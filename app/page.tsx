@@ -1,103 +1,168 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useRef, useEffect } from "react";
+import dynamic from "next/dynamic";
+import { parseSrt, findCurrentSubtitle } from "@/lib/parseSrt";
+import { Subtitle } from "@/lib/types";
+
+// Dynamically import VideoPlayer with no SSR
+const VideoPlayer = dynamic(() => import("./components/VideoPlayer"), {
+  ssr: false,
+  loading: () => (
+    <div className="relative w-full max-w-4xl mx-auto aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
+      <p>Loading video player...</p>
+    </div>
+  ),
+});
+
+// Move handleFileChange outside the component to prevent recreation on each render
+const handleFileUpload = async (file: File) => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const response = await fetch("/api/transcribe", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to process video");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error uploading video:", error);
+    throw error;
+  }
+};
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [videoUrl, setVideoUrl] = useState<string>("");
+  const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
+  const [currentSubtitle, setCurrentSubtitle] = useState<Subtitle | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [hasMounted, setHasMounted] = useState(false);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+  // Set hasMounted to true after component mounts (client-side only)
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsProcessing(true);
+    setError("");
+
+    try {
+      const data = await handleFileUpload(file);
+      setVideoUrl(data.videoUrl);
+
+      if (data.srtContent) {
+        const parsedSubtitles = parseSrt(data.srtContent);
+        setSubtitles(parsedSubtitles);
+      }
+    } catch (err) {
+      console.error("Error uploading video:", err);
+      setError("Failed to process video. Please try again.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleTimeUpdate = (currentTimeMs: number) => {
+    console.log("🕰️ Current time:", currentTimeMs);
+    console.log("📝 Subtitles length:", subtitles.length);
+    console.log("📝 First subtitle:", subtitles[0]);
+
+    const sub = findCurrentSubtitle(subtitles, currentTimeMs);
+    console.log("🎯 Found subtitle:", sub);
+
+    setCurrentSubtitle(sub);
+  };
+
+  const handleVideoEnd = () => {
+    setCurrentSubtitle(null);
+  };
+
+  return (
+    <main className="min-h-screen p-4 md:p-8 bg-gray-50">
+      <div className="max-w-6xl mx-auto">
+        <h1 className="text-3xl font-bold text-center mb-8 text-gray-800">
+          Video Subtitle Player
+        </h1>
+
+        <div className="bg-white rounded-xl shadow-md p-6 mb-8">
+          <div className="text-center mb-6">
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="video/*"
+              onChange={handleFileChange}
+              className="hidden"
+              disabled={isProcessing}
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isProcessing}
+              className={`px-6 py-3 rounded-lg font-medium text-white transition-colors ${
+                isProcessing
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700"
+              }`}
+            >
+              {isProcessing ? "Processing..." : "Upload Video"}
+            </button>
+            {error && <p className="mt-2 text-red-500">{error}</p>}
+          </div>
+
+          {videoUrl && (
+            <VideoPlayer
+              videoUrl={videoUrl}
+              subtitles={subtitles}
+              currentSubtitle={currentSubtitle}
+              onTimeUpdate={handleTimeUpdate}
+              onVideoEnd={handleVideoEnd}
+            />
+          )}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+
+        {subtitles.length > 0 && (
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-800">
+              Subtitles
+            </h2>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {subtitles.map((sub) => (
+                <div
+                  key={sub.id}
+                  className={`p-2 rounded ${
+                    currentSubtitle?.id === sub.id ? "bg-blue-50" : ""
+                  }`}
+                >
+                  <p className="text-sm text-gray-500">
+                    {formatTime(sub.startTime)} - {formatTime(sub.endTime)}
+                  </p>
+                  <p>{sub.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </main>
   );
+}
+
+// Helper function to format time (ms) to MM:SS
+function formatTime(ms: number): string {
+  const seconds = Math.floor(ms / 1000) % 60;
+  const minutes = Math.floor(ms / (1000 * 60));
+  return `${minutes.toString().padStart(2, "0")}:${seconds
+    .toString()
+    .padStart(2, "0")}`;
 }
