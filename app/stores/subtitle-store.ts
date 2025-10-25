@@ -21,7 +21,9 @@ export interface SubtitleSegment {
     shadowOffsetX: number; // 陰影 X 偏移 (-50 to 50)
     shadowOffsetY: number; // 陰影 Y 偏移 (-50 to 50)
     shadowBlur: number; // 陰影模糊半徑 (0-50)
+    positionX: number; // 水平位置百分比 (0-100, 50=中間)
     positionY: number; // 垂直位置百分比 (0-100)
+    maxWidth: number; // 最大寬度 vw 單位 (10-100)
     scale: number; // 縮放比例 (0.5-3.0)
   };
 }
@@ -92,7 +94,9 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
         shadowOffsetX: 4,
         shadowOffsetY: 4,
         shadowBlur: 8,
+        positionX: 50,
         positionY: 90,
+        maxWidth: 80,
         scale: 1.0,
       },
     };
@@ -168,7 +172,9 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
               shadowOffsetX: 4,
               shadowOffsetY: 4,
               shadowBlur: 8,
+              positionX: 50,
               positionY: 90,
+              maxWidth: 80,
               scale: 1.0,
             },
           });
