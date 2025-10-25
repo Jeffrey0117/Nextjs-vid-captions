@@ -7,6 +7,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import SubtitlePropertiesPanel from '../components/SubtitlePropertiesPanel';
 import BulkSubtitleEditor from '../components/BulkSubtitleEditor';
 import VideoPlaybackControls from '../components/VideoPlaybackControls';
+import SubtitlePlayhead from '../components/SubtitlePlayhead';
 
 export default function EditorProPage() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -984,14 +985,15 @@ export default function EditorProPage() {
                             }}
                             onClick={handleTimelineClick}
                           >
-                            {/* 播放頭 */}
+                            {/* SubtitlePlayhead 元件 - OpenCut 風格播放頭 */}
                             {duration > 0 && (
-                              <div
-                                className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10 pointer-events-none"
-                                style={{ left: `${currentTime * 50 * zoomLevel}px` }}
-                              >
-                                <div className="absolute -top-1 -left-1 w-2 h-2 bg-red-500 rounded-full" />
-                              </div>
+                              <SubtitlePlayhead
+                                currentTime={currentTime}
+                                pixelsPerSecond={50 * zoomLevel}
+                                containerRef={tracksScrollRef}
+                                onSeek={seekTo}
+                                duration={duration}
+                              />
                             )}
                             
                             {/* 字幕軌道 */}
@@ -1007,22 +1009,26 @@ export default function EditorProPage() {
                                     return (
                                       <div
                                         key={segment.id}
-                                        className={`absolute top-1 h-14 rounded border transition group ${
+                                        className={`absolute top-1 h-14 rounded-[0.5rem] border transition group ${
                                           isSelected
                                             ? 'bg-yellow-600 border-yellow-400'
-                                            : 'bg-blue-600 hover:bg-blue-700 border-blue-400'
+                                            : 'bg-[#5DBAA0] hover:bg-[#5DBAA0]/80 border-[#5DBAA0]'
                                         }`}
                                         style={{
                                           left: `${left}px`,
                                           width: `${Math.max(width, 80)}px`,
                                         }}
                                       >
-                                        {/* 左邊緣拖曳手柄 */}
+                                        {/* 左邊緣拖曳手柄 - OpenCut 風格 */}
                                         <div
-                                          className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 z-10"
+                                          className="absolute left-0 top-0 bottom-0 w-[0.6rem] cursor-w-resize bg-primary z-50 flex items-center justify-center hover:bg-primary/80 transition"
                                           onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'left')}
                                           onClick={(e) => e.stopPropagation()}
-                                        />
+                                        >
+                                          {isSelected && (
+                                            <div className="w-[0.2rem] h-[1.5rem] bg-foreground/75 rounded-full" />
+                                          )}
+                                        </div>
                                         
                                         {/* 中間區域:點擊選中,拖曳移動 */}
                                         <div
@@ -1038,12 +1044,16 @@ export default function EditorProPage() {
                                           </span>
                                         </div>
                                         
-                                        {/* 右邊緣拖曳手柄 */}
+                                        {/* 右邊緣拖曳手柄 - OpenCut 風格 */}
                                         <div
-                                          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/20 z-10"
+                                          className="absolute right-0 top-0 bottom-0 w-[0.6rem] cursor-e-resize bg-primary z-50 flex items-center justify-center hover:bg-primary/80 transition"
                                           onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'right')}
                                           onClick={(e) => e.stopPropagation()}
-                                        />
+                                        >
+                                          {isSelected && (
+                                            <div className="w-[0.2rem] h-[1.5rem] bg-foreground/75 rounded-full" />
+                                          )}
+                                        </div>
                                         
                                         {/* 時間提示 */}
                                         <div className="absolute -top-5 left-0 bg-gray-800 text-[0.65rem] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
