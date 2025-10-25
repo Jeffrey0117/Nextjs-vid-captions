@@ -40,6 +40,10 @@ export default function EditorProPage() {
   const timelineRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const srtInputRef = useRef<HTMLInputElement>(null);
+  const rulerScrollRef = useRef<HTMLDivElement | null>(null);
+  const tracksScrollRef = useRef<HTMLDivElement | null>(null);
+  const trackLabelsScrollRef = useRef<HTMLDivElement | null>(null);
+  const isUpdatingScrollRef = useRef(false);
 
   const { segments, importFromSrt, exportToSrt, clearAll, updateSegment, selectSegment } = useSubtitleStore();
 
@@ -87,6 +91,71 @@ export default function EditorProPage() {
       video.removeEventListener('pause', handlePause);
     };
   }, [videoUrl]);
+
+  // 滾動同步 - 標尺和軌道內容水平同步
+  useEffect(() => {
+    // 使用 DOM 查詢來獲取元素
+    const rulerScroll = document.getElementById('ruler-scroll');
+    const tracksScroll = document.getElementById('tracks-scroll');
+    const trackLabelsScroll = document.getElementById('track-labels-scroll');
+
+    if (!rulerScroll || !tracksScroll) return;
+
+    // 保存引用以便清理
+    rulerScrollRef.current = rulerScroll as HTMLDivElement;
+    tracksScrollRef.current = tracksScroll as HTMLDivElement;
+    trackLabelsScrollRef.current = trackLabelsScroll as HTMLDivElement | null;
+
+    // 水平滾動同步處理器
+    const handleRulerScroll = () => {
+      if (isUpdatingScrollRef.current) return;
+      isUpdatingScrollRef.current = true;
+      tracksScroll.scrollLeft = rulerScroll.scrollLeft;
+      isUpdatingScrollRef.current = false;
+    };
+
+    const handleTracksScroll = () => {
+      if (isUpdatingScrollRef.current) return;
+      isUpdatingScrollRef.current = true;
+      rulerScroll.scrollLeft = tracksScroll.scrollLeft;
+      isUpdatingScrollRef.current = false;
+    };
+
+    // 垂直滾動同步處理器 (如果有多個軌道)
+    let handleTrackLabelsScroll: (() => void) | null = null;
+    let handleTracksVerticalScroll: (() => void) | null = null;
+
+    if (trackLabelsScroll) {
+      handleTrackLabelsScroll = () => {
+        if (isUpdatingScrollRef.current) return;
+        isUpdatingScrollRef.current = true;
+        tracksScroll.scrollTop = trackLabelsScroll.scrollTop;
+        isUpdatingScrollRef.current = false;
+      };
+
+      handleTracksVerticalScroll = () => {
+        if (isUpdatingScrollRef.current) return;
+        isUpdatingScrollRef.current = true;
+        trackLabelsScroll.scrollTop = tracksScroll.scrollTop;
+        isUpdatingScrollRef.current = false;
+      };
+
+      trackLabelsScroll.addEventListener('scroll', handleTrackLabelsScroll);
+      tracksScroll.addEventListener('scroll', handleTracksVerticalScroll);
+    }
+
+    rulerScroll.addEventListener('scroll', handleRulerScroll);
+    tracksScroll.addEventListener('scroll', handleTracksScroll);
+
+    return () => {
+      rulerScroll.removeEventListener('scroll', handleRulerScroll);
+      tracksScroll.removeEventListener('scroll', handleTracksScroll);
+      if (trackLabelsScroll && handleTrackLabelsScroll && handleTracksVerticalScroll) {
+        trackLabelsScroll.removeEventListener('scroll', handleTrackLabelsScroll);
+        tracksScroll.removeEventListener('scroll', handleTracksVerticalScroll);
+      }
+    };
+  }, [duration, segments.length]); // 當 duration 或 segments 變化時重新綁定
 
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -274,10 +343,19 @@ export default function EditorProPage() {
 
   const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!timelineRef.current || duration === 0) return;
+    
+    // 獲取點擊位置相對於時間軸容器的座標
     const rect = timelineRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percentage = x / rect.width;
-    const newTime = percentage * duration;
+    const clickX = e.clientX - rect.left;
+    
+    // 獲取滾動容器的 scrollLeft
+    const tracksScroll = tracksScrollRef.current;
+    const scrollLeft = tracksScroll ? tracksScroll.scrollLeft : 0;
+    
+    // 計算實際的時間位置 (考慮滾動偏移)
+    const pixelsPerSecond = 50 * zoomLevel;
+    const newTime = Math.max(0, Math.min(duration, (clickX + scrollLeft) / pixelsPerSecond));
+    
     seekTo(newTime);
   };
 
@@ -429,9 +507,9 @@ export default function EditorProPage() {
   const handleTimelineDragMove = (e: React.MouseEvent) => {
     if (!timelineDragType || !timelineDragSegmentId || !timelineRef.current) return;
 
-    const rect = timelineRef.current.getBoundingClientRect();
+    const pixelsPerSecond = 50 * zoomLevel;
     const deltaX = e.clientX - timelineDragStartX;
-    const deltaTime = (deltaX / rect.width) * duration;
+    const deltaTime = deltaX / pixelsPerSecond;
 
     const segment = segments.find(s => s.id === timelineDragSegmentId);
     if (!segment) return;
@@ -751,79 +829,196 @@ export default function EditorProPage() {
                     showBookmarks={true}
                   />
   
-                  {/* 字幕軌道 */}
-                  <div
-                    ref={timelineRef}
-                    onClick={handleTimelineClick}
-                    onMouseMove={handleTimelineDragMove}
-                    onMouseUp={handleTimelineDragEnd}
-                    onMouseLeave={handleTimelineDragEnd}
-                    className="flex-1 relative bg-gray-900 cursor-pointer overflow-x-auto"
-                  >
-                    {/* 播放頭 */}
-                    {duration > 0 && (
-                      <div
-                        className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
-                        style={{ left: `${(currentTime / duration) * 100}%` }}
-                      >
-                        <div className="absolute -top-1 -left-1.5 w-3 h-3 bg-red-500 rounded-full" />
+                  {/* 時間軸容器 - 採用 OpenCut 的三欄佈局 */}
+                  <div className="flex-1 flex flex-col overflow-hidden relative">
+                    {/* 時間標尺區 */}
+                    <div className="flex bg-gray-900 sticky top-0 z-10 border-b border-gray-800">
+                      {/* 左側空白區 (對應軌道標籤寬度) */}
+                      <div className="w-28 shrink-0 bg-gray-900 border-r border-gray-800 flex items-center justify-between px-3 py-2">
+                        <span className="text-sm font-medium text-gray-600 opacity-0">.</span>
                       </div>
-                    )}
-  
-                    {/* 字幕片段 */}
-                    {duration > 0 && segments.map((segment) => {
-                      const left = (segment.startTime / duration) * 100;
-                      const width = ((segment.endTime - segment.startTime) / duration) * 100;
-                      const isSelected = selectedSegmentId === segment.id;
                       
-                      return (
-                        <div
-                          key={segment.id}
-                          className={`absolute top-2 h-16 rounded border transition group ${
-                            isSelected
-                              ? 'bg-yellow-600 border-yellow-400'
-                              : 'bg-blue-600 hover:bg-blue-700 border-blue-400'
-                          }`}
-                          style={{
-                            left: `${left}%`,
-                            width: `${width}%`,
-                          }}
-                        >
-                          {/* 左邊緣拖曳手柄 */}
+                      {/* 時間標尺 */}
+                      <div
+                        className="flex-1 relative overflow-hidden h-10"
+                        data-ruler-area="true"
+                      >
+                        <div className="overflow-auto scrollbar-thin w-full" id="ruler-scroll">
                           <div
-                            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 z-10"
-                            onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'left')}
-                            onClick={(e) => e.stopPropagation()}
-                          />
-  
-                          {/* 中間區域:點擊選中,拖曳移動 */}
-                          <div
-                            className="h-full flex items-center justify-center p-1 cursor-move"
-                            onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'move')}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSegmentClick(segment.id, segment.startTime);
+                            className="relative h-10 select-none cursor-default"
+                            style={{
+                              width: `${Math.max(duration * 50 * zoomLevel, 1500)}px`,
                             }}
+                            onClick={handleTimelineClick}
                           >
-                            <span className="text-xs text-white truncate">
-                              {segment.text}
-                            </span>
-                          </div>
-  
-                          {/* 右邊緣拖曳手柄 */}
-                          <div
-                            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 z-10"
-                            onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'right')}
-                            onClick={(e) => e.stopPropagation()}
-                          />
-  
-                          {/* 時間提示 */}
-                          <div className="absolute -top-6 left-0 bg-gray-800 text-xs px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
-                            {formatTime(segment.startTime)} - {formatTime(segment.endTime)}
+                            {/* 時間標記 */}
+                            {duration > 0 && (() => {
+                              const pixelsPerSecond = 50 * zoomLevel;
+                              const getTimeInterval = (zoom: number) => {
+                                const pps = 50 * zoom;
+                                if (pps >= 200) return 0.1;
+                                if (pps >= 100) return 0.5;
+                                if (pps >= 50) return 1;
+                                if (pps >= 25) return 2;
+                                if (pps >= 12) return 5;
+                                if (pps >= 6) return 10;
+                                return 30;
+                              };
+                              
+                              const interval = getTimeInterval(zoomLevel);
+                              const markerCount = Math.ceil(duration / interval) + 1;
+                              
+                              return Array.from({ length: markerCount }, (_, i) => {
+                                const time = i * interval;
+                                if (time > duration) return null;
+                                
+                                return (
+                                  <div
+                                    key={i}
+                                    className="absolute top-0 h-4 border-l border-gray-600"
+                                    style={{ left: `${time * pixelsPerSecond}px` }}
+                                  >
+                                    <span className="absolute top-1 left-1 text-[0.6rem] text-gray-400 font-medium">
+                                      {Math.floor(time)}s
+                                    </span>
+                                  </div>
+                                );
+                              }).filter(Boolean);
+                            })()}
+                            
+                            {/* 書籤標記 */}
+                            {bookmarks.map((bookmarkTime, i) => (
+                              <div
+                                key={`bookmark-${i}`}
+                                className="absolute top-0 h-10 w-0.5 bg-blue-500 cursor-pointer"
+                                style={{
+                                  left: `${bookmarkTime * 50 * zoomLevel}px`,
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  seekTo(bookmarkTime);
+                                }}
+                              />
+                            ))}
                           </div>
                         </div>
-                      );
-                    })}
+                      </div>
+                    </div>
+                    
+                    {/* 軌道區域 */}
+                    <div className="flex-1 flex overflow-hidden">
+                      {/* 軌道標籤 */}
+                      <div
+                        className="w-28 shrink-0 border-r border-gray-800 overflow-y-auto z-100 bg-gray-900"
+                        data-track-labels="true"
+                      >
+                        <div className="overflow-auto scrollbar-thin w-full h-full" id="track-labels-scroll">
+                          <div className="flex flex-col gap-1">
+                            {/* 字幕軌道標籤 */}
+                            <div
+                              className="flex items-center px-3 group"
+                              style={{ height: '80px' }}
+                            >
+                              <div className="flex items-center justify-end flex-1 min-w-0 gap-2">
+                                <span className="text-xs text-gray-400">字幕</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* 軌道內容 */}
+                      <div
+                        className="flex-1 relative overflow-hidden"
+                        onMouseMove={handleTimelineDragMove}
+                        onMouseUp={handleTimelineDragEnd}
+                        onMouseLeave={handleTimelineDragEnd}
+                      >
+                        <div className="overflow-auto scrollbar-thin w-full h-full" id="tracks-scroll">
+                          <div
+                            ref={timelineRef}
+                            className="relative flex-1"
+                            style={{
+                              height: '80px',
+                              width: `${Math.max(duration * 50 * zoomLevel, 1500)}px`,
+                            }}
+                            onClick={handleTimelineClick}
+                          >
+                            {/* 播放頭 */}
+                            {duration > 0 && (
+                              <div
+                                className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10 pointer-events-none"
+                                style={{ left: `${currentTime * 50 * zoomLevel}px` }}
+                              >
+                                <div className="absolute -top-1 -left-1.5 w-3 h-3 bg-red-500 rounded-full" />
+                              </div>
+                            )}
+                            
+                            {/* 字幕軌道 */}
+                            <div className="absolute left-0 right-0 top-0" style={{ height: '80px' }}>
+                              <div className="w-full h-full hover:bg-gray-800/20">
+                                <div className="h-full relative track-elements-container min-w-full">
+                                  {/* 字幕片段 */}
+                                  {segments.map((segment) => {
+                                    const left = segment.startTime * 50 * zoomLevel;
+                                    const width = (segment.endTime - segment.startTime) * 50 * zoomLevel;
+                                    const isSelected = selectedSegmentId === segment.id;
+                                    
+                                    return (
+                                      <div
+                                        key={segment.id}
+                                        className={`absolute top-2 h-16 rounded border transition group ${
+                                          isSelected
+                                            ? 'bg-yellow-600 border-yellow-400'
+                                            : 'bg-blue-600 hover:bg-blue-700 border-blue-400'
+                                        }`}
+                                        style={{
+                                          left: `${left}px`,
+                                          width: `${Math.max(width, 80)}px`,
+                                        }}
+                                      >
+                                        {/* 左邊緣拖曳手柄 */}
+                                        <div
+                                          className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 z-10"
+                                          onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'left')}
+                                          onClick={(e) => e.stopPropagation()}
+                                        />
+                                        
+                                        {/* 中間區域:點擊選中,拖曳移動 */}
+                                        <div
+                                          className="h-full flex items-center justify-center p-1 cursor-move"
+                                          onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'move')}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleSegmentClick(segment.id, segment.startTime);
+                                          }}
+                                        >
+                                          <span className="text-xs text-white truncate">
+                                            {segment.text}
+                                          </span>
+                                        </div>
+                                        
+                                        {/* 右邊緣拖曳手柄 */}
+                                        <div
+                                          className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 z-10"
+                                          onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'right')}
+                                          onClick={(e) => e.stopPropagation()}
+                                        />
+                                        
+                                        {/* 時間提示 */}
+                                        <div className="absolute -top-6 left-0 bg-gray-800 text-xs px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
+                                          {formatTime(segment.startTime)} - {formatTime(segment.endTime)}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </Panel>
