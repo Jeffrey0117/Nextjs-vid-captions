@@ -765,7 +765,7 @@ export default function EditorProPage() {
                           >
                             {/* 字幕內容 */}
                             <div
-                              className="px-4 py-2 rounded"
+                              className="rounded"
                               style={{
                                 backgroundColor: currentSubtitle.style.backgroundColor,
                                 opacity: currentSubtitle.style.opacity,
@@ -774,15 +774,18 @@ export default function EditorProPage() {
                                 cursor: isDragging ? 'grabbing' : 'grab',
                                 wordWrap: 'break-word',
                                 whiteSpace: 'pre-wrap',
+                                // padding 和 borderRadius 也需要相對縮放
+                                padding: `${(8 / 1080) * videoDisplaySize.height}px ${(16 / 1080) * videoDisplaySize.height}px`,
+                                borderRadius: `${(4 / 1080) * videoDisplaySize.height}px`,
                               }}
                               onMouseDown={handleSubtitleDragStart}
                             >
                               <p
                                 className="text-center"
                                 style={{
-                                  // 字幕大小相對於影片高度: (設定字體大小 / 1080) * 實際影片高度
-                                  // 這樣無論影片容器多大,字幕相對大小都會與輸出一致
-                                  fontSize: `${(currentSubtitle.style.fontSize / 1080) * videoDisplaySize.height}px`,
+                                  // 字幕大小 = (fontSize * scale / 1080) * 實際影片高度
+                                  // 包含 scale 的效果,確保與 ASS 輸出完全一致
+                                  fontSize: `${(currentSubtitle.style.fontSize * currentSubtitle.style.scale / 1080) * videoDisplaySize.height}px`,
                                   fontFamily: currentSubtitle.style.fontFamily,
                                   fontWeight: currentSubtitle.style.fontWeight,
                                   fontStyle: currentSubtitle.style.fontStyle,
