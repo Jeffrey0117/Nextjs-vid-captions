@@ -36,9 +36,9 @@ export async function POST(request: Request) {
     const srtPath = path.join(tempDir, srtFileName);
 
     try {
-      // 執行 Whisper 命令
+      // 執行 Whisper 命令 - 強制使用英文識別
       const { stderr } = await execAsync(
-        `whisper "${filePath}" --model base --output_format srt --output_dir "${tempDir}" --language zh`
+        `whisper "${filePath}" --model base --output_format srt --output_dir "${tempDir}" --language en`
       );
 
       if (stderr) {

@@ -19,7 +19,7 @@ export default function SubtitlePropertiesPanel({
   const { segments, updateSegment } = useSubtitleStore();
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showBgColorPicker, setShowBgColorPicker] = useState(false);
-  const [showOutlineColorPicker, setShowOutlineColorPicker] = useState(false);
+  const [showShadowColorPicker, setShowShadowColorPicker] = useState(false);
 
   const selectedSegment = segments.find(seg => seg.id === selectedSegmentId);
 
@@ -210,51 +210,149 @@ export default function SubtitlePropertiesPanel({
         />
       </div>
 
-      {/* 描邊顏色 */}
+      {/* 陰影效果 */}
       <div>
-        <label className="block text-sm font-medium mb-2">描邊顏色</label>
-        <div className="relative">
-          <button
-            onClick={() => setShowOutlineColorPicker(!showOutlineColorPicker)}
-            className="w-full flex items-center gap-3 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-750 transition"
-          >
-            <div
-              className="w-8 h-8 rounded border-2 border-gray-600"
-              style={{ backgroundColor: selectedSegment.style.outlineColor }}
-            />
-            <span className="font-mono">{selectedSegment.style.outlineColor}</span>
-          </button>
-          {showOutlineColorPicker && (
-            <div className="absolute top-full mt-2 z-50 p-3 bg-gray-900 border border-gray-700 rounded-lg shadow-xl">
-              <HexColorPicker
-                color={selectedSegment.style.outlineColor}
-                onChange={(color) => updateStyle({ outlineColor: color })}
-              />
-            </div>
-          )}
+        <div className="flex items-center gap-2 mb-3">
+          <input
+            type="checkbox"
+            id="enable-shadow"
+            checked={selectedSegment.style.enableShadow}
+            onChange={(e) => updateStyle({ enableShadow: e.target.checked })}
+            className="w-4 h-4"
+          />
+          <label htmlFor="enable-shadow" className="text-sm font-medium cursor-pointer">
+            啟用陰影效果
+          </label>
         </div>
+
+        {selectedSegment.style.enableShadow && (
+          <div className="space-y-4 pl-6 border-l-2 border-gray-700">
+            {/* 陰影顏色 */}
+            <div>
+              <label className="block text-sm font-medium mb-2">陰影顏色</label>
+              <div className="relative">
+                <button
+                  onClick={() => setShowShadowColorPicker(!showShadowColorPicker)}
+                  className="w-full flex items-center gap-3 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-750 transition"
+                >
+                  <div
+                    className="w-8 h-8 rounded border-2 border-gray-600"
+                    style={{ backgroundColor: selectedSegment.style.shadowColor }}
+                  />
+                  <span className="font-mono">{selectedSegment.style.shadowColor}</span>
+                </button>
+                {showShadowColorPicker && (
+                  <div className="absolute top-full mt-2 z-50 p-3 bg-gray-900 border border-gray-700 rounded-lg shadow-xl">
+                    <HexColorPicker
+                      color={selectedSegment.style.shadowColor}
+                      onChange={(color) => updateStyle({ shadowColor: color })}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 陰影 X 偏移 */}
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                X 偏移: {selectedSegment.style.shadowOffsetX}px
+              </label>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="range"
+                  min="-50"
+                  max="50"
+                  value={selectedSegment.style.shadowOffsetX}
+                  onChange={(e) => updateStyle({ shadowOffsetX: parseInt(e.target.value) })}
+                  className="flex-1"
+                />
+                <input
+                  type="number"
+                  min="-50"
+                  max="50"
+                  value={selectedSegment.style.shadowOffsetX}
+                  onChange={(e) => updateStyle({ shadowOffsetX: parseInt(e.target.value) })}
+                  className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-center"
+                />
+              </div>
+            </div>
+
+            {/* 陰影 Y 偏移 */}
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Y 偏移: {selectedSegment.style.shadowOffsetY}px
+              </label>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="range"
+                  min="-50"
+                  max="50"
+                  value={selectedSegment.style.shadowOffsetY}
+                  onChange={(e) => updateStyle({ shadowOffsetY: parseInt(e.target.value) })}
+                  className="flex-1"
+                />
+                <input
+                  type="number"
+                  min="-50"
+                  max="50"
+                  value={selectedSegment.style.shadowOffsetY}
+                  onChange={(e) => updateStyle({ shadowOffsetY: parseInt(e.target.value) })}
+                  className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-center"
+                />
+              </div>
+            </div>
+
+            {/* 陰影模糊半徑 */}
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                模糊半徑: {selectedSegment.style.shadowBlur}px
+              </label>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="range"
+                  min="0"
+                  max="50"
+                  value={selectedSegment.style.shadowBlur}
+                  onChange={(e) => updateStyle({ shadowBlur: parseInt(e.target.value) })}
+                  className="flex-1"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  max="50"
+                  value={selectedSegment.style.shadowBlur}
+                  onChange={(e) => updateStyle({ shadowBlur: parseInt(e.target.value) })}
+                  className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-center"
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* 描邊寬度 */}
+      {/* 縮放比例 */}
       <div>
         <label className="block text-sm font-medium mb-2">
-          描邊寬度: {selectedSegment.style.outlineWidth}px
+          縮放比例: {selectedSegment.style.scale.toFixed(1)}x
         </label>
+        <p className="text-xs text-gray-400 mb-2">提示: 也可以直接拖曳字幕邊框縮放</p>
         <div className="flex gap-2 items-center">
           <input
             type="range"
-            min="0"
-            max="10"
-            value={selectedSegment.style.outlineWidth}
-            onChange={(e) => updateStyle({ outlineWidth: parseInt(e.target.value) })}
+            min="50"
+            max="300"
+            step="10"
+            value={selectedSegment.style.scale * 100}
+            onChange={(e) => updateStyle({ scale: parseInt(e.target.value) / 100 })}
             className="flex-1"
           />
           <input
             type="number"
-            min="0"
-            max="10"
-            value={selectedSegment.style.outlineWidth}
-            onChange={(e) => updateStyle({ outlineWidth: parseInt(e.target.value) })}
+            min="0.5"
+            max="3.0"
+            step="0.1"
+            value={selectedSegment.style.scale}
+            onChange={(e) => updateStyle({ scale: parseFloat(e.target.value) })}
             className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-center"
           />
         </div>

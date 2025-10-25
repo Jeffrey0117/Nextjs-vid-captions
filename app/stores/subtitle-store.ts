@@ -16,9 +16,13 @@ export interface SubtitleSegment {
     opacity: number;
     backgroundColor: string;
     position: 'top' | 'center' | 'bottom';
-    outlineColor: string;
-    outlineWidth: number;
+    enableShadow: boolean; // 陰影開關
+    shadowColor: string;
+    shadowOffsetX: number; // 陰影 X 偏移 (-50 to 50)
+    shadowOffsetY: number; // 陰影 Y 偏移 (-50 to 50)
+    shadowBlur: number; // 陰影模糊半徑 (0-50)
     positionY: number; // 垂直位置百分比 (0-100)
+    scale: number; // 縮放比例 (0.5-3.0)
   };
 }
 
@@ -83,9 +87,13 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
         opacity: 1,
         backgroundColor: 'transparent',
         position: 'bottom',
-        outlineColor: '#000000',
-        outlineWidth: 2,
+        enableShadow: true,
+        shadowColor: '#000000',
+        shadowOffsetX: 4,
+        shadowOffsetY: 4,
+        shadowBlur: 8,
         positionY: 90,
+        scale: 1.0,
       },
     };
     set((state) => ({
@@ -155,9 +163,13 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
               opacity: 1,
               backgroundColor: 'transparent',
               position: 'bottom',
-              outlineColor: '#000000',
-              outlineWidth: 2,
+              enableShadow: true,
+              shadowColor: '#000000',
+              shadowOffsetX: 4,
+              shadowOffsetY: 4,
+              shadowBlur: 8,
               positionY: 90,
+              scale: 1.0,
             },
           });
         }

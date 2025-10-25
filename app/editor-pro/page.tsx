@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useSubtitleStore } from '../stores/subtitle-store';
-import { Play, Pause, Upload, FileText, Download, Languages, Trash2, Scissors, Film } from 'lucide-react';
+import { Play, Pause, Upload, FileText, Download, Languages, Trash2, Scissors, Film, Edit3 } from 'lucide-react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import SubtitlePropertiesPanel from '../components/SubtitlePropertiesPanel';
+import BulkSubtitleEditor from '../components/BulkSubtitleEditor';
 
 export default function EditorProPage() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -26,6 +27,9 @@ export default function EditorProPage() {
   const [timelineDragSegmentId, setTimelineDragSegmentId] = useState<string | null>(null);
   const [timelineDragStartX, setTimelineDragStartX] = useState(0);
   const [timelineDragStartTime, setTimelineDragStartTime] = useState({ start: 0, end: 0 });
+  const [resizeDragType, setResizeDragType] = useState<'tl' | 'tr' | 'bl' | 'br' | null>(null);
+  const [resizeDragStart, setResizeDragStart] = useState({ x: 0, y: 0, scale: 1 });
+  const [showBulkEditor, setShowBulkEditor] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -302,6 +306,48 @@ export default function EditorProPage() {
     setIsDragging(false);
   };
 
+  // 字幕縮放拖曳處理
+  const handleResizeDragStart = (e: React.MouseEvent, corner: 'tl' | 'tr' | 'bl' | 'br') => {
+    if (!currentSubtitle) return;
+    e.stopPropagation();
+    setResizeDragType(corner);
+    setResizeDragStart({
+      x: e.clientX,
+      y: e.clientY,
+      scale: currentSubtitle.style.scale,
+    });
+  };
+
+  const handleResizeDrag = (e: React.MouseEvent) => {
+    if (!resizeDragType || !currentSubtitle) return;
+
+    const deltaX = e.clientX - resizeDragStart.x;
+    const deltaY = e.clientY - resizeDragStart.y;
+    
+    // 使用對角線距離計算縮放變化
+    const delta = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    const direction = (deltaX + deltaY) > 0 ? 1 : -1;
+    const scaleChange = (direction * delta) / 200;
+    
+    const newScale = Math.max(0.5, Math.min(3.0, resizeDragStart.scale + scaleChange));
+
+    if (applyToAll) {
+      segments.forEach(seg => {
+        updateSegment(seg.id, {
+          style: { ...seg.style, scale: newScale },
+        });
+      });
+    } else {
+      updateSegment(currentSubtitle.id, {
+        style: { ...currentSubtitle.style, scale: newScale },
+      });
+    }
+  };
+
+  const handleResizeDragEnd = () => {
+    setResizeDragType(null);
+  };
+
   // 時間軸字幕區塊拖曳處理
   const handleTimelineDragStart = (
     e: React.MouseEvent,
@@ -440,6 +486,15 @@ export default function EditorProPage() {
         <div className="h-6 w-px bg-gray-700 mx-2" />
 
         <button
+          onClick={() => setShowBulkEditor(true)}
+          disabled={segments.length === 0}
+          className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 rounded transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Edit3 size={16} />
+          批量編輯
+        </button>
+
+        <button
           onClick={handleExportVideo}
           disabled={!videoFile || segments.length === 0 || isExporting}
           className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 rounded transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
@@ -502,45 +557,85 @@ export default function EditorProPage() {
                     {/* 字幕疊加層 */}
                     {currentSubtitle && (
                       <div
-                        className="absolute left-0 right-0 flex items-center justify-center px-4 cursor-move select-none"
+                        className="absolute left-0 right-0 flex items-center justify-center px-4 select-none"
                         style={{
                           top: `${currentSubtitle.style.positionY}%`,
                           transform: 'translateY(-50%)',
                           pointerEvents: 'auto',
                         }}
-                        onMouseDown={handleSubtitleDragStart}
-                        onMouseMove={handleSubtitleDrag}
-                        onMouseUp={handleSubtitleDragEnd}
-                        onMouseLeave={handleSubtitleDragEnd}
+                        onMouseMove={(e) => {
+                          handleSubtitleDrag(e);
+                          handleResizeDrag(e);
+                        }}
+                        onMouseUp={() => {
+                          handleSubtitleDragEnd();
+                          handleResizeDragEnd();
+                        }}
+                        onMouseLeave={() => {
+                          handleSubtitleDragEnd();
+                          handleResizeDragEnd();
+                        }}
                       >
-                        <div
-                          className="px-4 py-2 rounded"
-                          style={{
-                            backgroundColor: currentSubtitle.style.backgroundColor,
-                            opacity: currentSubtitle.style.opacity,
-                          }}
-                        >
-                          <p
-                            className="text-center"
+                        {/* 可拖曳縮放的容器 */}
+                        <div className="relative inline-block">
+                          {/* 縮放後的邊框和手柄容器 */}
+                          <div
+                            className="absolute inset-0 pointer-events-none"
                             style={{
-                              fontSize: `${currentSubtitle.style.fontSize}px`,
-                              fontFamily: currentSubtitle.style.fontFamily,
-                              fontWeight: currentSubtitle.style.fontWeight,
-                              fontStyle: currentSubtitle.style.fontStyle,
-                              textDecoration: currentSubtitle.style.textDecoration,
-                              color: currentSubtitle.style.color,
-                              WebkitTextStroke: `${currentSubtitle.style.outlineWidth}px ${currentSubtitle.style.outlineColor}`,
-                              textShadow: `
-                                ${currentSubtitle.style.outlineWidth}px ${currentSubtitle.style.outlineWidth}px 0 ${currentSubtitle.style.outlineColor},
-                                -${currentSubtitle.style.outlineWidth}px ${currentSubtitle.style.outlineWidth}px 0 ${currentSubtitle.style.outlineColor},
-                                ${currentSubtitle.style.outlineWidth}px -${currentSubtitle.style.outlineWidth}px 0 ${currentSubtitle.style.outlineColor},
-                                -${currentSubtitle.style.outlineWidth}px -${currentSubtitle.style.outlineWidth}px 0 ${currentSubtitle.style.outlineColor},
-                                2px 2px 4px rgba(0,0,0,0.8)
-                              `,
+                              transform: `scale(${currentSubtitle.style.scale})`,
+                              transformOrigin: 'center',
                             }}
                           >
-                            {currentSubtitle.translatedText || currentSubtitle.text}
-                          </p>
+                            {/* 虛線邊框 */}
+                            <div className="absolute inset-0 border-2 border-dashed border-white/40" />
+
+                            {/* 四個角的縮放手柄 */}
+                            <div
+                              className="absolute -top-2 -left-2 w-4 h-4 bg-white rounded-full cursor-nwse-resize z-20 pointer-events-auto"
+                              onMouseDown={(e) => handleResizeDragStart(e, 'tl')}
+                            />
+                            <div
+                              className="absolute -top-2 -right-2 w-4 h-4 bg-white rounded-full cursor-nesw-resize z-20 pointer-events-auto"
+                              onMouseDown={(e) => handleResizeDragStart(e, 'tr')}
+                            />
+                            <div
+                              className="absolute -bottom-2 -left-2 w-4 h-4 bg-white rounded-full cursor-nesw-resize z-20 pointer-events-auto"
+                              onMouseDown={(e) => handleResizeDragStart(e, 'bl')}
+                            />
+                            <div
+                              className="absolute -bottom-2 -right-2 w-4 h-4 bg-white rounded-full cursor-nwse-resize z-20 pointer-events-auto"
+                              onMouseDown={(e) => handleResizeDragStart(e, 'br')}
+                            />
+                          </div>
+
+                          {/* 字幕內容 */}
+                          <div
+                            className="px-4 py-2 rounded cursor-move"
+                            style={{
+                              backgroundColor: currentSubtitle.style.backgroundColor,
+                              opacity: currentSubtitle.style.opacity,
+                              transform: `scale(${currentSubtitle.style.scale})`,
+                              transformOrigin: 'center',
+                            }}
+                            onMouseDown={handleSubtitleDragStart}
+                          >
+                            <p
+                              className="text-center"
+                              style={{
+                                fontSize: `${currentSubtitle.style.fontSize}px`,
+                                fontFamily: currentSubtitle.style.fontFamily,
+                                fontWeight: currentSubtitle.style.fontWeight,
+                                fontStyle: currentSubtitle.style.fontStyle,
+                                textDecoration: currentSubtitle.style.textDecoration,
+                                color: currentSubtitle.style.color,
+                                textShadow: currentSubtitle.style.enableShadow
+                                  ? `${currentSubtitle.style.shadowOffsetX}px ${currentSubtitle.style.shadowOffsetY}px ${currentSubtitle.style.shadowBlur}px ${currentSubtitle.style.shadowColor}`
+                                  : 'none',
+                              }}
+                            >
+                              {currentSubtitle.translatedText || currentSubtitle.text}
+                            </p>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -689,6 +784,12 @@ export default function EditorProPage() {
           </Panel>
         </PanelGroup>
       </div>
+
+      {/* 批量編輯彈窗 */}
+      <BulkSubtitleEditor
+        isOpen={showBulkEditor}
+        onClose={() => setShowBulkEditor(false)}
+      />
     </div>
   );
 }

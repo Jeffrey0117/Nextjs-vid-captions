@@ -24,7 +24,7 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
     
     // ASS 顏色格式: &HAABBGGRR (alpha, blue, green, red)
     const primaryColor = hexToAssColor(style.color, style.opacity);
-    const outlineColor = hexToAssColor(style.outlineColor, 1);
+    const shadowColor = style.enableShadow ? hexToAssColor(style.shadowColor, 1) : '&H00000000';
     const backgroundColor = style.backgroundColor === 'transparent'
       ? '&H00000000'
       : hexToAssColor(style.backgroundColor, 1);
@@ -43,10 +43,13 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
     const underline = style.textDecoration === 'underline' ? -1 : 0;
     const strikeout = style.textDecoration === 'line-through' ? -1 : 0;
     
-    // Outline 寬度
-    const outline = style.outlineWidth;
+    // Shadow 距離 (ASS 只支援一個 shadow 參數,使用 Y 偏移作為距離)
+    const shadow = style.enableShadow ? Math.max(0, Math.abs(style.shadowOffsetY)) : 0;
     
-    return `Style: Style${index},${style.fontFamily},${style.fontSize},${primaryColor},&H000000FF,${outlineColor},${backgroundColor},${bold},${italic},${underline},${strikeout},100,100,0,0,1,${outline},0,${alignment},10,10,10,1`;
+    // 縮放比例 (ScaleX, ScaleY)
+    const scale = Math.round(style.scale * 100);
+    
+    return `Style: Style${index},${style.fontFamily},${style.fontSize},${primaryColor},&H000000FF,${shadowColor},${backgroundColor},${bold},${italic},${underline},${strikeout},${scale},${scale},0,0,1,0,${shadow},${alignment},10,10,10,1`;
   }).join('\n');
 
   // 事件 (字幕內容)
