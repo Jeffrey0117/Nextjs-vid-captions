@@ -6,9 +6,7 @@ import { Upload, FileText, Download, Languages, Trash2, Scissors, Film, Edit3 } 
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import SubtitlePropertiesPanel from '../components/SubtitlePropertiesPanel';
 import BulkSubtitleEditor from '../components/BulkSubtitleEditor';
-import VideoPlaybackControls from '../components/VideoPlaybackControls';
 import SubtitlePlayhead from '../components/SubtitlePlayhead';
-import TimelineTabBar from '../components/TimelineTabBar';
 
 export default function EditorProPage() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -58,6 +56,7 @@ export default function EditorProPage() {
   const rulerScrollRef = useRef<HTMLDivElement | null>(null);
   const tracksScrollRef = useRef<HTMLDivElement | null>(null);
   const trackLabelsScrollRef = useRef<HTMLDivElement | null>(null);
+  const timelineContentRef = useRef<HTMLDivElement>(null); // 標尺+軌道區的父容器 (不包含 Toolbar)
   const isUpdatingScrollRef = useRef(false);
 
   const { segments, importFromSrt, exportToSrt, clearAll, updateSegment, selectSegment } = useSubtitleStore();
@@ -909,34 +908,124 @@ export default function EditorProPage() {
               {/* 時間軸面板 */}
               <Panel defaultSize={30} minSize={15} maxSize={50}>
                 <div className="h-full flex flex-col bg-gray-900">
-                  {/* 播放控制列 */}
-                  <VideoPlaybackControls
-                    isPlaying={isPlaying}
-                    currentTime={currentTime}
-                    duration={duration}
-                    onPlayPause={togglePlayPause}
-                    onSeek={seekTo}
-                    onSkipToStart={handleSkipToStart}
-                    bookmarks={bookmarks}
-                    onToggleBookmark={handleToggleBookmark}
-                    zoomLevel={zoomLevel}
-                    onZoomIn={() => setZoomLevel(Math.min(4, zoomLevel + 0.25))}
-                    onZoomOut={() => setZoomLevel(Math.max(0.25, zoomLevel - 0.25))}
-                    onZoomChange={setZoomLevel}
-                    fps={30}
-                    showBookmarks={true}
-                  />
+                  {/* OpenCut TimelineToolbar - 播放控制 + 編輯工具 + 縮放控制 */}
+                  <div className="flex items-center justify-between px-2 py-1 border-b bg-zinc-900 h-8">
+                    {/* 左側: 播放控制 + 編輯工具 */}
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        onClick={togglePlayPause}
+                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors"
+                        title={isPlaying ? "暫停 (Space)" : "播放 (Space)"}
+                      >
+                        {isPlaying ? (
+                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <rect x="6" y="4" width="4" height="16" />
+                            <rect x="14" y="4" width="4" height="16" />
+                          </svg>
+                        ) : (
+                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                        )}
+                      </button>
+                      
+                      <button
+                        onClick={handleSkipToStart}
+                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors"
+                        title="跳到起點 (Home)"
+                      >
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <polygon points="19 20 9 12 19 4 19 20" />
+                          <line x1="5" x2="5" y1="19" y2="5" />
+                        </svg>
+                      </button>
+
+                      <div className="w-px h-5 bg-zinc-700 mx-0.5" />
+
+                      {/* 時間顯示 */}
+                      <div className="flex items-center gap-1 px-1">
+                        <span className="text-zinc-300 text-xs font-mono">
+                          {formatTime(currentTime)}
+                        </span>
+                        <span className="text-zinc-500 text-xs font-mono">/</span>
+                        <span className="text-zinc-400 text-xs font-mono">
+                          {formatTime(duration)}
+                        </span>
+                      </div>
+
+                      <div className="w-px h-5 bg-zinc-700 mx-0.5" />
+
+                      {/* 書籤按鈕 */}
+                      <button
+                        onClick={handleToggleBookmark}
+                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors"
+                        title={bookmarks.includes(Math.floor(currentTime * 10) / 10) ? "移除書籤" : "新增書籤"}
+                      >
+                        <svg
+                          className={`w-3 h-3 ${bookmarks.includes(Math.floor(currentTime * 10) / 10) ? 'fill-blue-500 text-blue-500' : 'text-white'}`}
+                          fill={bookmarks.includes(Math.floor(currentTime * 10) / 10) ? 'currentColor' : 'none'}
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          viewBox="0 0 24 24"
+                        >
+                          <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {/* 右側: 縮放控制 */}
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        onClick={() => setZoomLevel(Math.max(0.25, zoomLevel - 0.25))}
+                        disabled={zoomLevel <= 0.25}
+                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="縮小 (Ctrl + -)"
+                      >
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <circle cx="11" cy="11" r="8" />
+                          <path d="m21 21-4.35-4.35" />
+                          <line x1="8" x2="14" y1="11" y2="11" />
+                        </svg>
+                      </button>
+
+                      <input
+                        type="range"
+                        min="0.25"
+                        max="4"
+                        step="0.25"
+                        value={zoomLevel}
+                        onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
+                        className="w-20 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer"
+                        title={`縮放: ${zoomLevel.toFixed(2)}x`}
+                      />
+
+                      <button
+                        onClick={() => setZoomLevel(Math.min(4, zoomLevel + 0.25))}
+                        disabled={zoomLevel >= 4}
+                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="放大 (Ctrl + +)"
+                      >
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <circle cx="11" cy="11" r="8" />
+                          <path d="m21 21-4.35-4.35" />
+                          <line x1="11" x2="11" y1="8" y2="14" />
+                          <line x1="8" x2="14" y1="11" y2="11" />
+                        </svg>
+                      </button>
+
+                      <span className="text-[0.65rem] text-zinc-400 font-mono w-10 text-center">
+                        {(zoomLevel * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
   
-                  {/* 時間軸容器 - 採用 OpenCut 的三欄佈局 + 左側工具列 */}
+                  {/* 時間軸容器 - OpenCut 標準佈局 (無左側工具列) */}
                   <div
                     ref={timelineContainerRef}
-                    className="flex-1 flex overflow-hidden relative"
+                    className="flex-1 flex flex-col overflow-hidden relative"
                   >
-                    {/* 左側垂直工具列 - OpenCut 風格 */}
-                    <TimelineTabBar />
-                    
-                    {/* 時間軸內容區 */}
-                    <div className="flex-1 flex flex-col overflow-hidden">
+                    {/* 標尺+軌道內容區 - 播放頭高度計算用 */}
+                    <div ref={timelineContentRef} className="flex-1 flex flex-col overflow-hidden relative">
                     {/* 時間標尺區 */}
                     <div className="flex bg-gray-900 sticky top-0 z-10 border-b border-gray-800">
                       {/* 左側空白區 (對應軌道標籤寬度) */}
@@ -1053,7 +1142,7 @@ export default function EditorProPage() {
                                 containerRef={tracksScrollRef}
                                 onSeek={seekTo}
                                 duration={duration}
-                                timelineRef={timelineContainerRef}
+                                timelineRef={timelineContentRef}
                               />
                             )}
                             
@@ -1130,7 +1219,7 @@ export default function EditorProPage() {
                         </div>
                       </div>
                     </div>
-                    </div> {/* 結束時間軸內容區 */}
+                    </div> {/* 結束標尺+軌道內容區 */}
                   </div> {/* 結束時間軸容器 */}
                 </div>
               </Panel>
