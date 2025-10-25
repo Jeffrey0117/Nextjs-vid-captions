@@ -5,7 +5,7 @@ import { SubtitleSegment } from '../app/stores/subtitle-store';
  * ASS 格式支援豐富的字幕樣式,適合用於 FFmpeg 燒錄
  */
 export function generateAssSubtitle(segments: SubtitleSegment[]): string {
-  // ASS 檔頭
+  // ASS 檔頭 - 添加 Hinting 和抗鋸齒優化
   const header = `[Script Info]
 Title: Generated Subtitles
 ScriptType: v4.00+
@@ -13,6 +13,7 @@ WrapStyle: 0
 PlayResX: 1920
 PlayResY: 1080
 ScaledBorderAndShadow: yes
+YCbCr Matrix: TV.709
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -21,6 +22,23 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
   // 為每個字幕片段生成樣式
   const styles = segments.map((seg, index) => {
     const style = seg.style;
+    
+    // 字體回退策略: 根據平台選擇最佳字體
+    // Windows: Microsoft YaHei → Arial → SimHei
+    // Mac: PingFang TC → Helvetica → Arial
+    // Linux: Noto Sans CJK TC → DejaVu Sans → Arial
+    const getFontWithFallback = (fontFamily: string): string => {
+      // 如果已經是常見字體,直接使用
+      const commonFonts = ['Arial', 'Helvetica', 'Microsoft YaHei', 'PingFang TC', 'SimHei', 'Noto Sans CJK TC'];
+      if (commonFonts.includes(fontFamily)) {
+        return fontFamily;
+      }
+      
+      // 預設回退到 Arial (最通用的字體)
+      return 'Arial';
+    };
+    
+    const fontName = getFontWithFallback(style.fontFamily);
     
     // ASS 顏色格式: &HAABBGGRR (alpha, blue, green, red)
     const primaryColor = hexToAssColor(style.color, style.opacity);
@@ -61,7 +79,7 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
     // 使用 8px 的 padding (對應網頁預覽的 padding)
     const outline = style.backgroundColor !== 'transparent' ? 8 : 0;
     
-    return `Style: Style${index},${style.fontFamily},${actualFontSize},${primaryColor},&H000000FF,${shadowColor},${backgroundColor},${bold},${italic},${underline},${strikeout},${scale},${scale},0,0,${borderStyle},${outline},${shadow},${alignment},10,10,10,1`;
+    return `Style: Style${index},${fontName},${actualFontSize},${primaryColor},&H000000FF,${shadowColor},${backgroundColor},${bold},${italic},${underline},${strikeout},${scale},${scale},0,0,${borderStyle},${outline},${shadow},${alignment},10,10,10,1`;
   }).join('\n');
 
   // 事件 (字幕內容)

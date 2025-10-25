@@ -61,14 +61,19 @@ export async function POST(request: Request) {
         // ASS filter 路徑需要四個反斜線(\\\\) 來表示一個實際的反斜線
         const assPathEscaped = assPath.replace(/\\/g, '\\\\\\\\').replace(/:/g, '\\\\:');
         
-        // 優化參數: crf 18 (更高品質), preset slow (更好編碼), pix_fmt yuv420p (相容性)
-        // force_style 強制使用 Arial 字體確保一致性
-        ffmpegCommand = `ffmpeg -i "${videoPathNormalized}" -vf "ass=${assPathEscaped}:force_style='FontName=Arial'" -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -c:a copy "${outputPathNormalized}"`;
+        // 完整改善方案:
+        // 1. CRF 16 (接近無損品質,檔案較大但字幕清晰)
+        // 2. Preset slower (最佳編碼品質)
+        // 3. Tune film (優化細節保留)
+        // 4. Profile high (支援更多編碼特性)
+        // 5. Level 4.1 (1080p 最佳相容性)
+        // 6. force_style 包含 Hinting=0 (關閉 font hinting 提升清晰度)
+        // 7. sharpening_level=0.5 (適度銳化字幕)
+        ffmpegCommand = `ffmpeg -i "${videoPathNormalized}" -vf "ass=${assPathEscaped}:sharpening_level=0.5:force_style='FontName=Arial,Hinting=0'" -c:v libx264 -preset slower -crf 16 -tune film -profile:v high -level 4.1 -pix_fmt yuv420p -movflags +faststart -c:a copy "${outputPathNormalized}"`;
       } else {
         // Unix/Linux/Mac: 直接使用原始路徑
-        // 優化參數: crf 18 (更高品質), preset slow (更好編碼), pix_fmt yuv420p (相容性)
-        // force_style 強制使用 Arial 字體確保一致性
-        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "ass=${assPath}:force_style='FontName=Arial'" -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -c:a copy "${outputPath}"`;
+        // 完整改善方案 (同 Windows 說明)
+        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "ass=${assPath}:sharpening_level=0.5:force_style='FontName=Arial,Hinting=0'" -c:v libx264 -preset slower -crf 16 -tune film -profile:v high -level 4.1 -pix_fmt yuv420p -movflags +faststart -c:a copy "${outputPath}"`;
       }
       
       console.log("FFmpeg command:", ffmpegCommand);
