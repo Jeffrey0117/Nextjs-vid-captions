@@ -51,14 +51,27 @@ export async function POST(request: Request) {
       console.log("ASS path:", assPath);
       console.log("Output path:", outputPath);
       
-      // Windows 路徑需要轉換為正斜線或使用雙反斜線
-      const ffmpegCommand = process.platform === 'win32'
-        ? `ffmpeg -i "${videoPath.replace(/\\/g, '/')}" -vf "ass='${assPath.replace(/\\/g, '/')}':force_style='FontName=Arial'" -c:v libx264 -preset medium -crf 23 -c:a copy "${outputPath.replace(/\\/g, '/')}"`
-        : `ffmpeg -i "${videoPath}" -vf "ass=${assPath}" -c:v libx264 -preset medium -crf 23 -c:a copy "${outputPath}"`;
+      // Windows 路徑處理: ASS filter 需要雙反斜線轉義
+      let ffmpegCommand: string;
+      
+      if (process.platform === 'win32') {
+        // Windows: 將反斜線轉換為正斜線,並在 ass filter 中使用雙反斜線轉義
+        const videoPathNormalized = videoPath.replace(/\\/g, '/');
+        const outputPathNormalized = outputPath.replace(/\\/g, '/');
+        // ASS filter 路徑需要四個反斜線(\\\\) 來表示一個實際的反斜線
+        const assPathEscaped = assPath.replace(/\\/g, '\\\\\\\\').replace(/:/g, '\\\\:');
+        
+        ffmpegCommand = `ffmpeg -i "${videoPathNormalized}" -vf "ass=${assPathEscaped}" -c:v libx264 -preset medium -crf 23 -c:a copy "${outputPathNormalized}"`;
+      } else {
+        // Unix/Linux/Mac: 直接使用原始路徑
+        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "ass=${assPath}" -c:v libx264 -preset medium -crf 23 -c:a copy "${outputPath}"`;
+      }
       
       console.log("FFmpeg command:", ffmpegCommand);
       
-      const { stdout, stderr } = await execAsync(ffmpegCommand);
+      const { stdout, stderr } = await execAsync(ffmpegCommand, {
+        maxBuffer: 1024 * 1024 * 10, // 10MB buffer
+      });
 
       if (stdout) {
         console.log("FFmpeg stdout:", stdout);
