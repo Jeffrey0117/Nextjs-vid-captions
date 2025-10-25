@@ -2,10 +2,11 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useSubtitleStore } from '../stores/subtitle-store';
-import { Play, Pause, Upload, FileText, Download, Languages, Trash2, Scissors, Film, Edit3 } from 'lucide-react';
+import { Upload, FileText, Download, Languages, Trash2, Scissors, Film, Edit3 } from 'lucide-react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import SubtitlePropertiesPanel from '../components/SubtitlePropertiesPanel';
 import BulkSubtitleEditor from '../components/BulkSubtitleEditor';
+import VideoPlaybackControls from '../components/VideoPlaybackControls';
 
 export default function EditorProPage() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -32,6 +33,8 @@ export default function EditorProPage() {
   const [resizeDragType, setResizeDragType] = useState<'tl' | 'tr' | 'bl' | 'br' | 'left' | 'right' | null>(null);
   const [resizeDragStart, setResizeDragStart] = useState({ x: 0, y: 0, scale: 1, maxWidth: 80 });
   const [showBulkEditor, setShowBulkEditor] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [bookmarks, setBookmarks] = useState<number[]>([]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -254,6 +257,19 @@ export default function EditorProPage() {
       videoRef.current.currentTime = time;
       setCurrentTime(time);
     }
+  };
+
+  const handleSkipToStart = () => {
+    seekTo(0);
+  };
+
+  const handleToggleBookmark = () => {
+    const roundedTime = Math.floor(currentTime * 10) / 10;
+    setBookmarks(prev =>
+      prev.includes(roundedTime)
+        ? prev.filter(t => t !== roundedTime)
+        : [...prev, roundedTime]
+    );
   };
 
   const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -575,9 +591,12 @@ export default function EditorProPage() {
         <PanelGroup direction="horizontal">
           {/* 左側: 預覽面板 */}
           <Panel defaultSize={70} minSize={50}>
-            <div className="h-full flex flex-col bg-gray-900">
-              {/* 影片預覽區 */}
-              <div className="flex-1 flex items-center justify-center bg-black overflow-hidden relative">
+            <PanelGroup direction="vertical">
+              {/* 影片預覽面板 */}
+              <Panel defaultSize={70} minSize={30}>
+                <div className="h-full flex flex-col bg-gray-900">
+                  {/* 影片預覽區 */}
+                  <div className="flex-1 flex items-center justify-center bg-black overflow-hidden relative">
                 {!videoUrl ? (
                   <div className="text-center">
                     <Upload size={64} className="mx-auto mb-4 text-gray-600" />
@@ -705,49 +724,33 @@ export default function EditorProPage() {
                   </>
                 )}
               </div>
-
-              {/* 播放控制列 */}
-              <div className="h-16 border-t border-gray-800 flex items-center px-4 gap-4">
-                <button
-                  onClick={togglePlayPause}
-                  disabled={!videoUrl}
-                  className="p-2 hover:bg-gray-800 rounded transition disabled:opacity-50"
-                >
-                  {isPlaying ? <Pause size={20} /> : <Play size={20} />}
-                </button>
-                
-                <span className="text-sm text-gray-400 w-24">
-                  {formatTime(currentTime)} / {formatTime(duration)}
-                </span>
-
-                <div className="flex-1 h-2 bg-gray-800 rounded-full relative cursor-pointer">
-                  <div
-                    className="h-full bg-blue-600 rounded-full"
-                    style={{ width: `${(currentTime / duration) * 100 || 0}%` }}
-                  />
                 </div>
-              </div>
+              </Panel>
 
-              {/* 時間軸 */}
-              <div className="h-48 border-t border-gray-800 bg-gray-900">
-                <div className="h-full flex flex-col">
-                  {/* 時間標尺 */}
-                  <div className="h-8 border-b border-gray-800 bg-gray-950 relative">
-                    <div className="h-full flex items-end px-2">
-                      {duration > 0 && Array.from({ length: 11 }).map((_, i) => {
-                        const time = (duration / 10) * i;
-                        return (
-                          <div
-                            key={i}
-                            className="flex-1 text-xs text-gray-500 text-center"
-                          >
-                            {formatTime(time)}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
+              {/* 垂直調整手柄 */}
+              <PanelResizeHandle className="h-1 bg-gray-800 hover:bg-blue-600 transition cursor-row-resize" />
+  
+              {/* 時間軸面板 */}
+              <Panel defaultSize={30} minSize={15} maxSize={50}>
+                <div className="h-full flex flex-col bg-gray-900">
+                  {/* 播放控制列 */}
+                  <VideoPlaybackControls
+                    isPlaying={isPlaying}
+                    currentTime={currentTime}
+                    duration={duration}
+                    onPlayPause={togglePlayPause}
+                    onSeek={seekTo}
+                    onSkipToStart={handleSkipToStart}
+                    bookmarks={bookmarks}
+                    onToggleBookmark={handleToggleBookmark}
+                    zoomLevel={zoomLevel}
+                    onZoomIn={() => setZoomLevel(Math.min(4, zoomLevel + 0.25))}
+                    onZoomOut={() => setZoomLevel(Math.max(0.25, zoomLevel - 0.25))}
+                    onZoomChange={setZoomLevel}
+                    fps={30}
+                    showBookmarks={true}
+                  />
+  
                   {/* 字幕軌道 */}
                   <div
                     ref={timelineRef}
@@ -766,7 +769,7 @@ export default function EditorProPage() {
                         <div className="absolute -top-1 -left-1.5 w-3 h-3 bg-red-500 rounded-full" />
                       </div>
                     )}
-
+  
                     {/* 字幕片段 */}
                     {duration > 0 && segments.map((segment) => {
                       const left = (segment.startTime / duration) * 100;
@@ -792,7 +795,7 @@ export default function EditorProPage() {
                             onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'left')}
                             onClick={(e) => e.stopPropagation()}
                           />
-
+  
                           {/* 中間區域:點擊選中,拖曳移動 */}
                           <div
                             className="h-full flex items-center justify-center p-1 cursor-move"
@@ -806,14 +809,14 @@ export default function EditorProPage() {
                               {segment.text}
                             </span>
                           </div>
-
+  
                           {/* 右邊緣拖曳手柄 */}
                           <div
                             className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 z-10"
                             onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'right')}
                             onClick={(e) => e.stopPropagation()}
                           />
-
+  
                           {/* 時間提示 */}
                           <div className="absolute -top-6 left-0 bg-gray-800 text-xs px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
                             {formatTime(segment.startTime)} - {formatTime(segment.endTime)}
@@ -823,8 +826,8 @@ export default function EditorProPage() {
                     })}
                   </div>
                 </div>
-              </div>
-            </div>
+              </Panel>
+            </PanelGroup>
           </Panel>
 
           <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-blue-600 transition" />

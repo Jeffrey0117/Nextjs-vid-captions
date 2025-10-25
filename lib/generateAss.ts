@@ -62,12 +62,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     const end = formatAssTime(seg.endTime);
     const text = (seg.translatedText || seg.text).replace(/\n/g, '\\N');
     
-    // 計算垂直邊距 (positionY 0-100% -> MarginV)
-    // 1080p 為基準,positionY 是從頂部開始的百分比
-    const marginV = Math.round(1080 * (seg.style.positionY / 100));
+    // 計算位置 (1920x1080 為基準)
+    // positionX: 0-100% (水平位置,可能超出範圍 -50 到 150)
+    // positionY: 0-100% (垂直位置,可能超出範圍 -50 到 150)
+    const posX = Math.round(1920 * (seg.style.positionX / 100));
+    const posY = Math.round(1080 * (seg.style.positionY / 100));
     
-    // 使用 \pos 標籤精確定位
-    const posTag = `{\\pos(960,${marginV})}`;
+    // 使用 \pos 標籤精確定位,支援 X/Y 雙軸
+    const posTag = `{\\pos(${posX},${posY})}`;
     
     return `Dialogue: 0,${start},${end},Style${index},,0,0,0,,${posTag}${text}`;
   }).join('\n');

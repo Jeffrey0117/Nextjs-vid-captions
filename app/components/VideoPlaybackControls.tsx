@@ -1,7 +1,19 @@
 "use client";
 
-import { Play, Pause, SkipBack, ZoomIn, ZoomOut } from "lucide-react";
-import { formatTimeCode } from "@/lib/time";
+import {
+  Play,
+  Pause,
+  SkipBack,
+  ZoomIn,
+  ZoomOut,
+  Scissors,
+  ArrowLeftToLine,
+  ArrowRightToLine,
+  Copy,
+  Trash2,
+  Bookmark
+} from "lucide-react";
+import { EditableTimecode } from "./EditableTimecode";
 
 interface VideoPlaybackControlsProps {
   // Playback state
@@ -14,6 +26,17 @@ interface VideoPlaybackControlsProps {
   onSeek: (time: number) => void;
   onSkipToStart: () => void;
   
+  // Editing controls (optional)
+  onSplit?: () => void;
+  onSplitKeepLeft?: () => void;
+  onSplitKeepRight?: () => void;
+  onDuplicate?: () => void;
+  onDelete?: () => void;
+  
+  // Bookmark controls (optional)
+  bookmarks?: number[];
+  onToggleBookmark?: () => void;
+  
   // Zoom controls
   zoomLevel: number;
   onZoomIn: () => void;
@@ -23,6 +46,10 @@ interface VideoPlaybackControlsProps {
   // Display settings
   fps?: number;
   className?: string;
+  
+  // Feature flags
+  showEditingTools?: boolean;
+  showBookmarks?: boolean;
 }
 
 export default function VideoPlaybackControls({
@@ -32,16 +59,26 @@ export default function VideoPlaybackControls({
   onPlayPause,
   onSeek,
   onSkipToStart,
+  onSplit,
+  onSplitKeepLeft,
+  onSplitKeepRight,
+  onDuplicate,
+  onDelete,
+  bookmarks = [],
+  onToggleBookmark,
   zoomLevel,
   onZoomIn,
   onZoomOut,
   onZoomChange,
   fps = 30,
   className = "",
+  showEditingTools = false,
+  showBookmarks = false,
 }: VideoPlaybackControlsProps) {
+  const isBookmarked = bookmarks.includes(Math.floor(currentTime * 10) / 10);
   return (
     <div className={`flex items-center justify-between px-3 py-2 border-t bg-zinc-900 ${className}`}>
-      {/* Left: Playback Controls */}
+      {/* Left: Playback & Editing Controls */}
       <div className="flex items-center gap-1">
         {/* Play/Pause Button */}
         <button
@@ -67,16 +104,85 @@ export default function VideoPlaybackControls({
 
         <div className="w-px h-6 bg-zinc-700 mx-1" />
 
-        {/* Time Display */}
-        <div className="flex items-center gap-2 px-2 font-mono text-sm">
-          <span className="text-white">
-            {formatTimeCode(currentTime, "HH:MM:SS:FF", fps)}
-          </span>
-          <span className="text-zinc-500">/</span>
-          <span className="text-zinc-400">
-            {formatTimeCode(duration, "HH:MM:SS:FF", fps)}
+        {/* Time Display with Editable Timecode */}
+        <div className="flex items-center gap-2 px-2">
+          <EditableTimecode
+            time={currentTime}
+            duration={duration}
+            format="HH:MM:SS:FF"
+            fps={fps}
+            onTimeChange={onSeek}
+          />
+          <span className="text-zinc-500 text-sm font-mono">/</span>
+          <span className="text-zinc-400 text-sm font-mono">
+            {new Date(duration * 1000).toISOString().substr(11, 8)}:
+            {String(Math.floor((duration % 1) * fps)).padStart(2, '0')}
           </span>
         </div>
+        
+        {/* Editing Tools */}
+        {showEditingTools && (
+          <>
+            <div className="w-px h-6 bg-zinc-700 mx-1" />
+            
+            <button
+              onClick={onSplit}
+              className="w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors"
+              title="分割片段 (Ctrl+S)"
+            >
+              <Scissors className="w-4 h-4 text-white" />
+            </button>
+            
+            <button
+              onClick={onSplitKeepLeft}
+              className="w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors"
+              title="分割保留左側 (Ctrl+Q)"
+            >
+              <ArrowLeftToLine className="w-4 h-4 text-white" />
+            </button>
+            
+            <button
+              onClick={onSplitKeepRight}
+              className="w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors"
+              title="分割保留右側 (Ctrl+W)"
+            >
+              <ArrowRightToLine className="w-4 h-4 text-white" />
+            </button>
+            
+            <button
+              onClick={onDuplicate}
+              className="w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors"
+              title="複製片段 (Ctrl+D)"
+            >
+              <Copy className="w-4 h-4 text-white" />
+            </button>
+            
+            <button
+              onClick={onDelete}
+              className="w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors"
+              title="刪除片段 (Delete)"
+            >
+              <Trash2 className="w-4 h-4 text-white" />
+            </button>
+          </>
+        )}
+        
+        {/* Bookmarks */}
+        {showBookmarks && (
+          <>
+            <div className="w-px h-6 bg-zinc-700 mx-1" />
+            
+            <button
+              onClick={onToggleBookmark}
+              className="w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors"
+              title={isBookmarked ? "移除書籤" : "新增書籤"}
+            >
+              <Bookmark
+                className={`w-4 h-4 ${isBookmarked ? 'fill-blue-500 text-blue-500' : 'text-white'}`}
+              />
+            </button>
+          </>
+        )}
       </div>
 
       {/* Right: Zoom Controls */}

@@ -47,10 +47,22 @@ export async function POST(request: Request) {
     try {
       // 執行 FFmpeg 命令燒錄字幕
       console.log("Starting FFmpeg subtitle burn...");
-      const { stderr } = await execAsync(
-        `ffmpeg -i "${videoPath}" -vf "ass=${assPath}" -c:v libx264 -preset medium -crf 23 -c:a copy "${outputPath}"`
-      );
+      console.log("Video path:", videoPath);
+      console.log("ASS path:", assPath);
+      console.log("Output path:", outputPath);
+      
+      // Windows 路徑需要轉換為正斜線或使用雙反斜線
+      const ffmpegCommand = process.platform === 'win32'
+        ? `ffmpeg -i "${videoPath.replace(/\\/g, '/')}" -vf "ass='${assPath.replace(/\\/g, '/')}':force_style='FontName=Arial'" -c:v libx264 -preset medium -crf 23 -c:a copy "${outputPath.replace(/\\/g, '/')}"`
+        : `ffmpeg -i "${videoPath}" -vf "ass=${assPath}" -c:v libx264 -preset medium -crf 23 -c:a copy "${outputPath}"`;
+      
+      console.log("FFmpeg command:", ffmpegCommand);
+      
+      const { stdout, stderr } = await execAsync(ffmpegCommand);
 
+      if (stdout) {
+        console.log("FFmpeg stdout:", stdout);
+      }
       if (stderr) {
         console.log("FFmpeg stderr:", stderr);
       }
