@@ -560,40 +560,40 @@ export default function EditorProPage() {
   return (
     <div className="h-screen flex flex-col bg-gray-950 text-white">
       {/* 頂部工具列 */}
-      <header className="h-14 border-b border-gray-800 flex items-center px-4 gap-2 bg-gray-900">
-        <h1 className="text-lg font-bold mr-4">OpenCut 字幕編輯器</h1>
+      <header className="h-10 border-b border-gray-800 flex items-center px-3 gap-1.5 bg-gray-900">
+        <h1 className="text-sm font-bold mr-2">OpenCut 字幕編輯器</h1>
         
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded transition text-sm"
+          className="flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded transition text-xs"
         >
-          <Upload size={16} />
+          <Upload size={12} />
           上傳影片
         </button>
 
         <button
           onClick={() => srtInputRef.current?.click()}
-          className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded transition text-sm"
+          className="flex items-center gap-1 px-2 py-1 bg-green-600 hover:bg-green-700 rounded transition text-xs"
         >
-          <FileText size={16} />
+          <FileText size={12} />
           匯入 SRT
         </button>
 
         <button
           onClick={handleWhisperTranscribe}
           disabled={!videoFile || isTranscribing}
-          className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-1 px-2 py-1 bg-purple-600 hover:bg-purple-700 rounded transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Scissors size={16} />
+          <Scissors size={12} />
           {isTranscribing ? 'AI 識別中...' : 'Whisper 識別'}
         </button>
 
-        <div className="h-6 w-px bg-gray-700 mx-2" />
+        <div className="h-5 w-px bg-gray-700 mx-1" />
 
         <select
           value={targetLang}
           onChange={(e) => setTargetLang(e.target.value)}
-          className="px-3 py-1.5 bg-gray-800 rounded border border-gray-700 text-sm"
+          className="px-2 py-1 bg-gray-800 rounded border border-gray-700 text-xs"
         >
           <option value="zh-TW">繁體中文</option>
           <option value="zh-CN">簡體中文</option>
@@ -605,46 +605,46 @@ export default function EditorProPage() {
         <button
           onClick={handleTranslateAll}
           disabled={segments.length === 0 || isTranslating}
-          className="flex items-center gap-2 px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 rounded transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-1 px-2 py-1 bg-yellow-600 hover:bg-yellow-700 rounded transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Languages size={16} />
+          <Languages size={12} />
           {isTranslating ? '翻譯中...' : '翻譯全部'}
         </button>
 
         <button
           onClick={handleDownloadSrt}
           disabled={segments.length === 0}
-          className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-1 px-2 py-1 bg-indigo-600 hover:bg-indigo-700 rounded transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Download size={16} />
+          <Download size={12} />
           下載 SRT
         </button>
 
-        <div className="h-6 w-px bg-gray-700 mx-2" />
+        <div className="h-5 w-px bg-gray-700 mx-1" />
 
         <button
           onClick={() => setShowBulkEditor(true)}
           disabled={segments.length === 0}
-          className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 rounded transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-1 px-2 py-1 bg-teal-600 hover:bg-teal-700 rounded transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Edit3 size={16} />
+          <Edit3 size={12} />
           批量編輯
         </button>
 
         <button
           onClick={handleExportVideo}
           disabled={!videoFile || segments.length === 0 || isExporting}
-          className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 rounded transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-1 px-2 py-1 bg-emerald-600 hover:bg-emerald-700 rounded transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Film size={16} />
+          <Film size={12} />
           {isExporting ? `輸出中 ${exportProgress}%` : '輸出影片'}
         </button>
 
         <button
           onClick={clearAll}
-          className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded transition text-sm ml-auto"
+          className="flex items-center gap-1 px-2 py-1 bg-red-600 hover:bg-red-700 rounded transition text-xs ml-auto"
         >
-          <Trash2 size={16} />
+          <Trash2 size={12} />
           清空
         </button>
       </header>
@@ -834,18 +834,18 @@ export default function EditorProPage() {
                     {/* 時間標尺區 */}
                     <div className="flex bg-gray-900 sticky top-0 z-10 border-b border-gray-800">
                       {/* 左側空白區 (對應軌道標籤寬度) */}
-                      <div className="w-28 shrink-0 bg-gray-900 border-r border-gray-800 flex items-center justify-between px-3 py-2">
-                        <span className="text-sm font-medium text-gray-600 opacity-0">.</span>
+                      <div className="w-20 shrink-0 bg-gray-900 border-r border-gray-800 flex items-center justify-between px-2 py-1">
+                        <span className="text-xs font-medium text-gray-600 opacity-0">.</span>
                       </div>
                       
                       {/* 時間標尺 */}
                       <div
-                        className="flex-1 relative overflow-hidden h-10"
+                        className="flex-1 relative overflow-hidden h-8"
                         data-ruler-area="true"
                       >
                         <div className="overflow-auto scrollbar-thin w-full" id="ruler-scroll">
                           <div
-                            className="relative h-10 select-none cursor-default"
+                            className="relative h-8 select-none cursor-default"
                             style={{
                               width: `${Math.max(duration * 50 * zoomLevel, 1500)}px`,
                             }}
@@ -875,10 +875,10 @@ export default function EditorProPage() {
                                 return (
                                   <div
                                     key={i}
-                                    className="absolute top-0 h-4 border-l border-gray-600"
+                                    className="absolute top-0 h-3 border-l border-gray-600"
                                     style={{ left: `${time * pixelsPerSecond}px` }}
                                   >
-                                    <span className="absolute top-1 left-1 text-[0.6rem] text-gray-400 font-medium">
+                                    <span className="absolute top-0.5 left-1 text-[0.55rem] text-gray-400 font-medium">
                                       {Math.floor(time)}s
                                     </span>
                                   </div>
@@ -890,7 +890,7 @@ export default function EditorProPage() {
                             {bookmarks.map((bookmarkTime, i) => (
                               <div
                                 key={`bookmark-${i}`}
-                                className="absolute top-0 h-10 w-0.5 bg-blue-500 cursor-pointer"
+                                className="absolute top-0 h-8 w-0.5 bg-blue-500 cursor-pointer"
                                 style={{
                                   left: `${bookmarkTime * 50 * zoomLevel}px`,
                                 }}
@@ -909,18 +909,18 @@ export default function EditorProPage() {
                     <div className="flex-1 flex overflow-hidden">
                       {/* 軌道標籤 */}
                       <div
-                        className="w-28 shrink-0 border-r border-gray-800 overflow-y-auto z-100 bg-gray-900"
+                        className="w-20 shrink-0 border-r border-gray-800 overflow-y-auto z-100 bg-gray-900"
                         data-track-labels="true"
                       >
                         <div className="overflow-auto scrollbar-thin w-full h-full" id="track-labels-scroll">
                           <div className="flex flex-col gap-1">
                             {/* 字幕軌道標籤 */}
                             <div
-                              className="flex items-center px-3 group"
-                              style={{ height: '80px' }}
+                              className="flex items-center px-2 group"
+                              style={{ height: '60px' }}
                             >
-                              <div className="flex items-center justify-end flex-1 min-w-0 gap-2">
-                                <span className="text-xs text-gray-400">字幕</span>
+                              <div className="flex items-center justify-end flex-1 min-w-0 gap-1">
+                                <span className="text-[0.65rem] text-gray-400">字幕</span>
                               </div>
                             </div>
                           </div>
@@ -939,7 +939,7 @@ export default function EditorProPage() {
                             ref={timelineRef}
                             className="relative flex-1"
                             style={{
-                              height: '80px',
+                              height: '60px',
                               width: `${Math.max(duration * 50 * zoomLevel, 1500)}px`,
                             }}
                             onClick={handleTimelineClick}
@@ -950,12 +950,12 @@ export default function EditorProPage() {
                                 className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10 pointer-events-none"
                                 style={{ left: `${currentTime * 50 * zoomLevel}px` }}
                               >
-                                <div className="absolute -top-1 -left-1.5 w-3 h-3 bg-red-500 rounded-full" />
+                                <div className="absolute -top-1 -left-1 w-2 h-2 bg-red-500 rounded-full" />
                               </div>
                             )}
                             
                             {/* 字幕軌道 */}
-                            <div className="absolute left-0 right-0 top-0" style={{ height: '80px' }}>
+                            <div className="absolute left-0 right-0 top-0" style={{ height: '60px' }}>
                               <div className="w-full h-full hover:bg-gray-800/20">
                                 <div className="h-full relative track-elements-container min-w-full">
                                   {/* 字幕片段 */}
@@ -967,7 +967,7 @@ export default function EditorProPage() {
                                     return (
                                       <div
                                         key={segment.id}
-                                        className={`absolute top-2 h-16 rounded border transition group ${
+                                        className={`absolute top-1 h-14 rounded border transition group ${
                                           isSelected
                                             ? 'bg-yellow-600 border-yellow-400'
                                             : 'bg-blue-600 hover:bg-blue-700 border-blue-400'
@@ -986,27 +986,27 @@ export default function EditorProPage() {
                                         
                                         {/* 中間區域:點擊選中,拖曳移動 */}
                                         <div
-                                          className="h-full flex items-center justify-center p-1 cursor-move"
+                                          className="h-full flex items-center justify-center p-0.5 cursor-move"
                                           onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'move')}
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             handleSegmentClick(segment.id, segment.startTime);
                                           }}
                                         >
-                                          <span className="text-xs text-white truncate">
+                                          <span className="text-[0.65rem] text-white truncate">
                                             {segment.text}
                                           </span>
                                         </div>
                                         
                                         {/* 右邊緣拖曳手柄 */}
                                         <div
-                                          className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 z-10"
+                                          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/20 z-10"
                                           onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'right')}
                                           onClick={(e) => e.stopPropagation()}
                                         />
                                         
                                         {/* 時間提示 */}
-                                        <div className="absolute -top-6 left-0 bg-gray-800 text-xs px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
+                                        <div className="absolute -top-5 left-0 bg-gray-800 text-[0.65rem] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
                                           {formatTime(segment.startTime)} - {formatTime(segment.endTime)}
                                         </div>
                                       </div>
@@ -1030,8 +1030,8 @@ export default function EditorProPage() {
           {/* 右側: 字幕屬性編輯面板 */}
           <Panel defaultSize={30} minSize={25}>
             <div className="h-full flex flex-col bg-gray-900">
-              <div className="h-12 border-b border-gray-800 flex items-center px-4">
-                <h2 className="font-semibold">
+              <div className="h-9 border-b border-gray-800 flex items-center px-3">
+                <h2 className="text-sm font-semibold">
                   字幕屬性
                 </h2>
               </div>

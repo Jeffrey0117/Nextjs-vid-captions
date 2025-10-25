@@ -46,10 +46,14 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
     // Shadow 距離 (ASS 只支援一個 shadow 參數,使用 Y 偏移作為距離)
     const shadow = style.enableShadow ? Math.max(0, Math.abs(style.shadowOffsetY)) : 0;
     
-    // 縮放比例 (ScaleX, ScaleY)
-    const scale = Math.round(style.scale * 100);
+    // ASS 字體大小應該包含 scale 的效果,才能與網頁預覽一致
+    // 網頁上實際顯示大小 = fontSize * scale
+    const actualFontSize = Math.round(style.fontSize * style.scale);
     
-    return `Style: Style${index},${style.fontFamily},${style.fontSize},${primaryColor},&H000000FF,${shadowColor},${backgroundColor},${bold},${italic},${underline},${strikeout},${scale},${scale},0,0,1,0,${shadow},${alignment},10,10,10,1`;
+    // ScaleX/ScaleY 設為 100 (不再額外縮放,因為已經算在字體大小裡)
+    const scale = 100;
+    
+    return `Style: Style${index},${style.fontFamily},${actualFontSize},${primaryColor},&H000000FF,${shadowColor},${backgroundColor},${bold},${italic},${underline},${strikeout},${scale},${scale},0,0,1,0,${shadow},${alignment},10,10,10,1`;
   }).join('\n');
 
   // 事件 (字幕內容)

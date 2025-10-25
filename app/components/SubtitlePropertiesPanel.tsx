@@ -51,9 +51,9 @@ export default function SubtitlePropertiesPanel({
   };
 
   return (
-    <div className="h-full overflow-y-auto p-4 space-y-6">
+    <div className="h-full overflow-y-auto p-3 space-y-4">
       {/* 套用到所有字幕 */}
-      <div className="flex items-center gap-2 p-3 bg-blue-900 border border-blue-700 rounded-lg">
+      <div className="flex items-center gap-2 p-2 bg-blue-900 border border-blue-700 rounded-lg">
         <input
           type="checkbox"
           id="apply-to-all"
@@ -61,96 +61,96 @@ export default function SubtitlePropertiesPanel({
           onChange={(e) => setApplyToAll(e.target.checked)}
           className="w-4 h-4"
         />
-        <label htmlFor="apply-to-all" className="text-sm font-medium cursor-pointer">
+        <label htmlFor="apply-to-all" className="text-xs font-medium cursor-pointer">
           套用到所有字幕
         </label>
       </div>
 
       {/* 文字內容 */}
       <div>
-        <label className="block text-sm font-medium mb-2">字幕內容</label>
+        <label className="block text-xs font-medium mb-1.5">字幕內容</label>
         <textarea
           value={selectedSegment.text}
           onChange={(e) => updateSegment(selectedSegment.id, { text: e.target.value })}
-          className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg resize-none focus:outline-none focus:border-blue-500"
-          rows={3}
+          className="w-full px-2 py-1.5 text-xs bg-gray-800 border border-gray-700 rounded-lg resize-none focus:outline-none focus:border-blue-500"
+          rows={2}
         />
       </div>
 
       {/* 譯文 */}
       {selectedSegment.translatedText && (
         <div>
-          <label className="block text-sm font-medium mb-2">翻譯文字</label>
+          <label className="block text-xs font-medium mb-1.5">翻譯文字</label>
           <textarea
             value={selectedSegment.translatedText}
             onChange={(e) => updateSegment(selectedSegment.id, { translatedText: e.target.value })}
-            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg resize-none focus:outline-none focus:border-blue-500"
-            rows={3}
+            className="w-full px-2 py-1.5 text-xs bg-gray-800 border border-gray-700 rounded-lg resize-none focus:outline-none focus:border-blue-500"
+            rows={2}
           />
         </div>
       )}
 
       {/* 字型樣式 */}
       <div>
-        <label className="block text-sm font-medium mb-2">樣式</label>
-        <div className="flex gap-2">
+        <label className="block text-xs font-medium mb-1.5">樣式</label>
+        <div className="flex gap-1.5">
           <button
             onClick={() => updateStyle({
               fontWeight: selectedSegment.style.fontWeight === 'bold' ? 'normal' : 'bold'
             })}
-            className={`flex-1 px-3 py-2 rounded-lg border transition ${
+            className={`flex-1 px-2 py-1.5 rounded-lg border transition ${
               selectedSegment.style.fontWeight === 'bold'
                 ? 'bg-blue-600 border-blue-500'
                 : 'bg-gray-800 border-gray-700 hover:bg-gray-750'
             }`}
           >
-            <Bold size={18} className="mx-auto" />
+            <Bold size={14} className="mx-auto" />
           </button>
           <button
             onClick={() => updateStyle({
               fontStyle: selectedSegment.style.fontStyle === 'italic' ? 'normal' : 'italic'
             })}
-            className={`flex-1 px-3 py-2 rounded-lg border transition ${
+            className={`flex-1 px-2 py-1.5 rounded-lg border transition ${
               selectedSegment.style.fontStyle === 'italic'
                 ? 'bg-blue-600 border-blue-500'
                 : 'bg-gray-800 border-gray-700 hover:bg-gray-750'
             }`}
           >
-            <Italic size={18} className="mx-auto" />
+            <Italic size={14} className="mx-auto" />
           </button>
           <button
             onClick={() => updateStyle({
               textDecoration: selectedSegment.style.textDecoration === 'underline' ? 'none' : 'underline'
             })}
-            className={`flex-1 px-3 py-2 rounded-lg border transition ${
+            className={`flex-1 px-2 py-1.5 rounded-lg border transition ${
               selectedSegment.style.textDecoration === 'underline'
                 ? 'bg-blue-600 border-blue-500'
                 : 'bg-gray-800 border-gray-700 hover:bg-gray-750'
             }`}
           >
-            <Underline size={18} className="mx-auto" />
+            <Underline size={14} className="mx-auto" />
           </button>
           <button
             onClick={() => updateStyle({
               textDecoration: selectedSegment.style.textDecoration === 'line-through' ? 'none' : 'line-through'
             })}
-            className={`flex-1 px-3 py-2 rounded-lg border transition ${
+            className={`flex-1 px-2 py-1.5 rounded-lg border transition ${
               selectedSegment.style.textDecoration === 'line-through'
                 ? 'bg-blue-600 border-blue-500'
                 : 'bg-gray-800 border-gray-700 hover:bg-gray-750'
             }`}
           >
-            <Strikethrough size={18} className="mx-auto" />
+            <Strikethrough size={14} className="mx-auto" />
           </button>
         </div>
       </div>
 
       {/* 字型大小 */}
       <div>
-        <label className="block text-sm font-medium mb-2">
+        <label className="block text-xs font-medium mb-1.5">
           字型大小: {selectedSegment.style.fontSize}px
         </label>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-1.5 items-center">
           <input
             type="range"
             min="16"
@@ -165,24 +165,24 @@ export default function SubtitlePropertiesPanel({
             max="120"
             value={selectedSegment.style.fontSize}
             onChange={(e) => updateStyle({ fontSize: parseInt(e.target.value) })}
-            className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-center"
+            className="w-12 px-1.5 py-0.5 text-xs bg-gray-800 border border-gray-700 rounded text-center"
           />
         </div>
       </div>
 
       {/* 文字顏色 */}
       <div>
-        <label className="block text-sm font-medium mb-2">文字顏色</label>
+        <label className="block text-xs font-medium mb-1.5">文字顏色</label>
         <div className="relative">
           <button
             onClick={() => setShowColorPicker(!showColorPicker)}
-            className="w-full flex items-center gap-3 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-750 transition"
+            className="w-full flex items-center gap-2 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-750 transition"
           >
             <div
-              className="w-8 h-8 rounded border-2 border-gray-600"
+              className="w-6 h-6 rounded border-2 border-gray-600"
               style={{ backgroundColor: selectedSegment.style.color }}
             />
-            <span className="font-mono">{selectedSegment.style.color}</span>
+            <span className="font-mono text-xs">{selectedSegment.style.color}</span>
           </button>
           {showColorPicker && (
             <div className="absolute top-full mt-2 z-50 p-3 bg-gray-900 border border-gray-700 rounded-lg shadow-xl">
@@ -197,7 +197,7 @@ export default function SubtitlePropertiesPanel({
 
       {/* 透明度 */}
       <div>
-        <label className="block text-sm font-medium mb-2">
+        <label className="block text-xs font-medium mb-1.5">
           透明度: {Math.round(selectedSegment.style.opacity * 100)}%
         </label>
         <input
@@ -212,34 +212,34 @@ export default function SubtitlePropertiesPanel({
 
       {/* 陰影效果 */}
       <div>
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-2">
           <input
             type="checkbox"
             id="enable-shadow"
             checked={selectedSegment.style.enableShadow}
             onChange={(e) => updateStyle({ enableShadow: e.target.checked })}
-            className="w-4 h-4"
+            className="w-3.5 h-3.5"
           />
-          <label htmlFor="enable-shadow" className="text-sm font-medium cursor-pointer">
+          <label htmlFor="enable-shadow" className="text-xs font-medium cursor-pointer">
             啟用陰影效果
           </label>
         </div>
 
         {selectedSegment.style.enableShadow && (
-          <div className="space-y-4 pl-6 border-l-2 border-gray-700">
+          <div className="space-y-3 pl-4 border-l-2 border-gray-700">
             {/* 陰影顏色 */}
             <div>
-              <label className="block text-sm font-medium mb-2">陰影顏色</label>
+              <label className="block text-xs font-medium mb-1.5">陰影顏色</label>
               <div className="relative">
                 <button
                   onClick={() => setShowShadowColorPicker(!showShadowColorPicker)}
-                  className="w-full flex items-center gap-3 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-750 transition"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-750 transition"
                 >
                   <div
-                    className="w-8 h-8 rounded border-2 border-gray-600"
+                    className="w-6 h-6 rounded border-2 border-gray-600"
                     style={{ backgroundColor: selectedSegment.style.shadowColor }}
                   />
-                  <span className="font-mono">{selectedSegment.style.shadowColor}</span>
+                  <span className="font-mono text-xs">{selectedSegment.style.shadowColor}</span>
                 </button>
                 {showShadowColorPicker && (
                   <div className="absolute top-full mt-2 z-50 p-3 bg-gray-900 border border-gray-700 rounded-lg shadow-xl">
@@ -254,10 +254,10 @@ export default function SubtitlePropertiesPanel({
 
             {/* 陰影 X 偏移 */}
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label className="block text-xs font-medium mb-1.5">
                 X 偏移: {selectedSegment.style.shadowOffsetX}px
               </label>
-              <div className="flex gap-2 items-center">
+              <div className="flex gap-1.5 items-center">
                 <input
                   type="range"
                   min="-50"
@@ -272,17 +272,17 @@ export default function SubtitlePropertiesPanel({
                   max="50"
                   value={selectedSegment.style.shadowOffsetX}
                   onChange={(e) => updateStyle({ shadowOffsetX: parseInt(e.target.value) })}
-                  className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-center"
+                  className="w-12 px-1.5 py-0.5 text-xs bg-gray-800 border border-gray-700 rounded text-center"
                 />
               </div>
             </div>
 
             {/* 陰影 Y 偏移 */}
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label className="block text-xs font-medium mb-1.5">
                 Y 偏移: {selectedSegment.style.shadowOffsetY}px
               </label>
-              <div className="flex gap-2 items-center">
+              <div className="flex gap-1.5 items-center">
                 <input
                   type="range"
                   min="-50"
@@ -297,17 +297,17 @@ export default function SubtitlePropertiesPanel({
                   max="50"
                   value={selectedSegment.style.shadowOffsetY}
                   onChange={(e) => updateStyle({ shadowOffsetY: parseInt(e.target.value) })}
-                  className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-center"
+                  className="w-12 px-1.5 py-0.5 text-xs bg-gray-800 border border-gray-700 rounded text-center"
                 />
               </div>
             </div>
 
             {/* 陰影模糊半徑 */}
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label className="block text-xs font-medium mb-1.5">
                 模糊半徑: {selectedSegment.style.shadowBlur}px
               </label>
-              <div className="flex gap-2 items-center">
+              <div className="flex gap-1.5 items-center">
                 <input
                   type="range"
                   min="0"
@@ -322,7 +322,7 @@ export default function SubtitlePropertiesPanel({
                   max="50"
                   value={selectedSegment.style.shadowBlur}
                   onChange={(e) => updateStyle({ shadowBlur: parseInt(e.target.value) })}
-                  className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-center"
+                  className="w-12 px-1.5 py-0.5 text-xs bg-gray-800 border border-gray-700 rounded text-center"
                 />
               </div>
             </div>
@@ -332,11 +332,11 @@ export default function SubtitlePropertiesPanel({
 
       {/* 縮放比例 */}
       <div>
-        <label className="block text-sm font-medium mb-2">
+        <label className="block text-xs font-medium mb-1.5">
           縮放比例: {selectedSegment.style.scale.toFixed(1)}x
         </label>
-        <p className="text-xs text-gray-400 mb-2">提示: 也可以直接拖曳字幕邊框縮放</p>
-        <div className="flex gap-2 items-center">
+        <p className="text-[0.65rem] text-gray-400 mb-1.5">提示: 也可以直接拖曳字幕邊框縮放</p>
+        <div className="flex gap-1.5 items-center">
           <input
             type="range"
             min="50"
@@ -353,30 +353,30 @@ export default function SubtitlePropertiesPanel({
             step="0.1"
             value={selectedSegment.style.scale}
             onChange={(e) => updateStyle({ scale: parseFloat(e.target.value) })}
-            className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-center"
+            className="w-12 px-1.5 py-0.5 text-xs bg-gray-800 border border-gray-700 rounded text-center"
           />
         </div>
       </div>
 
       {/* 背景顏色 */}
       <div>
-        <label className="block text-sm font-medium mb-2">背景顏色</label>
-        <div className="space-y-2">
+        <label className="block text-xs font-medium mb-1.5">背景顏色</label>
+        <div className="space-y-1.5">
           <div className="relative">
             <button
               onClick={() => setShowBgColorPicker(!showBgColorPicker)}
-              className="w-full flex items-center gap-3 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-750 transition"
+              className="w-full flex items-center gap-2 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-750 transition"
               disabled={selectedSegment.style.backgroundColor === 'transparent'}
             >
               <div
-                className="w-8 h-8 rounded border-2 border-gray-600"
+                className="w-6 h-6 rounded border-2 border-gray-600"
                 style={{
                   backgroundColor: selectedSegment.style.backgroundColor === 'transparent'
                     ? '#000000'
                     : selectedSegment.style.backgroundColor
                 }}
               />
-              <span className="font-mono">
+              <span className="font-mono text-xs">
                 {selectedSegment.style.backgroundColor === 'transparent'
                   ? '透明'
                   : selectedSegment.style.backgroundColor}
@@ -395,7 +395,7 @@ export default function SubtitlePropertiesPanel({
             onClick={() => updateStyle({
               backgroundColor: selectedSegment.style.backgroundColor === 'transparent' ? '#000000' : 'transparent'
             })}
-            className={`w-full px-3 py-2 rounded-lg border transition ${
+            className={`w-full px-2 py-1.5 text-xs rounded-lg border transition ${
               selectedSegment.style.backgroundColor === 'transparent'
                 ? 'bg-blue-600 border-blue-500'
                 : 'bg-gray-800 border-gray-700 hover:bg-gray-750'
@@ -408,10 +408,10 @@ export default function SubtitlePropertiesPanel({
 
       {/* 垂直位置 */}
       <div>
-        <label className="block text-sm font-medium mb-2">
+        <label className="block text-xs font-medium mb-1.5">
           垂直位置: {selectedSegment.style.positionY}%
         </label>
-        <p className="text-xs text-gray-400 mb-2">提示: 也可以直接拖曳影片上的字幕</p>
+        <p className="text-[0.65rem] text-gray-400 mb-1.5">提示: 也可以直接拖曳影片上的字幕</p>
         <input
           type="range"
           min="0"
