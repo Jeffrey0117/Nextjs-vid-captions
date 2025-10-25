@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useSubtitleStore } from '../stores/subtitle-store';
-import { Upload, FileText, Download, Languages, Trash2, Scissors, Film, Edit3 } from 'lucide-react';
+import { Upload, FileText, Download, Languages, Trash2, Scissors, Film, Edit3, ArrowLeftToLine, ArrowRightToLine, SplitSquareHorizontal, Copy, Snowflake } from 'lucide-react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import SubtitlePropertiesPanel from '../components/SubtitlePropertiesPanel';
 import BulkSubtitleEditor from '../components/BulkSubtitleEditor';
