@@ -8,6 +8,7 @@ import SubtitlePropertiesPanel from '../components/SubtitlePropertiesPanel';
 import BulkSubtitleEditor from '../components/BulkSubtitleEditor';
 import VideoPlaybackControls from '../components/VideoPlaybackControls';
 import SubtitlePlayhead from '../components/SubtitlePlayhead';
+import TimelineTabBar from '../components/TimelineTabBar';
 
 export default function EditorProPage() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -51,6 +52,7 @@ export default function EditorProPage() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
+  const timelineContainerRef = useRef<HTMLDivElement>(null); // 整個時間軸容器 (用於計算播放頭高度)
   const fileInputRef = useRef<HTMLInputElement>(null);
   const srtInputRef = useRef<HTMLInputElement>(null);
   const rulerScrollRef = useRef<HTMLDivElement | null>(null);
@@ -925,8 +927,16 @@ export default function EditorProPage() {
                     showBookmarks={true}
                   />
   
-                  {/* 時間軸容器 - 採用 OpenCut 的三欄佈局 */}
-                  <div className="flex-1 flex flex-col overflow-hidden relative">
+                  {/* 時間軸容器 - 採用 OpenCut 的三欄佈局 + 左側工具列 */}
+                  <div
+                    ref={timelineContainerRef}
+                    className="flex-1 flex overflow-hidden relative"
+                  >
+                    {/* 左側垂直工具列 - OpenCut 風格 */}
+                    <TimelineTabBar />
+                    
+                    {/* 時間軸內容區 */}
+                    <div className="flex-1 flex flex-col overflow-hidden">
                     {/* 時間標尺區 */}
                     <div className="flex bg-gray-900 sticky top-0 z-10 border-b border-gray-800">
                       {/* 左側空白區 (對應軌道標籤寬度) */}
@@ -1035,7 +1045,7 @@ export default function EditorProPage() {
                             }}
                             onClick={handleTimelineClick}
                           >
-                            {/* SubtitlePlayhead 元件 - OpenCut 風格播放頭 */}
+                            {/* SubtitlePlayhead 元件 - OpenCut 風格播放頭 (延伸到底部) */}
                             {duration > 0 && (
                               <SubtitlePlayhead
                                 currentTime={currentTime}
@@ -1043,6 +1053,7 @@ export default function EditorProPage() {
                                 containerRef={tracksScrollRef}
                                 onSeek={seekTo}
                                 duration={duration}
+                                timelineRef={timelineContainerRef}
                               />
                             )}
                             
@@ -1119,7 +1130,8 @@ export default function EditorProPage() {
                         </div>
                       </div>
                     </div>
-                  </div>
+                    </div> {/* 結束時間軸內容區 */}
+                  </div> {/* 結束時間軸容器 */}
                 </div>
               </Panel>
             </PanelGroup>

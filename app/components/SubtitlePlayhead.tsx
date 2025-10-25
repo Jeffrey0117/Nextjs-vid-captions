@@ -13,6 +13,8 @@ interface SubtitlePlayheadProps {
   onSeek: (time: number) => void;
   /** 影片總長度 (秒) */
   duration: number;
+  /** 時間軸總容器 ref (用於計算完整高度) */
+  timelineRef?: React.RefObject<HTMLDivElement>;
 }
 
 export default function SubtitlePlayhead({
@@ -21,12 +23,30 @@ export default function SubtitlePlayhead({
   containerRef,
   onSeek,
   duration,
+  timelineRef,
 }: SubtitlePlayheadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const playheadRef = useRef<HTMLDivElement>(null);
+  const [scrollLeft, setScrollLeft] = useState(0);
 
   // 計算播放頭的 X 位置 (像素)
   const playheadX = currentTime * pixelsPerSecond;
+
+  // 追蹤滾動位置 (OpenCut 風格: 讓播放頭鎖定在畫面內)
+  useEffect(() => {
+    const tracksViewport = containerRef.current;
+    if (!tracksViewport) return;
+
+    const handleScroll = () => {
+      setScrollLeft(tracksViewport.scrollLeft);
+    };
+
+    // 設定初始滾動位置
+    setScrollLeft(tracksViewport.scrollLeft);
+
+    tracksViewport.addEventListener('scroll', handleScroll);
+    return () => tracksViewport.removeEventListener('scroll', handleScroll);
+  }, [containerRef]);
 
   // 處理拖曳開始
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -89,6 +109,10 @@ export default function SubtitlePlayhead({
     }
   }, [currentTime, playheadX, containerRef, isDragging]);
 
+  // 計算時間軸容器的完整高度 (OpenCut 風格: 從頂部延伸到底部)
+  const timelineContainerHeight = timelineRef?.current?.offsetHeight || containerRef.current?.offsetHeight || 400;
+  const totalHeight = timelineContainerHeight - 4; // 留一點呼吸空間
+
   return (
     <div
       ref={playheadRef}
@@ -96,22 +120,23 @@ export default function SubtitlePlayhead({
       style={{
         left: `${playheadX}px`,
         top: 0,
-        height: '100%',
+        height: `${totalHeight}px`, // OpenCut 風格: 延伸到底部
+        width: '2px', // 稍微加寬點擊區域
       }}
       onMouseDown={handleMouseDown}
     >
-      {/* 垂直紅線 */}
-      <div 
+      {/* 垂直紅線 - 從頂部延伸到底部 */}
+      <div
         className={`absolute left-0 w-0.5 h-full cursor-col-resize transition-colors ${
           isDragging ? 'bg-red-500' : 'bg-foreground'
         }`}
       />
       
       {/* 頂部圓點 */}
-      <div 
+      <div
         className={`absolute top-1 left-1/2 transform -translate-x-1/2 w-3 h-3 rounded-full border-2 transition-colors ${
-          isDragging 
-            ? 'bg-red-500 border-red-300' 
+          isDragging
+            ? 'bg-red-500 border-red-300'
             : 'bg-foreground border-foreground/50'
         }`}
       />
