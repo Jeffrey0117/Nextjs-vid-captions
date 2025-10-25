@@ -61,10 +61,14 @@ export async function POST(request: Request) {
         // ASS filter 路徑需要四個反斜線(\\\\) 來表示一個實際的反斜線
         const assPathEscaped = assPath.replace(/\\/g, '\\\\\\\\').replace(/:/g, '\\\\:');
         
-        ffmpegCommand = `ffmpeg -i "${videoPathNormalized}" -vf "ass=${assPathEscaped}" -c:v libx264 -preset medium -crf 23 -c:a copy "${outputPathNormalized}"`;
+        // 優化參數: crf 18 (更高品質), preset slow (更好編碼), pix_fmt yuv420p (相容性)
+        // force_style 強制使用 Arial 字體確保一致性
+        ffmpegCommand = `ffmpeg -i "${videoPathNormalized}" -vf "ass=${assPathEscaped}:force_style='FontName=Arial'" -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -c:a copy "${outputPathNormalized}"`;
       } else {
         // Unix/Linux/Mac: 直接使用原始路徑
-        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "ass=${assPath}" -c:v libx264 -preset medium -crf 23 -c:a copy "${outputPath}"`;
+        // 優化參數: crf 18 (更高品質), preset slow (更好編碼), pix_fmt yuv420p (相容性)
+        // force_style 強制使用 Arial 字體確保一致性
+        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "ass=${assPath}:force_style='FontName=Arial'" -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -c:a copy "${outputPath}"`;
       }
       
       console.log("FFmpeg command:", ffmpegCommand);
