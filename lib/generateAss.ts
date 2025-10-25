@@ -61,8 +61,14 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
     const underline = style.textDecoration === 'underline' ? -1 : 0;
     const strikeout = style.textDecoration === 'line-through' ? -1 : 0;
     
-    // Shadow 距離 (ASS 只支援一個 shadow 參數,使用 Y 偏移作為距離)
-    const shadow = style.enableShadow ? Math.max(0, Math.abs(style.shadowOffsetY)) : 0;
+    // Shadow 距離 (ASS 只支援一個 shadow 參數,計算對角線距離)
+    // 使用勾股定理計算 X 和 Y 偏移的合成距離
+    const shadow = style.enableShadow
+      ? Math.round(Math.sqrt(
+          Math.pow(style.shadowOffsetX, 2) +
+          Math.pow(style.shadowOffsetY, 2)
+        ))
+      : 0;
     
     // ASS 字體大小應該包含 scale 的效果,才能與網頁預覽一致
     // 網頁上實際顯示大小 = fontSize * scale
