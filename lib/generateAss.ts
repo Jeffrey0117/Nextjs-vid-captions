@@ -53,7 +53,15 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
     // ScaleX/ScaleY 設為 100 (不再額外縮放,因為已經算在字體大小裡)
     const scale = 100;
     
-    return `Style: Style${index},${style.fontFamily},${actualFontSize},${primaryColor},&H000000FF,${shadowColor},${backgroundColor},${bold},${italic},${underline},${strikeout},${scale},${scale},0,0,1,0,${shadow},${alignment},10,10,10,1`;
+    // BorderStyle: 1=普通邊框, 3=不透明方框背景
+    // 如果有背景色,使用 BorderStyle=3 來顯示背景框
+    const borderStyle = style.backgroundColor !== 'transparent' ? 3 : 1;
+    
+    // Outline: 邊框寬度 (當 BorderStyle=3 時,這個值控制背景框的 padding)
+    // 使用 8px 的 padding (對應網頁預覽的 padding)
+    const outline = style.backgroundColor !== 'transparent' ? 8 : 0;
+    
+    return `Style: Style${index},${style.fontFamily},${actualFontSize},${primaryColor},&H000000FF,${shadowColor},${backgroundColor},${bold},${italic},${underline},${strikeout},${scale},${scale},0,0,${borderStyle},${outline},${shadow},${alignment},10,10,10,1`;
   }).join('\n');
 
   // 事件 (字幕內容)
