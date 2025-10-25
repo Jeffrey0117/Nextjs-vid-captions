@@ -35,6 +35,7 @@ export default function EditorProPage() {
   const [showBulkEditor, setShowBulkEditor] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [bookmarks, setBookmarks] = useState<number[]>([]);
+  const [videoDisplaySize, setVideoDisplaySize] = useState({ width: 1920, height: 1080 });
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -69,28 +70,62 @@ export default function EditorProPage() {
     };
   }, [videoUrl]);
 
-  // 更新播放時間
+  // 更新播放時間和影片顯示尺寸
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
     const handleTimeUpdate = () => setCurrentTime(video.currentTime);
-    const handleLoadedMetadata = () => setDuration(video.duration);
+    const handleLoadedMetadata = () => {
+      setDuration(video.duration);
+      // 更新影片實際渲染尺寸
+      updateVideoDisplaySize();
+    };
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
+    const handleResize = () => updateVideoDisplaySize();
 
     video.addEventListener('timeupdate', handleTimeUpdate);
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
+    
+    // 監聽 resize 來更新顯示尺寸
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(video);
 
     return () => {
       video.removeEventListener('timeupdate', handleTimeUpdate);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
       video.removeEventListener('play', handlePlay);
       video.removeEventListener('pause', handlePause);
+      resizeObserver.disconnect();
     };
   }, [videoUrl]);
+
+  // 更新影片實際顯示尺寸
+  const updateVideoDisplaySize = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    
+    // 獲取影片實際渲染尺寸 (考慮 object-fit: contain)
+    const videoRect = video.getBoundingClientRect();
+    const videoAspect = video.videoWidth / video.videoHeight;
+    const containerAspect = videoRect.width / videoRect.height;
+    
+    let displayWidth, displayHeight;
+    if (containerAspect > videoAspect) {
+      // 容器更寬,影片高度填滿
+      displayHeight = videoRect.height;
+      displayWidth = displayHeight * videoAspect;
+    } else {
+      // 容器更高,影片寬度填滿
+      displayWidth = videoRect.width;
+      displayHeight = displayWidth / videoAspect;
+    }
+    
+    setVideoDisplaySize({ width: displayWidth, height: displayHeight });
+  };
 
   // 滾動同步 - 標尺和軌道內容水平同步
   useEffect(() => {
@@ -745,14 +780,16 @@ export default function EditorProPage() {
                               <p
                                 className="text-center"
                                 style={{
-                                  fontSize: `${currentSubtitle.style.fontSize}px`,
+                                  // 字幕大小相對於影片高度: (設定字體大小 / 1080) * 實際影片高度
+                                  // 這樣無論影片容器多大,字幕相對大小都會與輸出一致
+                                  fontSize: `${(currentSubtitle.style.fontSize / 1080) * videoDisplaySize.height}px`,
                                   fontFamily: currentSubtitle.style.fontFamily,
                                   fontWeight: currentSubtitle.style.fontWeight,
                                   fontStyle: currentSubtitle.style.fontStyle,
                                   textDecoration: currentSubtitle.style.textDecoration,
                                   color: currentSubtitle.style.color,
                                   textShadow: currentSubtitle.style.enableShadow
-                                    ? `${currentSubtitle.style.shadowOffsetX}px ${currentSubtitle.style.shadowOffsetY}px ${currentSubtitle.style.shadowBlur}px ${currentSubtitle.style.shadowColor}`
+                                    ? `${(currentSubtitle.style.shadowOffsetX / 1080) * videoDisplaySize.height}px ${(currentSubtitle.style.shadowOffsetY / 1080) * videoDisplaySize.height}px ${(currentSubtitle.style.shadowBlur / 1080) * videoDisplaySize.height}px ${currentSubtitle.style.shadowColor}`
                                     : 'none',
                                 }}
                               >
