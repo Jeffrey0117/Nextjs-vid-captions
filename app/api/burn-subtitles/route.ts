@@ -68,12 +68,11 @@ export async function POST(request: Request) {
         // 4. Profile high (支援更多編碼特性)
         // 5. Level 4.1 (1080p 最佳相容性)
         // 6. force_style 包含 Hinting=0 (關閉 font hinting 提升清晰度)
-        // 7. sharpening_level=0.5 (適度銳化字幕)
-        ffmpegCommand = `ffmpeg -i "${videoPathNormalized}" -vf "ass=${assPathEscaped}:sharpening_level=0.5:force_style='FontName=Arial,Hinting=0'" -c:v libx264 -preset slower -crf 16 -tune film -profile:v high -level 4.1 -pix_fmt yuv420p -movflags +faststart -c:a copy "${outputPathNormalized}"`;
+        ffmpegCommand = `ffmpeg -i "${videoPathNormalized}" -vf "ass=${assPathEscaped}:force_style='FontName=Arial,Hinting=0'" -c:v libx264 -preset slower -crf 16 -tune film -profile:v high -level 4.1 -pix_fmt yuv420p -movflags +faststart -c:a copy "${outputPathNormalized}"`;
       } else {
         // Unix/Linux/Mac: 直接使用原始路徑
         // 完整改善方案 (同 Windows 說明)
-        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "ass=${assPath}:sharpening_level=0.5:force_style='FontName=Arial,Hinting=0'" -c:v libx264 -preset slower -crf 16 -tune film -profile:v high -level 4.1 -pix_fmt yuv420p -movflags +faststart -c:a copy "${outputPath}"`;
+        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "ass=${assPath}:force_style='FontName=Arial,Hinting=0'" -c:v libx264 -preset slower -crf 16 -tune film -profile:v high -level 4.1 -pix_fmt yuv420p -movflags +faststart -c:a copy "${outputPath}"`;
       }
       
       console.log("FFmpeg command:", ffmpegCommand);
