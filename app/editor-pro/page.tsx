@@ -27,10 +27,21 @@ export default function EditorProPage() {
   const [dragStartPositionX, setDragStartPositionX] = useState(50);
   const [dragStartPositionY, setDragStartPositionY] = useState(0);
   const [applyToAll, setApplyToAll] = useState(false);
-  const [timelineDragType, setTimelineDragType] = useState<'left' | 'right' | 'move' | null>(null);
-  const [timelineDragSegmentId, setTimelineDragSegmentId] = useState<string | null>(null);
-  const [timelineDragStartX, setTimelineDragStartX] = useState(0);
-  const [timelineDragStartTime, setTimelineDragStartTime] = useState({ start: 0, end: 0 });
+  const [timelineDragState, setTimelineDragState] = useState<{
+    isDragging: boolean;
+    dragType: 'left' | 'right' | 'move' | null;
+    segmentId: string | null;
+    startMouseX: number;
+    startTime: { start: number; end: number };
+    clickOffsetTime: number;
+  }>({
+    isDragging: false,
+    dragType: null,
+    segmentId: null,
+    startMouseX: 0,
+    startTime: { start: 0, end: 0 },
+    clickOffsetTime: 0,
+  });
   const [resizeDragType, setResizeDragType] = useState<'tl' | 'tr' | 'bl' | 'br' | 'left' | 'right' | null>(null);
   const [resizeDragStart, setResizeDragStart] = useState({ x: 0, y: 0, scale: 1, maxWidth: 80 });
   const [showBulkEditor, setShowBulkEditor] = useState(false);
@@ -521,7 +532,7 @@ export default function EditorProPage() {
     setResizeDragType(null);
   };
 
-  // 時間軸字幕區塊拖曳處理
+  // 時間軸字幕區塊拖曳處理 - OpenCut 風格 (document-level listeners)
   const handleTimelineDragStart = (
     e: React.MouseEvent,
     segmentId: string,
@@ -529,69 +540,113 @@ export default function EditorProPage() {
   ) => {
     e.stopPropagation();
     const segment = segments.find(s => s.id === segmentId);
-    if (!segment) return;
+    if (!segment || !timelineRef.current) return;
 
-    setTimelineDragType(dragType);
-    setTimelineDragSegmentId(segmentId);
-    setTimelineDragStartX(e.clientX);
-    setTimelineDragStartTime({
-      start: segment.startTime,
-      end: segment.endTime,
+    // 計算 click offset (關鍵: 讓拖曳時元素不會跳動)
+    let clickOffsetTime = 0;
+    if (dragType === 'move') {
+      const elementRect = (e.target as HTMLElement).getBoundingClientRect();
+      const clickOffsetX = e.clientX - elementRect.left;
+      const pixelsPerSecond = 50 * zoomLevel;
+      clickOffsetTime = clickOffsetX / pixelsPerSecond;
+    }
+
+    setTimelineDragState({
+      isDragging: true,
+      dragType,
+      segmentId,
+      startMouseX: e.clientX,
+      startTime: { start: segment.startTime, end: segment.endTime },
+      clickOffsetTime,
     });
   };
 
-  const handleTimelineDragMove = (e: React.MouseEvent) => {
-    if (!timelineDragType || !timelineDragSegmentId || !timelineRef.current) return;
+  const handleTimelineDragEnd = () => {
+    setTimelineDragState({
+      isDragging: false,
+      dragType: null,
+      segmentId: null,
+      startMouseX: 0,
+      startTime: { start: 0, end: 0 },
+      clickOffsetTime: 0,
+    });
+  };
 
-    const pixelsPerSecond = 50 * zoomLevel;
-    const deltaX = e.clientX - timelineDragStartX;
-    const deltaTime = deltaX / pixelsPerSecond;
+  // Document-level mouse listeners (OpenCut 核心機制)
+  useEffect(() => {
+    if (!timelineDragState.isDragging || !timelineRef.current) return;
 
-    const segment = segments.find(s => s.id === timelineDragSegmentId);
-    if (!segment) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!timelineRef.current) return;
 
-    if (timelineDragType === 'left') {
-      // 拖曳左邊緣,調整 startTime
-      const newStartTime = Math.max(0, timelineDragStartTime.start + deltaTime);
-      if (newStartTime < segment.endTime) {
-        updateSegment(timelineDragSegmentId, {
+      const pixelsPerSecond = 50 * zoomLevel;
+      const deltaX = e.clientX - timelineDragState.startMouseX;
+      const deltaTime = deltaX / pixelsPerSecond;
+
+      const segment = segments.find(s => s.id === timelineDragState.segmentId);
+      if (!segment) return;
+
+      // Frame snapping (對齊到 30fps 影格)
+      const fps = 30;
+      const snapTimeToFrame = (time: number) => {
+        return Math.round(time * fps) / fps;
+      };
+
+      if (timelineDragState.dragType === 'left') {
+        // 拖曳左邊緣,調整 startTime
+        let newStartTime = snapTimeToFrame(Math.max(0, timelineDragState.startTime.start + deltaTime));
+        if (newStartTime < segment.endTime) {
+          updateSegment(timelineDragState.segmentId!, { startTime: newStartTime });
+        }
+      } else if (timelineDragState.dragType === 'right') {
+        // 拖曳右邊緣,調整 endTime
+        let newEndTime = snapTimeToFrame(Math.min(duration, timelineDragState.startTime.end + deltaTime));
+        if (newEndTime > segment.startTime) {
+          updateSegment(timelineDragState.segmentId!, { endTime: newEndTime });
+        }
+      } else if (timelineDragState.dragType === 'move') {
+        // 整體移動 (使用 clickOffsetTime 避免跳動)
+        const timelineRect = timelineRef.current.getBoundingClientRect();
+        const tracksScroll = tracksScrollRef.current;
+        const scrollLeft = tracksScroll ? tracksScroll.scrollLeft : 0;
+        
+        const mouseX = e.clientX - timelineRect.left + scrollLeft;
+        const mouseTime = mouseX / pixelsPerSecond;
+        const adjustedTime = Math.max(0, mouseTime - timelineDragState.clickOffsetTime);
+        const snappedTime = snapTimeToFrame(adjustedTime);
+
+        const segmentDuration = timelineDragState.startTime.end - timelineDragState.startTime.start;
+        let newStartTime = snappedTime;
+        let newEndTime = snappedTime + segmentDuration;
+
+        // 確保不超出範圍
+        if (newStartTime < 0) {
+          newStartTime = 0;
+          newEndTime = segmentDuration;
+        } else if (newEndTime > duration) {
+          newEndTime = duration;
+          newStartTime = duration - segmentDuration;
+        }
+
+        updateSegment(timelineDragState.segmentId!, {
           startTime: newStartTime,
-        });
-      }
-    } else if (timelineDragType === 'right') {
-      // 拖曳右邊緣,調整 endTime
-      const newEndTime = Math.min(duration, timelineDragStartTime.end + deltaTime);
-      if (newEndTime > segment.startTime) {
-        updateSegment(timelineDragSegmentId, {
           endTime: newEndTime,
         });
       }
-    } else if (timelineDragType === 'move') {
-      // 整個移動
-      const segmentDuration = timelineDragStartTime.end - timelineDragStartTime.start;
-      let newStartTime = timelineDragStartTime.start + deltaTime;
-      let newEndTime = timelineDragStartTime.end + deltaTime;
+    };
 
-      // 確保不超出範圍
-      if (newStartTime < 0) {
-        newStartTime = 0;
-        newEndTime = segmentDuration;
-      } else if (newEndTime > duration) {
-        newEndTime = duration;
-        newStartTime = duration - segmentDuration;
-      }
+    const handleMouseUp = () => {
+      handleTimelineDragEnd();
+    };
 
-      updateSegment(timelineDragSegmentId, {
-        startTime: newStartTime,
-        endTime: newEndTime,
-      });
-    }
-  };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
 
-  const handleTimelineDragEnd = () => {
-    setTimelineDragType(null);
-    setTimelineDragSegmentId(null);
-  };
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [timelineDragState, segments, duration, zoomLevel, updateSegment]);
 
   return (
     <div className="h-screen flex flex-col bg-gray-950 text-white">
@@ -969,12 +1024,7 @@ export default function EditorProPage() {
                       </div>
                       
                       {/* 軌道內容 */}
-                      <div
-                        className="flex-1 relative overflow-hidden"
-                        onMouseMove={handleTimelineDragMove}
-                        onMouseUp={handleTimelineDragEnd}
-                        onMouseLeave={handleTimelineDragEnd}
-                      >
+                      <div className="flex-1 relative overflow-hidden">
                         <div className="overflow-auto scrollbar-thin w-full h-full" id="tracks-scroll">
                           <div
                             ref={timelineRef}
