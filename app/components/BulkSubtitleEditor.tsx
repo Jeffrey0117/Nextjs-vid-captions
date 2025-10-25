@@ -1,7 +1,7 @@
 'use client';
 
 import { useSubtitleStore } from '../stores/subtitle-store';
-import { X } from 'lucide-react';
+import { X, Replace } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 interface BulkSubtitleEditorProps {
@@ -12,8 +12,12 @@ interface BulkSubtitleEditorProps {
 export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEditorProps) {
   const { segments, updateSegment } = useSubtitleStore();
   const [editedTexts, setEditedTexts] = useState<{ [key: string]: string }>({});
+  const [fontSize, setFontSize] = useState<number>(14);
+  const [findText, setFindText] = useState<string>('');
+  const [replaceText, setReplaceText] = useState<string>('');
+  const [showReplace, setShowReplace] = useState<boolean>(false);
 
-  // 初始化編輯文字
+  // 初始化編輯文字和字體大小
   useEffect(() => {
     if (isOpen) {
       const texts: { [key: string]: string } = {};
@@ -21,8 +25,19 @@ export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEdit
         texts[seg.id] = seg.translatedText || seg.text;
       });
       setEditedTexts(texts);
+      
+      // 從 localStorage 讀取字體大小
+      const savedFontSize = localStorage.getItem('bulkEditorFontSize');
+      if (savedFontSize) {
+        setFontSize(Number(savedFontSize));
+      }
     }
   }, [isOpen, segments]);
+
+  // 儲存字體大小到 localStorage
+  useEffect(() => {
+    localStorage.setItem('bulkEditorFontSize', fontSize.toString());
+  }, [fontSize]);
 
   const handleSave = () => {
     // 批量更新所有字幕
@@ -39,21 +54,95 @@ export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEdit
     onClose();
   };
 
+  const handleReplaceAll = () => {
+    if (!findText) return;
+    
+    const newTexts = { ...editedTexts };
+    Object.keys(newTexts).forEach(id => {
+      newTexts[id] = newTexts[id].replaceAll(findText, replaceText);
+    });
+    setEditedTexts(newTexts);
+  };
+
+  const handleReplaceCurrent = (segmentId: string) => {
+    if (!findText) return;
+    
+    setEditedTexts({
+      ...editedTexts,
+      [segmentId]: editedTexts[segmentId]?.replaceAll(findText, replaceText) || ''
+    });
+  };
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 rounded-lg border border-gray-700 w-full max-w-5xl max-h-[90vh] flex flex-col">
+      <div className="bg-gray-900 rounded-lg border border-gray-700 w-full max-w-3xl max-h-[90vh] flex flex-col">
         {/* 標題列 */}
         <div className="flex items-center justify-between p-4 border-b border-gray-700">
           <h2 className="text-xl font-bold">批量編輯字幕</h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-800 rounded transition"
-          >
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-4">
+            {/* 取代功能按鈕 */}
+            <button
+              onClick={() => setShowReplace(!showReplace)}
+              className={`p-2 hover:bg-gray-800 rounded transition ${showReplace ? 'bg-blue-600' : ''}`}
+              title="尋找與取代"
+            >
+              <Replace size={20} />
+            </button>
+            {/* 字體大小控制 */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-400">字體大小:</span>
+              <input
+                type="range"
+                min="10"
+                max="32"
+                value={fontSize}
+                onChange={(e) => setFontSize(Number(e.target.value))}
+                className="w-24"
+              />
+              <span className="text-sm text-gray-400 w-10">{fontSize}px</span>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-800 rounded transition"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
+
+        {/* 取代功能區 */}
+        {showReplace && (
+          <div className="p-4 border-b border-gray-700 bg-gray-800/50 space-y-3">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={findText}
+                onChange={(e) => setFindText(e.target.value)}
+                placeholder="尋找文字..."
+                className="flex-1 px-3 py-2 bg-gray-900 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
+              />
+              <input
+                type="text"
+                value={replaceText}
+                onChange={(e) => setReplaceText(e.target.value)}
+                placeholder="取代為..."
+                className="flex-1 px-3 py-2 bg-gray-900 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
+              />
+              <button
+                onClick={handleReplaceAll}
+                disabled={!findText}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed rounded transition"
+              >
+                全部取代
+              </button>
+            </div>
+            <p className="text-xs text-gray-400">
+              輸入要尋找的文字和取代內容,點擊「全部取代」可一次取代所有字幕中的文字
+            </p>
+          </div>
+        )}
 
         {/* 字幕列表 */}
         <div className="flex-1 overflow-y-auto p-4 space-y-1.5">
@@ -75,9 +164,21 @@ export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEdit
                   ...editedTexts,
                   [segment.id]: e.target.value
                 })}
-                className="flex-1 px-3 py-1.5 bg-gray-900 border border-gray-600 rounded focus:outline-none focus:border-blue-500 text-sm"
+                style={{ fontSize: `${fontSize}px` }}
+                className="flex-1 px-3 py-1.5 bg-gray-900 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
                 placeholder="字幕內容"
               />
+
+              {/* 單條取代按鈕 */}
+              {showReplace && findText && (
+                <button
+                  onClick={() => handleReplaceCurrent(segment.id)}
+                  className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded transition text-xs"
+                  title="取代此條字幕"
+                >
+                  取代
+                </button>
+              )}
             </div>
           ))}
         </div>
