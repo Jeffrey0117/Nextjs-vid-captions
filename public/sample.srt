@@ -1,0 +1,19 @@
+1
+00:00:00,000 --> 00:00:02,500
+Hello, welcome to our video editing tutorial.
+
+2
+00:00:02,500 --> 00:00:05,000
+Today we will learn how to add subtitles.
+
+3
+00:00:05,000 --> 00:00:08,000
+This is a professional subtitle editor.
+
+4
+00:00:08,000 --> 00:00:11,500
+You can translate subtitles to multiple languages.
+
+5
+00:00:11,500 --> 00:00:14,000
+Let's get started with the demo!

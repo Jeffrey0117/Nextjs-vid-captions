@@ -19,6 +19,8 @@ interface VideoPlayerProps {
   currentSubtitle: Subtitle | null;
   onTimeUpdate: (currentTime: number) => void;
   onVideoEnd: () => void;
+  onSubtitlePositionChange?: (x: number, y: number) => void;
+  isDraggableSubtitle?: boolean;
 }
 
 export default function VideoPlayer({
@@ -27,6 +29,8 @@ export default function VideoPlayer({
   currentSubtitle,
   onTimeUpdate,
   onVideoEnd,
+  onSubtitlePositionChange,
+  isDraggableSubtitle = false,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -96,7 +100,11 @@ export default function VideoPlayer({
           onClick={togglePlay}
           controls
         />
-        <SubtitleBox subtitle={currentSubtitle} />
+        <SubtitleBox
+          subtitle={currentSubtitle}
+          onPositionChange={onSubtitlePositionChange}
+          isDraggable={isDraggableSubtitle}
+        />
       </div>
       <div className="mt-4 flex justify-center">
         <button

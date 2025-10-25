@@ -1,0 +1,20 @@
+1
+00:00:00,000 --> 00:00:01,540
+9
+
+2
+00:00:01,800 --> 00:00:03,480
+shampoo conditioner
+
+3
+00:00:03,480 --> 00:00:04,820
+body wash soap
+
+4
+00:00:04,820 --> 00:00:05,900
+lotion
+
+5
+00:00:05,900 --> 00:00:09,160
+saving cream toothpaste detergent and motor oil
+

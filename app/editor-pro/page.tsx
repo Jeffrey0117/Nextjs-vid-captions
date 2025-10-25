@@ -1,0 +1,707 @@
+'use client';
+
+import { useState, useRef, useEffect } from 'react';
+import { useSubtitleStore } from '../stores/subtitle-store';
+import { Play, Pause, Upload, FileText, Download, Languages, Trash2, Scissors, Film } from 'lucide-react';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import SubtitlePropertiesPanel from '../components/SubtitlePropertiesPanel';
+
+export default function EditorProPage() {
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+  const [targetLang, setTargetLang] = useState('zh-TW');
+  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartY, setDragStartY] = useState(0);
+  const [dragStartPosition, setDragStartPosition] = useState(0);
+  const [applyToAll, setApplyToAll] = useState(false);
+  const [timelineDragType, setTimelineDragType] = useState<'left' | 'right' | 'move' | null>(null);
+  const [timelineDragSegmentId, setTimelineDragSegmentId] = useState<string | null>(null);
+  const [timelineDragStartX, setTimelineDragStartX] = useState(0);
+  const [timelineDragStartTime, setTimelineDragStartTime] = useState({ start: 0, end: 0 });
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const srtInputRef = useRef<HTMLInputElement>(null);
+
+  const { segments, importFromSrt, exportToSrt, clearAll, updateSegment, selectSegment } = useSubtitleStore();
+
+  // 取得當前播放的字幕
+  const currentSubtitle = segments.find(
+    seg => currentTime >= seg.startTime && currentTime <= seg.endTime
+  );
+
+  // 自動選中當前播放的字幕
+  useEffect(() => {
+    if (currentSubtitle && currentSubtitle.id !== selectedSegmentId) {
+      setSelectedSegmentId(currentSubtitle.id);
+      selectSegment(currentSubtitle.id);
+    }
+  }, [currentSubtitle, selectedSegmentId, selectSegment]);
+
+  // 清理 URL
+  useEffect(() => {
+    return () => {
+      if (videoUrl) {
+        URL.revokeObjectURL(videoUrl);
+      }
+    };
+  }, [videoUrl]);
+
+  // 更新播放時間
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleTimeUpdate = () => setCurrentTime(video.currentTime);
+    const handleLoadedMetadata = () => setDuration(video.duration);
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
+
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+
+    return () => {
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+    };
+  }, [videoUrl]);
+
+  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (videoUrl) {
+        URL.revokeObjectURL(videoUrl);
+      }
+      setVideoFile(file);
+      setVideoUrl(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSrtUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const content = await file.text();
+      importFromSrt(content);
+    }
+  };
+
+  const handleWhisperTranscribe = async () => {
+    if (!videoFile) {
+      alert('請先上傳影片');
+      return;
+    }
+
+    setIsTranscribing(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', videoFile);
+
+      const response = await fetch('/api/transcribe', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data.srtContent) {
+        importFromSrt(data.srtContent);
+        alert('字幕識別完成!');
+      } else {
+        alert('字幕識別失敗,請檢查 Whisper 是否已安裝');
+      }
+    } catch (error) {
+      console.error('轉錄失敗:', error);
+      alert('轉錄失敗,請確認 Whisper 已正確安裝');
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  const handleTranslateAll = async () => {
+    if (segments.length === 0) return;
+
+    setIsTranslating(true);
+    try {
+      const texts = segments.map(seg => seg.text);
+
+      const response = await fetch('/api/translate', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          texts,
+          targetLang,
+          sourceLang: 'auto',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        data.translations.forEach((translation: any, index: number) => {
+          if (translation.success) {
+            updateSegment(segments[index].id, {
+              translatedText: translation.translatedText,
+            });
+          }
+        });
+        alert('翻譯完成!');
+      }
+    } catch (error) {
+      console.error('翻譯失敗:', error);
+      alert('翻譯失敗,請稍後再試');
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  const handleDownloadSrt = () => {
+    const srtContent = exportToSrt();
+    const blob = new Blob([srtContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'subtitles.srt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportVideo = async () => {
+    if (!videoFile || segments.length === 0) {
+      alert('請先上傳影片並添加字幕');
+      return;
+    }
+
+    setIsExporting(true);
+    setExportProgress(0);
+
+    try {
+      const formData = new FormData();
+      formData.append('video', videoFile);
+      formData.append('subtitles', JSON.stringify(segments));
+
+      // 模擬進度
+      const progressInterval = setInterval(() => {
+        setExportProgress(prev => Math.min(prev + 10, 90));
+      }, 500);
+
+      const response = await fetch('/api/burn-subtitles', {
+        method: 'POST',
+        body: formData,
+      });
+
+      clearInterval(progressInterval);
+      setExportProgress(100);
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || '輸出失敗');
+      }
+
+      // 下載影片
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'subtitled_video.mp4';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      alert('影片輸出完成!');
+    } catch (error: any) {
+      console.error('輸出失敗:', error);
+      alert(`輸出失敗: ${error.message}`);
+    } finally {
+      setIsExporting(false);
+      setExportProgress(0);
+    }
+  };
+
+  const togglePlayPause = () => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play();
+      }
+    }
+  };
+
+  const seekTo = (time: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = time;
+      setCurrentTime(time);
+    }
+  };
+
+  const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!timelineRef.current || duration === 0) return;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = x / rect.width;
+    const newTime = percentage * duration;
+    seekTo(newTime);
+  };
+
+  const handleSegmentClick = (segmentId: string, startTime: number) => {
+    setSelectedSegmentId(segmentId);
+    selectSegment(segmentId);
+    seekTo(startTime);
+  };
+
+  const handleSubtitleDragStart = (e: React.MouseEvent) => {
+    if (!currentSubtitle) return;
+    setIsDragging(true);
+    setDragStartY(e.clientY);
+    setDragStartPosition(currentSubtitle.style.positionY);
+  };
+
+  const handleSubtitleDrag = (e: React.MouseEvent) => {
+    if (!isDragging || !currentSubtitle) return;
+    
+    const videoElement = videoRef.current;
+    if (!videoElement) return;
+    
+    const rect = videoElement.getBoundingClientRect();
+    const deltaY = e.clientY - dragStartY;
+    const percentChange = (deltaY / rect.height) * 100;
+    const newPosition = Math.max(0, Math.min(100, dragStartPosition + percentChange));
+    
+    if (applyToAll) {
+      // 套用到所有字幕
+      segments.forEach(seg => {
+        updateSegment(seg.id, {
+          style: { ...seg.style, positionY: Math.round(newPosition) },
+        });
+      });
+    } else {
+      // 只更新當前字幕
+      updateSegment(currentSubtitle.id, {
+        style: { ...currentSubtitle.style, positionY: Math.round(newPosition) },
+      });
+    }
+  };
+
+  const handleSubtitleDragEnd = () => {
+    setIsDragging(false);
+  };
+
+  // 時間軸字幕區塊拖曳處理
+  const handleTimelineDragStart = (
+    e: React.MouseEvent,
+    segmentId: string,
+    dragType: 'left' | 'right' | 'move'
+  ) => {
+    e.stopPropagation();
+    const segment = segments.find(s => s.id === segmentId);
+    if (!segment) return;
+
+    setTimelineDragType(dragType);
+    setTimelineDragSegmentId(segmentId);
+    setTimelineDragStartX(e.clientX);
+    setTimelineDragStartTime({
+      start: segment.startTime,
+      end: segment.endTime,
+    });
+  };
+
+  const handleTimelineDragMove = (e: React.MouseEvent) => {
+    if (!timelineDragType || !timelineDragSegmentId || !timelineRef.current) return;
+
+    const rect = timelineRef.current.getBoundingClientRect();
+    const deltaX = e.clientX - timelineDragStartX;
+    const deltaTime = (deltaX / rect.width) * duration;
+
+    const segment = segments.find(s => s.id === timelineDragSegmentId);
+    if (!segment) return;
+
+    if (timelineDragType === 'left') {
+      // 拖曳左邊緣,調整 startTime
+      const newStartTime = Math.max(0, timelineDragStartTime.start + deltaTime);
+      if (newStartTime < segment.endTime) {
+        updateSegment(timelineDragSegmentId, {
+          startTime: newStartTime,
+        });
+      }
+    } else if (timelineDragType === 'right') {
+      // 拖曳右邊緣,調整 endTime
+      const newEndTime = Math.min(duration, timelineDragStartTime.end + deltaTime);
+      if (newEndTime > segment.startTime) {
+        updateSegment(timelineDragSegmentId, {
+          endTime: newEndTime,
+        });
+      }
+    } else if (timelineDragType === 'move') {
+      // 整個移動
+      const segmentDuration = timelineDragStartTime.end - timelineDragStartTime.start;
+      let newStartTime = timelineDragStartTime.start + deltaTime;
+      let newEndTime = timelineDragStartTime.end + deltaTime;
+
+      // 確保不超出範圍
+      if (newStartTime < 0) {
+        newStartTime = 0;
+        newEndTime = segmentDuration;
+      } else if (newEndTime > duration) {
+        newEndTime = duration;
+        newStartTime = duration - segmentDuration;
+      }
+
+      updateSegment(timelineDragSegmentId, {
+        startTime: newStartTime,
+        endTime: newEndTime,
+      });
+    }
+  };
+
+  const handleTimelineDragEnd = () => {
+    setTimelineDragType(null);
+    setTimelineDragSegmentId(null);
+  };
+
+  return (
+    <div className="h-screen flex flex-col bg-gray-950 text-white">
+      {/* 頂部工具列 */}
+      <header className="h-14 border-b border-gray-800 flex items-center px-4 gap-2 bg-gray-900">
+        <h1 className="text-lg font-bold mr-4">OpenCut 字幕編輯器</h1>
+        
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded transition text-sm"
+        >
+          <Upload size={16} />
+          上傳影片
+        </button>
+
+        <button
+          onClick={() => srtInputRef.current?.click()}
+          className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded transition text-sm"
+        >
+          <FileText size={16} />
+          匯入 SRT
+        </button>
+
+        <button
+          onClick={handleWhisperTranscribe}
+          disabled={!videoFile || isTranscribing}
+          className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Scissors size={16} />
+          {isTranscribing ? 'AI 識別中...' : 'Whisper 識別'}
+        </button>
+
+        <div className="h-6 w-px bg-gray-700 mx-2" />
+
+        <select
+          value={targetLang}
+          onChange={(e) => setTargetLang(e.target.value)}
+          className="px-3 py-1.5 bg-gray-800 rounded border border-gray-700 text-sm"
+        >
+          <option value="zh-TW">繁體中文</option>
+          <option value="zh-CN">簡體中文</option>
+          <option value="en">英文</option>
+          <option value="ja">日文</option>
+          <option value="ko">韓文</option>
+        </select>
+
+        <button
+          onClick={handleTranslateAll}
+          disabled={segments.length === 0 || isTranslating}
+          className="flex items-center gap-2 px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 rounded transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Languages size={16} />
+          {isTranslating ? '翻譯中...' : '翻譯全部'}
+        </button>
+
+        <button
+          onClick={handleDownloadSrt}
+          disabled={segments.length === 0}
+          className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Download size={16} />
+          下載 SRT
+        </button>
+
+        <div className="h-6 w-px bg-gray-700 mx-2" />
+
+        <button
+          onClick={handleExportVideo}
+          disabled={!videoFile || segments.length === 0 || isExporting}
+          className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 rounded transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Film size={16} />
+          {isExporting ? `輸出中 ${exportProgress}%` : '輸出影片'}
+        </button>
+
+        <button
+          onClick={clearAll}
+          className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded transition text-sm ml-auto"
+        >
+          <Trash2 size={16} />
+          清空
+        </button>
+      </header>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="video/*"
+        onChange={handleVideoUpload}
+        className="hidden"
+      />
+      <input
+        ref={srtInputRef}
+        type="file"
+        accept=".srt"
+        onChange={handleSrtUpload}
+        className="hidden"
+      />
+
+      {/* 主要工作區 */}
+      <div className="flex-1 overflow-hidden">
+        <PanelGroup direction="horizontal">
+          {/* 左側: 預覽面板 */}
+          <Panel defaultSize={70} minSize={50}>
+            <div className="h-full flex flex-col bg-gray-900">
+              {/* 影片預覽區 */}
+              <div className="flex-1 flex items-center justify-center bg-black overflow-hidden relative">
+                {!videoUrl ? (
+                  <div className="text-center">
+                    <Upload size={64} className="mx-auto mb-4 text-gray-600" />
+                    <p className="text-xl text-gray-500 mb-4">尚未上傳影片</p>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition"
+                    >
+                      點擊上傳影片
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <video
+                      ref={videoRef}
+                      src={videoUrl}
+                      className="w-full h-full object-contain"
+                    />
+                    
+                    {/* 字幕疊加層 */}
+                    {currentSubtitle && (
+                      <div
+                        className="absolute left-0 right-0 flex items-center justify-center px-4 cursor-move select-none"
+                        style={{
+                          top: `${currentSubtitle.style.positionY}%`,
+                          transform: 'translateY(-50%)',
+                          pointerEvents: 'auto',
+                        }}
+                        onMouseDown={handleSubtitleDragStart}
+                        onMouseMove={handleSubtitleDrag}
+                        onMouseUp={handleSubtitleDragEnd}
+                        onMouseLeave={handleSubtitleDragEnd}
+                      >
+                        <div
+                          className="px-4 py-2 rounded"
+                          style={{
+                            backgroundColor: currentSubtitle.style.backgroundColor,
+                            opacity: currentSubtitle.style.opacity,
+                          }}
+                        >
+                          <p
+                            className="text-center"
+                            style={{
+                              fontSize: `${currentSubtitle.style.fontSize}px`,
+                              fontFamily: currentSubtitle.style.fontFamily,
+                              fontWeight: currentSubtitle.style.fontWeight,
+                              fontStyle: currentSubtitle.style.fontStyle,
+                              textDecoration: currentSubtitle.style.textDecoration,
+                              color: currentSubtitle.style.color,
+                              WebkitTextStroke: `${currentSubtitle.style.outlineWidth}px ${currentSubtitle.style.outlineColor}`,
+                              textShadow: `
+                                ${currentSubtitle.style.outlineWidth}px ${currentSubtitle.style.outlineWidth}px 0 ${currentSubtitle.style.outlineColor},
+                                -${currentSubtitle.style.outlineWidth}px ${currentSubtitle.style.outlineWidth}px 0 ${currentSubtitle.style.outlineColor},
+                                ${currentSubtitle.style.outlineWidth}px -${currentSubtitle.style.outlineWidth}px 0 ${currentSubtitle.style.outlineColor},
+                                -${currentSubtitle.style.outlineWidth}px -${currentSubtitle.style.outlineWidth}px 0 ${currentSubtitle.style.outlineColor},
+                                2px 2px 4px rgba(0,0,0,0.8)
+                              `,
+                            }}
+                          >
+                            {currentSubtitle.translatedText || currentSubtitle.text}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* 播放控制列 */}
+              <div className="h-16 border-t border-gray-800 flex items-center px-4 gap-4">
+                <button
+                  onClick={togglePlayPause}
+                  disabled={!videoUrl}
+                  className="p-2 hover:bg-gray-800 rounded transition disabled:opacity-50"
+                >
+                  {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+                </button>
+                
+                <span className="text-sm text-gray-400 w-24">
+                  {formatTime(currentTime)} / {formatTime(duration)}
+                </span>
+
+                <div className="flex-1 h-2 bg-gray-800 rounded-full relative cursor-pointer">
+                  <div
+                    className="h-full bg-blue-600 rounded-full"
+                    style={{ width: `${(currentTime / duration) * 100 || 0}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* 時間軸 */}
+              <div className="h-48 border-t border-gray-800 bg-gray-900">
+                <div className="h-full flex flex-col">
+                  {/* 時間標尺 */}
+                  <div className="h-8 border-b border-gray-800 bg-gray-950 relative">
+                    <div className="h-full flex items-end px-2">
+                      {duration > 0 && Array.from({ length: 11 }).map((_, i) => {
+                        const time = (duration / 10) * i;
+                        return (
+                          <div
+                            key={i}
+                            className="flex-1 text-xs text-gray-500 text-center"
+                          >
+                            {formatTime(time)}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 字幕軌道 */}
+                  <div
+                    ref={timelineRef}
+                    onClick={handleTimelineClick}
+                    onMouseMove={handleTimelineDragMove}
+                    onMouseUp={handleTimelineDragEnd}
+                    onMouseLeave={handleTimelineDragEnd}
+                    className="flex-1 relative bg-gray-900 cursor-pointer overflow-x-auto"
+                  >
+                    {/* 播放頭 */}
+                    {duration > 0 && (
+                      <div
+                        className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
+                        style={{ left: `${(currentTime / duration) * 100}%` }}
+                      >
+                        <div className="absolute -top-1 -left-1.5 w-3 h-3 bg-red-500 rounded-full" />
+                      </div>
+                    )}
+
+                    {/* 字幕片段 */}
+                    {duration > 0 && segments.map((segment) => {
+                      const left = (segment.startTime / duration) * 100;
+                      const width = ((segment.endTime - segment.startTime) / duration) * 100;
+                      const isSelected = selectedSegmentId === segment.id;
+                      
+                      return (
+                        <div
+                          key={segment.id}
+                          className={`absolute top-2 h-16 rounded border transition group ${
+                            isSelected
+                              ? 'bg-yellow-600 border-yellow-400'
+                              : 'bg-blue-600 hover:bg-blue-700 border-blue-400'
+                          }`}
+                          style={{
+                            left: `${left}%`,
+                            width: `${width}%`,
+                          }}
+                        >
+                          {/* 左邊緣拖曳手柄 */}
+                          <div
+                            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 z-10"
+                            onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'left')}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+
+                          {/* 中間區域:點擊選中,拖曳移動 */}
+                          <div
+                            className="h-full flex items-center justify-center p-1 cursor-move"
+                            onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'move')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSegmentClick(segment.id, segment.startTime);
+                            }}
+                          >
+                            <span className="text-xs text-white truncate">
+                              {segment.text}
+                            </span>
+                          </div>
+
+                          {/* 右邊緣拖曳手柄 */}
+                          <div
+                            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 z-10"
+                            onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'right')}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+
+                          {/* 時間提示 */}
+                          <div className="absolute -top-6 left-0 bg-gray-800 text-xs px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
+                            {formatTime(segment.startTime)} - {formatTime(segment.endTime)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Panel>
+
+          <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-blue-600 transition" />
+
+          {/* 右側: 字幕屬性編輯面板 */}
+          <Panel defaultSize={30} minSize={25}>
+            <div className="h-full flex flex-col bg-gray-900">
+              <div className="h-12 border-b border-gray-800 flex items-center px-4">
+                <h2 className="font-semibold">
+                  字幕屬性
+                </h2>
+              </div>
+
+              <SubtitlePropertiesPanel
+                selectedSegmentId={selectedSegmentId}
+                applyToAll={applyToAll}
+                setApplyToAll={setApplyToAll}
+              />
+            </div>
+          </Panel>
+        </PanelGroup>
+      </div>
+    </div>
+  );
+}
+
+function formatTime(seconds: number): string {
+  if (!seconds || !isFinite(seconds)) return '0:00';
+  
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+  return `${minutes}:${String(secs).padStart(2, '0')}`;
+}
