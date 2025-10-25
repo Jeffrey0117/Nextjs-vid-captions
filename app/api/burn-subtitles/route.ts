@@ -61,18 +61,13 @@ export async function POST(request: Request) {
         // ASS filter 路徑需要四個反斜線(\\\\) 來表示一個實際的反斜線
         const assPathEscaped = assPath.replace(/\\/g, '\\\\\\\\').replace(/:/g, '\\\\:');
         
-        // 完整改善方案:
-        // 1. CRF 16 (接近無損品質,檔案較大但字幕清晰)
-        // 2. Preset slower (最佳編碼品質)
-        // 3. Tune film (優化細節保留)
-        // 4. Profile high (支援更多編碼特性)
-        // 5. Level 4.1 (1080p 最佳相容性)
-        // 6. force_style 包含 Hinting=0 (關閉 font hinting 提升清晰度)
-        ffmpegCommand = `ffmpeg -i "${videoPathNormalized}" -vf "ass=${assPathEscaped}:force_style='FontName=Arial,Hinting=0'" -c:v libx264 -preset slower -crf 16 -tune film -profile:v high -level 4.1 -pix_fmt yuv420p -movflags +faststart -c:a copy "${outputPathNormalized}"`;
+        // 基本參數配置 (移除可能導致錯誤的進階參數)
+        // 只保留最基本的字幕燒錄功能
+        ffmpegCommand = `ffmpeg -i "${videoPathNormalized}" -vf "ass=${assPathEscaped}" -c:v libx264 -c:a copy "${outputPathNormalized}"`;
       } else {
         // Unix/Linux/Mac: 直接使用原始路徑
-        // 完整改善方案 (同 Windows 說明)
-        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "ass=${assPath}:force_style='FontName=Arial,Hinting=0'" -c:v libx264 -preset slower -crf 16 -tune film -profile:v high -level 4.1 -pix_fmt yuv420p -movflags +faststart -c:a copy "${outputPath}"`;
+        // 基本參數配置 (移除可能導致錯誤的進階參數)
+        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "ass=${assPath}" -c:v libx264 -c:a copy "${outputPath}"`;
       }
       
       console.log("FFmpeg command:", ffmpegCommand);
