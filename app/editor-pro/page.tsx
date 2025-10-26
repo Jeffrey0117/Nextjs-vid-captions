@@ -774,12 +774,18 @@ export default function EditorProPage() {
       {/* 主要工作區 */}
       <div className="flex-1 overflow-hidden">
         <PanelGroup direction="horizontal">
-          {/* 最左側: OpenCut 風格媒體面板 */}
-          <Panel defaultSize={20} minSize={15} maxSize={40}>
+          {/* 左側區域: 媒體面板 + 預覽 (帶時間軸) */}
+          <Panel defaultSize={70} minSize={40}>
+            <PanelGroup direction="vertical">
+              {/* 上方: 媒體面板 + 預覽 */}
+              <Panel defaultSize={70} minSize={30}>
+                <PanelGroup direction="horizontal">
+                  {/* 最左側: OpenCut 風格媒體面板 */}
+                  <Panel defaultSize={20} minSize={15} maxSize={40}>
             <div className="h-full flex bg-panel rounded-sm">
-              {/* TabBar - 左側垂直工具列 */}
+              {/* TabBar - 左側垂直工具列 (簡化版 - 不顯示滾動條) */}
               <div className="flex relative">
-                <div className="h-full px-4 flex flex-col justify-start items-center gap-5 overflow-y-auto scrollbar-hidden relative w-full py-4">
+                <div className="h-full px-4 flex flex-col justify-start items-center gap-5 overflow-hidden relative w-full py-4">
                   {/* Media - 影片 */}
                   <div
                     className={`flex z-[100] flex-col gap-0.5 items-center cursor-pointer ${
@@ -813,73 +819,15 @@ export default function EditorProPage() {
                     <Type className="size-[1.1rem] opacity-100 hover:opacity-75" />
                   </div>
 
-                  {/* Stickers - 貼紙 */}
+                  {/* Captions - 字幕 */}
                   <div
                     className={`flex z-[100] flex-col gap-0.5 items-center cursor-pointer ${
                       activeMediaTab === 'captions' ? 'text-primary !opacity-100' : 'text-muted-foreground'
                     }`}
                     onClick={() => setActiveMediaTab('captions')}
-                    title="貼紙"
+                    title="字幕"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-[1.1rem] opacity-100 hover:opacity-75">
-                      <path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"></path>
-                      <path d="M14 3v4a2 2 0 0 0 2 2h4"></path>
-                      <path d="M8 13h.01"></path>
-                      <path d="M16 13h.01"></path>
-                      <path d="M10 16s.8 1 2 1c1.3 0 2-1 2-1"></path>
-                    </svg>
-                  </div>
-
-                  {/* Sparkles - AI 特效 */}
-                  <div className="flex z-[100] flex-col gap-0.5 items-center cursor-pointer text-muted-foreground" title="AI 特效">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-[1.1rem] opacity-100 hover:opacity-75">
-                      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"></path>
-                      <path d="M20 3v4"></path>
-                      <path d="M22 5h-4"></path>
-                      <path d="M4 17v2"></path>
-                      <path d="M5 18H3"></path>
-                    </svg>
-                  </div>
-
-                  {/* Transitions - 轉場 */}
-                  <div className="flex z-[100] flex-col gap-0.5 items-center cursor-pointer text-muted-foreground" title="轉場">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-[1.1rem] opacity-100 hover:opacity-75">
-                      <path d="M8 3 4 7l4 4"></path>
-                      <path d="M4 7h16"></path>
-                      <path d="m16 21 4-4-4-4"></path>
-                      <path d="M20 17H4"></path>
-                    </svg>
-                  </div>
-
-                  {/* Captions - 字幕 */}
-                  <div className="flex z-[100] flex-col gap-0.5 items-center cursor-pointer text-muted-foreground" title="字幕">
                     <CaptionsIcon className="size-[1.1rem] opacity-100 hover:opacity-75" />
-                  </div>
-
-                  {/* Filters - 濾鏡 */}
-                  <div
-                    className={`flex z-[100] flex-col gap-0.5 items-center cursor-pointer ${
-                      activeMediaTab === 'filters' ? 'text-primary !opacity-100' : 'text-muted-foreground'
-                    }`}
-                    onClick={() => setActiveMediaTab('filters')}
-                    title="濾鏡"
-                  >
-                    <Blend className="size-[1.1rem] opacity-100 hover:opacity-75" />
-                  </div>
-
-                  {/* Sliders - 調整 */}
-                  <div className="flex z-[100] flex-col gap-0.5 items-center cursor-pointer text-muted-foreground" title="調整">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-[1.1rem] opacity-100 hover:opacity-75">
-                      <line x1="21" x2="14" y1="4" y2="4"></line>
-                      <line x1="10" x2="3" y1="4" y2="4"></line>
-                      <line x1="21" x2="12" y1="12" y2="12"></line>
-                      <line x1="8" x2="3" y1="12" y2="12"></line>
-                      <line x1="21" x2="16" y1="20" y2="20"></line>
-                      <line x1="12" x2="3" y1="20" y2="20"></line>
-                      <line x1="14" x2="14" y1="2" y2="6"></line>
-                      <line x1="8" x2="8" y1="10" y2="14"></line>
-                      <line x1="16" x2="16" y1="18" y2="22"></line>
-                    </svg>
                   </div>
 
                   {/* Settings - 設定 */}
@@ -893,10 +841,6 @@ export default function EditorProPage() {
                     <Settings className="size-[1.1rem] opacity-100 hover:opacity-75" />
                   </div>
                 </div>
-
-                {/* 上下漸層覆蓋 */}
-                <div className="absolute left-0 right-0 h-6 pointer-events-none z-[101] transition-opacity duration-200 top-0 bg-gradient-to-b from-panel to-transparent" />
-                <div className="absolute left-0 right-0 h-6 pointer-events-none z-[101] transition-opacity duration-200 bottom-0 bg-gradient-to-t from-panel to-transparent" />
               </div>
 
               {/* 垂直分隔線 */}
@@ -941,11 +885,10 @@ export default function EditorProPage() {
 
           <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-blue-600 transition" />
 
-          {/* 中間: 預覽面板 + 時間軸 */}
-          <Panel defaultSize={55} minSize={40}>
-        <PanelGroup direction="vertical">
-          {/* 影片預覽面板 */}
-          <Panel defaultSize={70} minSize={30}>
+                  <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-blue-600 transition" />
+
+                  {/* 中間: 預覽面板 */}
+                  <Panel defaultSize={80} minSize={60}>
             <div className="h-full flex items-center justify-center bg-black overflow-hidden relative">
                 {!videoUrl ? (
                   <div className="text-center">
@@ -1079,12 +1022,14 @@ export default function EditorProPage() {
                   </>
                 )}
               </div>
-            </Panel>
+                  </Panel>
+                </PanelGroup>
+              </Panel>
 
               {/* 垂直調整手柄 */}
               <PanelResizeHandle className="h-1 bg-gray-800 hover:bg-blue-600 transition cursor-row-resize" />
-  
-              {/* 時間軸面板 */}
+
+              {/* 底部: 時間軸面板 (只延伸到媒體+預覽區域) */}
               <Panel defaultSize={30} minSize={15} maxSize={50}>
                 <div className="h-full flex flex-col bg-gray-900">
                   {/* OpenCut TimelineToolbar - 播放控制 + 編輯工具 + 縮放控制 */}
@@ -1531,29 +1476,29 @@ export default function EditorProPage() {
                   </div> {/* 結束時間軸容器 */}
                 </div>
               </Panel>
-            </PanelGroup>
-          </Panel>
+           </PanelGroup>
+         </Panel>
 
-          <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-blue-600 transition" />
+         <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-blue-600 transition" />
 
-          {/* 右側: 字幕屬性編輯面板 */}
-          <Panel defaultSize={30} minSize={25}>
-            <div className="h-full flex flex-col bg-gray-900">
-              <div className="h-9 border-b border-gray-800 flex items-center px-3">
-                <h2 className="text-sm font-semibold">
-                  字幕屬性
-                </h2>
-              </div>
+         {/* 右側: 字幕屬性編輯面板 (獨立垂直區域) */}
+         <Panel defaultSize={30} minSize={25}>
+           <div className="h-full flex flex-col bg-gray-900">
+             <div className="h-9 border-b border-gray-800 flex items-center px-3">
+               <h2 className="text-sm font-semibold">
+                 字幕屬性
+               </h2>
+             </div>
 
-              <SubtitlePropertiesPanel
-                selectedSegmentId={selectedSegmentId}
-                applyToAll={applyToAll}
-                setApplyToAll={setApplyToAll}
-              />
-            </div>
-          </Panel>
-        </PanelGroup>
-      </div>
+             <SubtitlePropertiesPanel
+               selectedSegmentId={selectedSegmentId}
+               applyToAll={applyToAll}
+               setApplyToAll={setApplyToAll}
+             />
+           </div>
+         </Panel>
+       </PanelGroup>
+     </div>
 
       {/* 批量編輯彈窗 */}
       <BulkSubtitleEditor
