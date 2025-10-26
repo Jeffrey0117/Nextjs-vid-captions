@@ -60,10 +60,24 @@ export default function EditorProPage() {
   const timelineContentRef = useRef<HTMLDivElement>(null); // 標尺+軌道區的父容器 (不包含 Toolbar)
   const isUpdatingScrollRef = useRef(false);
 
-  const { segments, importFromSrt, exportToSrt, clearAll, updateSegment, selectSegment } = useSubtitleStore();
+  const {
+    tracks,
+    selectedTrackId,
+    segments,
+    importFromSrt,
+    exportToSrt,
+    clearAll,
+    updateSegment,
+    selectSegment,
+    addTrack,
+    deleteTrack,
+    selectTrack,
+    getAllSegments
+  } = useSubtitleStore();
 
-  // 取得當前播放的字幕
-  const currentSubtitle = segments.find(
+  // 取得當前播放的字幕 (從所有可見軌道中尋找)
+  const allVisibleSegments = getAllSegments();
+  const currentSubtitle = allVisibleSegments.find(
     seg => currentTime >= seg.startTime && currentTime <= seg.endTime
   );
 
@@ -760,132 +774,179 @@ export default function EditorProPage() {
       {/* 主要工作區 */}
       <div className="flex-1 overflow-hidden">
         <PanelGroup direction="horizontal">
-          {/* 左側: 預覽面板 */}
-          <Panel defaultSize={70} minSize={50}>
-        <PanelGroup direction="vertical">
-          {/* 影片預覽面板 */}
-          <Panel defaultSize={70} minSize={30}>
-            <div className="h-full flex bg-gray-900">
-              {/* OpenCut 風格左側工具列 */}
-              <div className="h-full flex bg-panel">
-                <div className="flex relative">
-                  <div className="h-full px-4 flex flex-col justify-start items-center gap-5 overflow-hidden relative w-full py-4">
-                    {/* Media */}
-                    <div
-                      className={`flex z-[100] flex-col gap-0.5 items-center cursor-pointer ${
-                        activeMediaTab === 'media' ? 'text-primary !opacity-100' : 'text-muted-foreground'
-                      }`}
-                      onClick={() => setActiveMediaTab('media')}
-                      title="影片"
-                    >
-                      <Video className="size-[1.1rem] opacity-100 hover:opacity-75" />
-                    </div>
-
-                    {/* Sounds */}
-                    <div
-                      className={`flex z-[100] flex-col gap-0.5 items-center cursor-pointer ${
-                        activeMediaTab === 'sounds' ? 'text-primary !opacity-100' : 'text-muted-foreground'
-                      }`}
-                      onClick={() => setActiveMediaTab('sounds')}
-                      title="音樂"
-                    >
-                      <Music className="size-[1.1rem] opacity-100 hover:opacity-75" />
-                    </div>
-
-                    {/* Text (Default Active) */}
-                    <div
-                      className={`flex z-[100] flex-col gap-0.5 items-center cursor-pointer ${
-                        activeMediaTab === 'text' ? 'text-primary !opacity-100' : 'text-muted-foreground'
-                      }`}
-                      onClick={() => setActiveMediaTab('text')}
-                      title="文字"
-                    >
-                      <Type className="size-[1.1rem] opacity-100 hover:opacity-75" />
-                    </div>
-
-                    {/* Captions */}
-                    <div
-                      className={`flex z-[100] flex-col gap-0.5 items-center cursor-pointer ${
-                        activeMediaTab === 'captions' ? 'text-primary !opacity-100' : 'text-muted-foreground'
-                      }`}
-                      onClick={() => setActiveMediaTab('captions')}
-                      title="字幕"
-                    >
-                      <CaptionsIcon className="size-[1.1rem] opacity-100 hover:opacity-75" />
-                    </div>
-
-                    {/* Filters */}
-                    <div
-                      className={`flex z-[100] flex-col gap-0.5 items-center cursor-pointer ${
-                        activeMediaTab === 'filters' ? 'text-primary !opacity-100' : 'text-muted-foreground'
-                      }`}
-                      onClick={() => setActiveMediaTab('filters')}
-                      title="濾鏡"
-                    >
-                      <Blend className="size-[1.1rem] opacity-100 hover:opacity-75" />
-                    </div>
-
-                    {/* Settings */}
-                    <div
-                      className={`flex z-[100] flex-col gap-0.5 items-center cursor-pointer ${
-                        activeMediaTab === 'settings' ? 'text-primary !opacity-100' : 'text-muted-foreground'
-                      }`}
-                      onClick={() => setActiveMediaTab('settings')}
-                      title="設定"
-                    >
-                      <Settings className="size-[1.1rem] opacity-100 hover:opacity-75" />
-                    </div>
+          {/* 最左側: OpenCut 風格媒體面板 */}
+          <Panel defaultSize={20} minSize={15} maxSize={40}>
+            <div className="h-full flex bg-panel rounded-sm">
+              {/* TabBar - 左側垂直工具列 */}
+              <div className="flex relative">
+                <div className="h-full px-4 flex flex-col justify-start items-center gap-5 overflow-y-auto scrollbar-hidden relative w-full py-4">
+                  {/* Media - 影片 */}
+                  <div
+                    className={`flex z-[100] flex-col gap-0.5 items-center cursor-pointer ${
+                      activeMediaTab === 'media' ? 'text-primary !opacity-100' : 'text-muted-foreground'
+                    }`}
+                    onClick={() => setActiveMediaTab('media')}
+                    title="影片"
+                  >
+                    <Video className="size-[1.1rem] opacity-100 hover:opacity-75" />
                   </div>
 
-                  {/* 上下漸層覆蓋 */}
-                  <div className="absolute left-0 right-0 h-6 pointer-events-none z-[101] transition-opacity duration-200 top-0 bg-gradient-to-b from-panel to-transparent" />
-                  <div className="absolute left-0 right-0 h-6 pointer-events-none z-[101] transition-opacity duration-200 bottom-0 bg-gradient-to-t from-panel to-transparent" />
-                </div>
+                  {/* Sounds - 音樂 */}
+                  <div
+                    className={`flex z-[100] flex-col gap-0.5 items-center cursor-pointer ${
+                      activeMediaTab === 'sounds' ? 'text-primary !opacity-100' : 'text-muted-foreground'
+                    }`}
+                    onClick={() => setActiveMediaTab('sounds')}
+                    title="音樂"
+                  >
+                    <Music className="size-[1.1rem] opacity-100 hover:opacity-75" />
+                  </div>
 
-                {/* 垂直分隔線 */}
-                <div data-orientation="vertical" role="none" className="shrink-0 bg-border h-full w-px" />
+                  {/* Text - 文字 (預設啟用) */}
+                  <div
+                    className={`flex z-[100] flex-col gap-0.5 items-center cursor-pointer ${
+                      activeMediaTab === 'text' ? 'text-primary !opacity-100' : 'text-muted-foreground'
+                    }`}
+                    onClick={() => setActiveMediaTab('text')}
+                    title="文字"
+                  >
+                    <Type className="size-[1.1rem] opacity-100 hover:opacity-75" />
+                  </div>
 
-                {/* 右側內容面板 (未來擴充) */}
-                <div className="flex-1 overflow-hidden">
-                  <div className="h-full flex flex-col">
-                    <div className="overflow-hidden flex-1">
-                      <div className="p-5">
-                        {/* 預設文字樣板 */}
-                        {activeMediaTab === 'text' && (
-                          <div className="relative group w-28 h-28">
-                            <div className="flex flex-col gap-1 p-1 h-auto w-full relative cursor-default">
-                              <div data-radix-aspect-ratio-wrapper="" style={{ position: 'relative', width: '100%', paddingBottom: '100%' }}>
-                                <div className="bg-panel-accent relative overflow-hidden rounded-md" draggable="true" style={{ position: 'absolute', inset: '0px' }}>
-                                  <div className="flex items-center justify-center w-full h-full bg-panel-accent rounded">
-                                    <span className="text-xs select-none">Default text</span>
-                                  </div>
-                                  <button className="inline-flex items-center cursor-pointer justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 shadow-sm absolute bottom-2 right-2 size-5 bg-background hover:bg-panel text-foreground opacity-0 group-hover:opacity-100">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-plus size-4">
-                                      <path d="M5 12h14" />
-                                      <path d="M12 5v14" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        {activeMediaTab !== 'text' && (
-                          <div className="p-4 text-muted-foreground text-sm">
-                            {activeMediaTab.charAt(0).toUpperCase() + activeMediaTab.slice(1)} 功能開發中...
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                  {/* Stickers - 貼紙 */}
+                  <div
+                    className={`flex z-[100] flex-col gap-0.5 items-center cursor-pointer ${
+                      activeMediaTab === 'captions' ? 'text-primary !opacity-100' : 'text-muted-foreground'
+                    }`}
+                    onClick={() => setActiveMediaTab('captions')}
+                    title="貼紙"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-[1.1rem] opacity-100 hover:opacity-75">
+                      <path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"></path>
+                      <path d="M14 3v4a2 2 0 0 0 2 2h4"></path>
+                      <path d="M8 13h.01"></path>
+                      <path d="M16 13h.01"></path>
+                      <path d="M10 16s.8 1 2 1c1.3 0 2-1 2-1"></path>
+                    </svg>
+                  </div>
+
+                  {/* Sparkles - AI 特效 */}
+                  <div className="flex z-[100] flex-col gap-0.5 items-center cursor-pointer text-muted-foreground" title="AI 特效">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-[1.1rem] opacity-100 hover:opacity-75">
+                      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"></path>
+                      <path d="M20 3v4"></path>
+                      <path d="M22 5h-4"></path>
+                      <path d="M4 17v2"></path>
+                      <path d="M5 18H3"></path>
+                    </svg>
+                  </div>
+
+                  {/* Transitions - 轉場 */}
+                  <div className="flex z-[100] flex-col gap-0.5 items-center cursor-pointer text-muted-foreground" title="轉場">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-[1.1rem] opacity-100 hover:opacity-75">
+                      <path d="M8 3 4 7l4 4"></path>
+                      <path d="M4 7h16"></path>
+                      <path d="m16 21 4-4-4-4"></path>
+                      <path d="M20 17H4"></path>
+                    </svg>
+                  </div>
+
+                  {/* Captions - 字幕 */}
+                  <div className="flex z-[100] flex-col gap-0.5 items-center cursor-pointer text-muted-foreground" title="字幕">
+                    <CaptionsIcon className="size-[1.1rem] opacity-100 hover:opacity-75" />
+                  </div>
+
+                  {/* Filters - 濾鏡 */}
+                  <div
+                    className={`flex z-[100] flex-col gap-0.5 items-center cursor-pointer ${
+                      activeMediaTab === 'filters' ? 'text-primary !opacity-100' : 'text-muted-foreground'
+                    }`}
+                    onClick={() => setActiveMediaTab('filters')}
+                    title="濾鏡"
+                  >
+                    <Blend className="size-[1.1rem] opacity-100 hover:opacity-75" />
+                  </div>
+
+                  {/* Sliders - 調整 */}
+                  <div className="flex z-[100] flex-col gap-0.5 items-center cursor-pointer text-muted-foreground" title="調整">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-[1.1rem] opacity-100 hover:opacity-75">
+                      <line x1="21" x2="14" y1="4" y2="4"></line>
+                      <line x1="10" x2="3" y1="4" y2="4"></line>
+                      <line x1="21" x2="12" y1="12" y2="12"></line>
+                      <line x1="8" x2="3" y1="12" y2="12"></line>
+                      <line x1="21" x2="16" y1="20" y2="20"></line>
+                      <line x1="12" x2="3" y1="20" y2="20"></line>
+                      <line x1="14" x2="14" y1="2" y2="6"></line>
+                      <line x1="8" x2="8" y1="10" y2="14"></line>
+                      <line x1="16" x2="16" y1="18" y2="22"></line>
+                    </svg>
+                  </div>
+
+                  {/* Settings - 設定 */}
+                  <div
+                    className={`flex z-[100] flex-col gap-0.5 items-center cursor-pointer ${
+                      activeMediaTab === 'settings' ? 'text-primary !opacity-100' : 'text-muted-foreground'
+                    }`}
+                    onClick={() => setActiveMediaTab('settings')}
+                    title="設定"
+                  >
+                    <Settings className="size-[1.1rem] opacity-100 hover:opacity-75" />
                   </div>
                 </div>
+
+                {/* 上下漸層覆蓋 */}
+                <div className="absolute left-0 right-0 h-6 pointer-events-none z-[101] transition-opacity duration-200 top-0 bg-gradient-to-b from-panel to-transparent" />
+                <div className="absolute left-0 right-0 h-6 pointer-events-none z-[101] transition-opacity duration-200 bottom-0 bg-gradient-to-t from-panel to-transparent" />
               </div>
 
               {/* 垂直分隔線 */}
               <div data-orientation="vertical" role="none" className="shrink-0 bg-border h-full w-px" />
 
-              {/* 影片預覽區 */}
-              <div className="flex-1 flex items-center justify-center bg-black overflow-hidden relative">
+              {/* 右側內容面板 */}
+              <div className="flex-1 overflow-hidden">
+                <div className="h-full flex flex-col">
+                  <div className="overflow-auto scrollbar-thin flex-1">
+                    <div className="p-5">
+                      {/* 預設文字樣板 */}
+                      {activeMediaTab === 'text' && (
+                        <div className="relative group w-28 h-28">
+                          <div className="flex flex-col gap-1 p-1 h-auto w-full relative cursor-default">
+                            <div data-radix-aspect-ratio-wrapper="" style={{ position: 'relative', width: '100%', paddingBottom: '100%' }}>
+                              <div className="bg-panel-accent relative overflow-hidden rounded-md" draggable="true" style={{ position: 'absolute', inset: '0px' }}>
+                                <div className="flex items-center justify-center w-full h-full bg-panel-accent rounded">
+                                  <span className="text-xs select-none">Default text</span>
+                                </div>
+                                <button className="inline-flex items-center cursor-pointer justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 shadow-sm absolute bottom-2 right-2 size-5 bg-background hover:bg-panel text-foreground opacity-0 group-hover:opacity-100">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-plus size-4">
+                                    <path d="M5 12h14" />
+                                    <path d="M12 5v14" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {activeMediaTab !== 'text' && (
+                        <div className="p-4 text-muted-foreground text-sm">
+                          {activeMediaTab.charAt(0).toUpperCase() + activeMediaTab.slice(1)} 功能開發中...
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Panel>
+
+          <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-blue-600 transition" />
+
+          {/* 中間: 預覽面板 + 時間軸 */}
+          <Panel defaultSize={55} minSize={40}>
+        <PanelGroup direction="vertical">
+          {/* 影片預覽面板 */}
+          <Panel defaultSize={70} minSize={30}>
+            <div className="h-full flex items-center justify-center bg-black overflow-hidden relative">
                 {!videoUrl ? (
                   <div className="text-center">
                     <Upload size={64} className="mx-auto mb-4 text-gray-600" />
@@ -1018,8 +1079,7 @@ export default function EditorProPage() {
                   </>
                 )}
               </div>
-                </div>
-              </Panel>
+            </Panel>
 
               {/* 垂直調整手柄 */}
               <PanelResizeHandle className="h-1 bg-gray-800 hover:bg-blue-600 transition cursor-row-resize" />
