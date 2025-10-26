@@ -144,19 +144,19 @@ export default function SubtitlePlayhead({
       }}
       onMouseDown={handleMouseDown}
     >
-      {/* 垂直紅線 - 從頂部延伸到底部 */}
+      {/* 垂直紅線 - 從頂部延伸到底部 (改用醒目的紅色) */}
       <div
         className={`absolute left-0 w-0.5 h-full cursor-col-resize transition-colors ${
-          isDragging ? 'bg-red-500' : 'bg-foreground'
+          isDragging ? 'bg-red-600' : 'bg-red-500'
         }`}
       />
       
-      {/* 頂部圓點 */}
+      {/* 頂部圓點 (改用醒目的紅色) */}
       <div
         className={`absolute top-1 left-1/2 transform -translate-x-1/2 w-3 h-3 rounded-full border-2 transition-colors ${
           isDragging
-            ? 'bg-red-500 border-red-300'
-            : 'bg-foreground border-foreground/50'
+            ? 'bg-red-600 border-red-400'
+            : 'bg-red-500 border-red-300'
         }`}
       />
       

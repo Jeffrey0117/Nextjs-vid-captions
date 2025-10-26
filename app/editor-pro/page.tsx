@@ -1399,12 +1399,17 @@ export default function EditorProPage() {
                               />
                             )}
                             
-                            {/* 字幕軌道 */}
-                            <div className="absolute left-0 right-0 top-0" style={{ height: '60px' }}>
-                              <div className="w-full h-full hover:bg-gray-800/20">
-                                <div className="h-full relative track-elements-container min-w-full">
-                                  {/* 字幕片段 */}
-                                  {segments.map((segment) => {
+                            {/* 字幕軌道 - 整個區域填滿並可點擊 */}
+                            <div
+                              className="absolute left-0 right-0 top-0 bottom-0"
+                              onClick={handleTimelineClick}
+                            >
+                              <div
+                                className="w-full h-full hover:bg-gray-800/20 relative"
+                                onClick={handleTimelineClick}
+                              >
+                                {/* 字幕片段 */}
+                                {segments.map((segment) => {
                                     const left = segment.startTime * 50 * zoomLevel;
                                     const width = (segment.endTime - segment.startTime) * 50 * zoomLevel;
                                     const isSelected = selectedSegmentId === segment.id;
@@ -1463,9 +1468,8 @@ export default function EditorProPage() {
                                           {formatTime(segment.startTime)} - {formatTime(segment.endTime)}
                                         </div>
                                       </div>
-                                    );
-                                  })}
-                                </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           </div>
