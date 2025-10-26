@@ -28,9 +28,29 @@ export default function SubtitlePlayhead({
   const [isDragging, setIsDragging] = useState(false);
   const playheadRef = useRef<HTMLDivElement>(null);
   const [scrollLeft, setScrollLeft] = useState(0);
+  const [timelineHeight, setTimelineHeight] = useState(400);
 
   // 計算播放頭的 X 位置 (像素)
   const playheadX = currentTime * pixelsPerSecond;
+
+  // 追蹤時間軸容器高度變化 (OpenCut 標準: 播放頭延伸整個時間軸)
+  useEffect(() => {
+    const timelineContainer = timelineRef?.current;
+    if (!timelineContainer) return;
+
+    const updateHeight = () => {
+      setTimelineHeight(timelineContainer.offsetHeight);
+    };
+
+    // 設定初始高度
+    updateHeight();
+
+    // 監聽容器尺寸變化
+    const resizeObserver = new ResizeObserver(updateHeight);
+    resizeObserver.observe(timelineContainer);
+
+    return () => resizeObserver.disconnect();
+  }, [timelineRef]);
 
   // 追蹤滾動位置 (OpenCut 風格: 讓播放頭鎖定在畫面內)
   useEffect(() => {
@@ -109,9 +129,8 @@ export default function SubtitlePlayhead({
     }
   }, [currentTime, playheadX, containerRef, isDragging]);
 
-  // 計算時間軸容器的完整高度 (OpenCut 風格: 從頂部延伸到底部)
-  const timelineContainerHeight = timelineRef?.current?.offsetHeight || containerRef.current?.offsetHeight || 400;
-  const totalHeight = timelineContainerHeight - 4; // 留一點呼吸空間
+  // OpenCut 標準: 播放頭延伸整個時間軸高度 (標尺 + 所有軌道)
+  const totalHeight = timelineHeight - 4; // 留 4px 呼吸空間
 
   return (
     <div
@@ -120,8 +139,8 @@ export default function SubtitlePlayhead({
       style={{
         left: `${playheadX}px`,
         top: 0,
-        height: `${totalHeight}px`, // OpenCut 風格: 延伸到底部
-        width: '2px', // 稍微加寬點擊區域
+        height: `${totalHeight}px`, // 播放頭從頂部延伸到底部
+        width: '2px', // 稍微加寬點擊區域,提升可點擊性
       }}
       onMouseDown={handleMouseDown}
     >
