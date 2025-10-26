@@ -343,13 +343,14 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       trackId = newTrack.id;
     }
     
-    // 匯入字幕到指定軌道
+    // 匯入字幕到指定軌道,並確保該軌道被選中
     set((state) => ({
       tracks: state.tracks.map(t =>
         t.id === trackId
           ? { ...t, segments: segments.sort((a, b) => a.startTime - b.startTime) }
           : t
       ),
+      selectedTrackId: trackId, // 確保選中該軌道
     }));
   },
 

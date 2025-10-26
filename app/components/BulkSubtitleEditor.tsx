@@ -10,12 +10,15 @@ interface BulkSubtitleEditorProps {
 }
 
 export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEditorProps) {
-  const { segments, updateSegment } = useSubtitleStore();
+  const { tracks, updateSegment } = useSubtitleStore();
   const [editedTexts, setEditedTexts] = useState<{ [key: string]: string }>({});
   const [fontSize, setFontSize] = useState<number>(14);
   const [findText, setFindText] = useState<string>('');
   const [replaceText, setReplaceText] = useState<string>('');
   const [showReplace, setShowReplace] = useState<boolean>(false);
+
+  // 從 tracks 計算 segments (reactive)
+  const segments = tracks.length > 0 ? tracks[0].segments : [];
 
   // 初始化編輯文字和字體大小
   useEffect(() => {

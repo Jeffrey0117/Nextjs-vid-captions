@@ -218,7 +218,7 @@ export default function EditorProPage() {
         tracksScroll.removeEventListener('scroll', handleTracksVerticalScroll);
       }
     };
-  }, [duration, segments.length]); // 當 duration 或 segments 變化時重新綁定
+  }, [duration, tracks]); // 當 duration 或 tracks 變化時重新綁定 (tracks 是真正的 reactive state)
 
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -258,7 +258,17 @@ export default function EditorProPage() {
       const data = await response.json();
 
       if (data.srtContent) {
+        console.log('🔍 API 回傳的 SRT 內容:', data.srtContent.substring(0, 500));
         importFromSrt(data.srtContent);
+        
+        // Debug: 檢查 store 狀態
+        setTimeout(() => {
+          const state = useSubtitleStore.getState();
+          console.log('🔍 Store 狀態 - tracks:', state.tracks);
+          console.log('🔍 Store 狀態 - selectedTrackId:', state.selectedTrackId);
+          console.log('🔍 Store 狀態 - segments:', state.tracks[0]?.segments);
+        }, 100);
+        
         alert('字幕識別完成!');
       } else {
         alert('字幕識別失敗,請檢查 Whisper 是否已安裝');
@@ -711,7 +721,7 @@ export default function EditorProPage() {
 
         <button
           onClick={handleTranslateAll}
-          disabled={segments.length === 0 || isTranslating}
+          disabled={tracks.length === 0 || tracks.every(t => t.segments.length === 0) || isTranslating}
           className="flex items-center gap-1 px-2 py-1 bg-yellow-600 hover:bg-yellow-700 rounded transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Languages size={12} />
@@ -720,7 +730,7 @@ export default function EditorProPage() {
 
         <button
           onClick={handleDownloadSrt}
-          disabled={segments.length === 0}
+          disabled={tracks.length === 0 || tracks.every(t => t.segments.length === 0)}
           className="flex items-center gap-1 px-2 py-1 bg-indigo-600 hover:bg-indigo-700 rounded transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Download size={12} />
@@ -731,7 +741,7 @@ export default function EditorProPage() {
 
         <button
           onClick={() => setShowBulkEditor(true)}
-          disabled={segments.length === 0}
+          disabled={tracks.length === 0 || tracks.every(t => t.segments.length === 0)}
           className="flex items-center gap-1 px-2 py-1 bg-teal-600 hover:bg-teal-700 rounded transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Edit3 size={12} />
@@ -740,7 +750,7 @@ export default function EditorProPage() {
 
         <button
           onClick={handleExportVideo}
-          disabled={!videoFile || segments.length === 0 || isExporting}
+          disabled={!videoFile || tracks.length === 0 || tracks.every(t => t.segments.length === 0) || isExporting}
           className="flex items-center gap-1 px-2 py-1 bg-emerald-600 hover:bg-emerald-700 rounded transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Film size={12} />
@@ -1409,7 +1419,7 @@ export default function EditorProPage() {
                                 onClick={handleTimelineClick}
                               >
                                 {/* 字幕片段 */}
-                                {segments.map((segment) => {
+                                {tracks.length > 0 && tracks[0].segments.map((segment) => {
                                     const left = segment.startTime * 50 * zoomLevel;
                                     const width = (segment.endTime - segment.startTime) * 50 * zoomLevel;
                                     const isSelected = selectedSegmentId === segment.id;

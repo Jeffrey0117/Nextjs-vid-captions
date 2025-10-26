@@ -16,11 +16,13 @@ export default function SubtitlePropertiesPanel({
   applyToAll,
   setApplyToAll
 }: SubtitlePropertiesPanelProps) {
-  const { segments, updateSegment } = useSubtitleStore();
+  const { tracks, updateSegment } = useSubtitleStore();
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showBgColorPicker, setShowBgColorPicker] = useState(false);
   const [showShadowColorPicker, setShowShadowColorPicker] = useState(false);
 
+  // 從 tracks 計算 segments (reactive)
+  const segments = tracks.length > 0 ? tracks[0].segments : [];
   const selectedSegment = segments.find(seg => seg.id === selectedSegmentId);
 
   if (!selectedSegment) {
