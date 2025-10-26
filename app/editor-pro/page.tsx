@@ -955,6 +955,135 @@ export default function EditorProPage() {
 
                       <div className="w-px h-5 bg-zinc-700 mx-0.5" />
 
+                      {/* 編輯工具按鈕組 - OpenCut 風格 */}
+                      <button
+                        onClick={() => {
+                          // TODO: 實現剪刀分割功能
+                          console.log('Split at playhead:', currentTime);
+                        }}
+                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors"
+                        title="在播放頭位置分割 (Ctrl+S)"
+                      >
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <circle cx="6" cy="6" r="3" />
+                          <path d="M8.12 8.12 12 12" />
+                          <path d="M20 4 8.12 15.88" />
+                          <circle cx="6" cy="18" r="3" />
+                          <path d="M14.8 14.8 20 20" />
+                        </svg>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          // TODO: 實現分割並保留左側
+                          console.log('Split and keep left');
+                        }}
+                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors"
+                        title="分割並保留左側 (Ctrl+Q)"
+                      >
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path d="M3 19V5" />
+                          <path d="m13 6-6 6 6 6" />
+                          <path d="M7 12h14" />
+                        </svg>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          // TODO: 實現分割並保留右側
+                          console.log('Split and keep right');
+                        }}
+                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors"
+                        title="分割並保留右側 (Ctrl+W)"
+                      >
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path d="M17 12H3" />
+                          <path d="m11 18 6-6-6-6" />
+                          <path d="M21 5v14" />
+                        </svg>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          // TODO: 實現水平分割功能
+                          console.log('Separate audio/split horizontal');
+                        }}
+                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors"
+                        title="水平分割 (Ctrl+D)"
+                      >
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path d="M8 19H5c-1 0-2-1-2-2V7c0-1 1-2 2-2h3" />
+                          <path d="M16 5h3c1 0 2 1 2 2v10c0 1-1 2-2 2h-3" />
+                          <line x1="12" x2="12" y1="4" y2="20" />
+                        </svg>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          if (!selectedSegmentId) return;
+                          const segment = segments.find(s => s.id === selectedSegmentId);
+                          if (!segment) return;
+                          
+                          // 複製選中的字幕 (簡單實現: 在後面添加一個相同的)
+                          const newStartTime = segment.endTime + 0.1;
+                          const duration = segment.endTime - segment.startTime;
+                          
+                          console.log('Duplicate segment:', segment.id);
+                          // TODO: 完整實現複製功能
+                        }}
+                        disabled={!selectedSegmentId}
+                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="複製字幕 (Ctrl+D)"
+                      >
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                          <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                        </svg>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          // TODO: 實現凍結幀功能
+                          console.log('Freeze frame');
+                        }}
+                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors"
+                        title="凍結幀 (F)"
+                      >
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <line x1="2" x2="22" y1="12" y2="12" />
+                          <line x1="12" x2="12" y1="2" y2="22" />
+                          <path d="m20 16-4-4 4-4" />
+                          <path d="m4 8 4 4-4 4" />
+                          <path d="m16 4-4 4-4-4" />
+                          <path d="m8 20 4-4 4 4" />
+                        </svg>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          if (!selectedSegmentId) return;
+                          // 刪除選中的字幕
+                          const segmentToDelete = segments.find(s => s.id === selectedSegmentId);
+                          if (segmentToDelete && window.confirm(`確定要刪除字幕「${segmentToDelete.text}」嗎?`)) {
+                            // TODO: 實現刪除功能 (需要在 subtitle-store 添加 deleteSegment 方法)
+                            console.log('Delete segment:', selectedSegmentId);
+                          }
+                        }}
+                        disabled={!selectedSegmentId}
+                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="刪除字幕 (Delete)"
+                      >
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path d="M3 6h18" />
+                          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                          <line x1="10" x2="10" y1="11" y2="17" />
+                          <line x1="14" x2="14" y1="11" y2="17" />
+                        </svg>
+                      </button>
+
+                      <div className="w-px h-5 bg-zinc-700 mx-0.5" />
+
                       {/* 書籤按鈕 */}
                       <button
                         onClick={handleToggleBookmark}
