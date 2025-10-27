@@ -1034,7 +1034,7 @@ export default function EditorProPage() {
                     {/* 字幕疊加層 */}
                     {currentSubtitle && (
                       <div
-                        className="absolute inset-0 flex items-center justify-center select-none pointer-events-none"
+                        className="absolute inset-0 flex items-center justify-center pointer-events-none"
                       >
                         <div
                           className="absolute pointer-events-auto"

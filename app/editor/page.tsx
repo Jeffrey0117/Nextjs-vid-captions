@@ -1,315 +1,888 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import dynamic from "next/dynamic";
-import { parseSrt, findCurrentSubtitle } from "@/lib/parseSrt";
-import { Subtitle, SubtitleStyle, DEFAULT_STYLE } from "@/lib/types";
+import {
+  Calendar,
+  ChevronLeft,
+  Edit,
+  Loader2,
+  MoreHorizontal,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+  Video,
+  X,
+} from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
+import { useSubtitleStore } from "../stores/subtitle-store";
+import BulkSubtitleEditor from "../components/BulkSubtitleEditor";
+import { parseSrt } from "@/lib/parseSrt";
 
-// Dynamically import VideoPlayer with no SSR
-const VideoPlayer = dynamic(() => import("../components/VideoPlayer"), {
-  ssr: false,
-  loading: () => (
-    <div className="relative w-full aspect-video bg-gray-900 rounded-lg flex items-center justify-center">
-      <p className="text-white">Loading video player...</p>
-    </div>
-  ),
-});
+// 專案資料類型
+interface Project {
+  id: string;
+  name: string;
+  createdAt: Date;
+  thumbnail?: string | null;
+  
+  // 影片相關
+  videoFile?: File | null;
+  videoUrl?: string | null;
+  
+  // 狀態追蹤
+  status: 'idle' | 'uploading' | 'transcribing' | 'translating' | 'ready' | 'error';
+  progress: number; // 0-100
+  errorMessage?: string;
+  
+  // 字幕資料
+  segments?: Array<{
+    id: string;
+    startTime: number;
+    endTime: number;
+    text: string;
+    translatedText?: string;
+  }>;
+}
 
-// Move handleFileChange outside the component to prevent recreation on each render
-const handleFileUpload = async (file: File) => {
-  const formData = new FormData();
-  formData.append("file", file);
-
-  try {
-    const response = await fetch("/api/transcribe", {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to process video");
+export default function ProjectsPage() {
+  const router = useRouter();
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  
+  // 使用 localStorage 持久化專案列表
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
+  
+  // 批量編輯器狀態
+  const [showBulkEditor, setShowBulkEditor] = useState(false);
+  const [currentEditingProjectId, setCurrentEditingProjectId] = useState<string | null>(null);
+  
+  // Zustand store
+  const { tracks, setSegments, reset: resetSubtitleStore } = useSubtitleStore();
+  
+  // 初始化:從 localStorage 載入專案
+  useEffect(() => {
+    const savedProjects = localStorage.getItem('subtitle-projects');
+    if (savedProjects) {
+      const parsed = JSON.parse(savedProjects);
+      // 恢復 Date 物件
+      const restored = parsed.map((p: any) => ({
+        ...p,
+        createdAt: new Date(p.createdAt),
+        status: p.status || 'idle',
+        progress: p.progress || 0,
+      }));
+      setProjects(restored);
     }
+  }, []);
+  
+  // 持久化:專案變更時儲存到 localStorage
+  useEffect(() => {
+    if (projects.length > 0) {
+      localStorage.setItem('subtitle-projects', JSON.stringify(projects));
+    }
+  }, [projects]);
 
-    return await response.json();
-  } catch (error) {
-    console.error("Error uploading video:", error);
-    throw error;
-  }
-};
+  // 更新專案狀態
+  const updateProject = (projectId: string, updates: Partial<Project>) => {
+    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updates } : p));
+  };
 
-export default function EditorPage() {
-  const [videoUrl, setVideoUrl] = useState<string>("");
-  const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
-  const [currentSubtitle, setCurrentSubtitle] = useState<Subtitle | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState<string>("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  // 全域樣式狀態 (套用到所有字幕)
-  const [globalStyle, setGlobalStyle] = useState<SubtitleStyle>(DEFAULT_STYLE);
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCreateProject = () => {
+    const newId = Date.now().toString();
+    const newProject: Project = {
+      id: newId,
+      name: `專案 ${projects.length + 1}`,
+      createdAt: new Date(),
+      status: 'idle',
+      progress: 0,
+    };
+    setProjects([newProject, ...projects]);
+  };
+  
+  // 處理專案卡片點擊 → 觸發影片上傳
+  const handleProjectClick = (projectId: string) => {
+    if (isSelectionMode) return;
+    setCurrentEditingProjectId(projectId);
+    videoInputRef.current?.click();
+  };
+  
+  // 處理影片檔案上傳
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsProcessing(true);
-    setError("");
-
+    if (!file || !currentEditingProjectId) return;
+    
+    const projectId = currentEditingProjectId;
+    updateProject(projectId, {
+      videoFile: file,
+      videoUrl: URL.createObjectURL(file),
+      status: 'uploading',
+      progress: 0,
+    });
+    
+    // 模擬上傳進度
+    updateProject(projectId, { status: 'uploading', progress: 100 });
+    
+    // 自動執行字幕識別+翻譯
+    await autoProcessVideo(projectId, file);
+    
+    // 重置檔案選擇器
+    e.target.value = '';
+    setCurrentEditingProjectId(null);
+  };
+  
+  // 自動處理流程:字幕識別 → 翻譯
+  const autoProcessVideo = async (projectId: string, videoFile: File) => {
     try {
-      const data = await handleFileUpload(file);
-      setVideoUrl(data.videoUrl);
-
-      if (data.srtContent) {
-        const parsedSubtitles = parseSrt(data.srtContent);
-        // 為每個字幕添加預設樣式
-        const subtitlesWithStyle = parsedSubtitles.map((sub) => ({
-          ...sub,
-          style: { ...DEFAULT_STYLE },
-        }));
-        setSubtitles(subtitlesWithStyle);
+      // Step 1: Whisper 字幕識別
+      updateProject(projectId, { status: 'transcribing', progress: 0 });
+      
+      const formData = new FormData();
+      formData.append('file', videoFile); // 修正:改用 'file' 參數名
+      formData.append('language', 'zh');
+      
+      const transcribeRes = await fetch('/api/transcribe', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!transcribeRes.ok) {
+        const errorData = await transcribeRes.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || '字幕識別失敗');
       }
-    } catch (err) {
-      console.error("Error uploading video:", err);
-      setError("Failed to process video. Please try again.");
-    } finally {
-      setIsProcessing(false);
+      
+      const { srtContent } = await transcribeRes.json(); // 修正:改用 'srtContent' 欄位名
+      const parsedSegments = parseSrt(srtContent);
+      
+      updateProject(projectId, { progress: 50 });
+      
+      // Step 2: Google Translate 翻譯
+      updateProject(projectId, { status: 'translating', progress: 50 });
+      
+      const translateRes = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          texts: parsedSegments.map(s => s.text),
+          targetLang: 'zh-TW',
+        }),
+      });
+      
+      if (!translateRes.ok) throw new Error('翻譯失敗');
+      
+      const { translations } = await translateRes.json();
+      
+      // 合併字幕資料
+      const segments = parsedSegments.map((seg, i) => ({
+        ...seg,
+        translatedText: translations[i] || seg.text,
+      }));
+      
+      updateProject(projectId, {
+        status: 'ready',
+        progress: 100,
+        segments,
+      });
+      
+    } catch (error: any) {
+      console.error('自動處理失敗:', error);
+      updateProject(projectId, {
+        status: 'error',
+        errorMessage: error.message || '處理失敗',
+      });
+    }
+  };
+  
+  // 開啟批量編輯器
+  const openBulkEditor = (projectId: string) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project || !project.segments) return;
+    
+    // 載入字幕到 Zustand store
+    resetSubtitleStore();
+    setSegments(project.segments);
+    setCurrentEditingProjectId(projectId);
+    setShowBulkEditor(true);
+  };
+  
+  // 關閉批量編輯器並儲存
+  const closeBulkEditor = () => {
+    if (currentEditingProjectId && tracks[0]?.segments) {
+      // 儲存編輯結果回專案
+      updateProject(currentEditingProjectId, {
+        segments: tracks[0].segments,
+      });
+    }
+    setShowBulkEditor(false);
+    setCurrentEditingProjectId(null);
+    resetSubtitleStore();
+  };
+  
+  // 輸出影片
+  const exportVideo = async (projectId: string) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project || !project.videoFile || !project.segments || project.segments.length === 0) {
+      alert('請先上傳影片並完成字幕識別');
+      return;
+    }
+    
+    try {
+      updateProject(projectId, { status: 'uploading', progress: 0 });
+      
+      const formData = new FormData();
+      formData.append('video', project.videoFile);
+      formData.append('segments', JSON.stringify(project.segments));
+      
+      const res = await fetch('/api/burn-subtitles', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!res.ok) throw new Error('影片輸出失敗');
+      
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${project.name}_字幕版.mp4`;
+      a.click();
+      
+      updateProject(projectId, { status: 'ready', progress: 100 });
+      
+    } catch (error: any) {
+      console.error('輸出失敗:', error);
+      alert('輸出失敗:' + error.message);
+      updateProject(projectId, { status: 'error', errorMessage: error.message });
     }
   };
 
-  const handleTimeUpdate = (currentTimeMs: number) => {
-    const sub = findCurrentSubtitle(subtitles, currentTimeMs);
-    setCurrentSubtitle(sub);
+  const handleDeleteProject = (projectId: string) => {
+    setProjects(projects.filter((p) => p.id !== projectId));
   };
 
-  const handleVideoEnd = () => {
-    setCurrentSubtitle(null);
+  const handleSelectProject = (projectId: string, checked: boolean) => {
+    const newSelected = new Set(selectedProjects);
+    if (checked) {
+      newSelected.add(projectId);
+    } else {
+      newSelected.delete(projectId);
+    }
+    setSelectedProjects(newSelected);
   };
 
-  // 更新全域樣式並套用到所有字幕
-  const updateGlobalStyle = (newStyle: Partial<SubtitleStyle>) => {
-    const updatedStyle = { ...globalStyle, ...newStyle };
-    setGlobalStyle(updatedStyle);
-
-    // 更新所有字幕的樣式
-    setSubtitles((prev) =>
-      prev.map((sub) => ({
-        ...sub,
-        style: { ...updatedStyle },
-      }))
-    );
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedProjects(new Set(filteredProjects.map((p) => p.id)));
+    } else {
+      setSelectedProjects(new Set());
+    }
   };
 
-  // 下載 SRT 檔案
-  const downloadSRT = () => {
-    const srtContent = subtitles
-      .map((sub, i) => {
-        const start = formatTimeToSRT(
-          typeof sub.startTime === "number" ? sub.startTime : 0
-        );
-        const end = formatTimeToSRT(
-          typeof sub.endTime === "number" ? sub.endTime : 0
-        );
-        return `${i + 1}\n${start} --> ${end}\n${sub.text}\n`;
-      })
-      .join("\n");
-
-    const blob = new Blob([srtContent], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "subtitles.srt";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const handleCancelSelection = () => {
+    setIsSelectionMode(false);
+    setSelectedProjects(new Set());
   };
+
+  const handleBulkDelete = () => {
+    setProjects(projects.filter((p) => !selectedProjects.has(p.id)));
+    setSelectedProjects(new Set());
+    setIsSelectionMode(false);
+  };
+
+  // 搜尋過濾
+  const filteredProjects = projects.filter((p) =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const allSelected =
+    filteredProjects.length > 0 &&
+    selectedProjects.size === filteredProjects.length;
 
   return (
-    <main className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <h1 className="text-2xl font-bold">字幕編輯器</h1>
-          <div className="flex items-center gap-4">
-            {/* 下載 SRT */}
-            {subtitles.length > 0 && (
+    <div className="min-h-screen bg-gray-900 text-white">
+      {/* 隱藏的檔案選擇器 */}
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/*"
+        onChange={handleVideoUpload}
+        className="hidden"
+      />
+      
+      {/* 批量編輯器全螢幕 Modal */}
+      {showBulkEditor && (
+        <div className="fixed inset-0 z-50 bg-gray-900">
+          <div className="h-full flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+              <h2 className="text-lg font-bold">批量編輯字幕</h2>
               <button
-                onClick={downloadSRT}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded font-medium transition-colors"
+                onClick={closeBulkEditor}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded transition-colors"
               >
-                下載 SRT
+                完成編輯
               </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <BulkSubtitleEditor />
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Header */}
+      <div className="pt-6 px-6 flex items-center justify-between w-full h-16">
+        <Link
+          href="/"
+          className="flex items-center gap-1 text-gray-400 hover:text-gray-200 transition-colors"
+        >
+          <ChevronLeft className="w-5 h-5 shrink-0" />
+          <span className="text-sm font-medium">返回</span>
+        </Link>
+        <div className="block md:hidden">
+          {isSelectionMode ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCancelSelection}
+                className="px-3 py-1.5 text-sm border border-gray-600 rounded hover:bg-gray-800 transition-colors"
+              >
+                <X className="w-4 h-4 inline-block mr-1" />
+                取消
+              </button>
+              {selectedProjects.size > 0 && (
+                <button
+                  onClick={handleBulkDelete}
+                  className="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-700 rounded transition-colors"
+                >
+                  <Trash2 className="w-4 h-4 inline-block mr-1" />
+                  刪除 ({selectedProjects.size})
+                </button>
+              )}
+            </div>
+          ) : (
+            <CreateButton onClick={handleCreateProject} />
+          )}
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <main className="max-w-6xl mx-auto px-6 pt-6 pb-6">
+        <div className="mb-8 flex items-center justify-between">
+          <div className="flex flex-col gap-3">
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+              您的專案
+            </h1>
+            <p className="text-gray-400">
+              {projects.length}{" "}
+              {projects.length === 1 ? "個專案" : "個專案"}
+              {isSelectionMode && selectedProjects.size > 0 && (
+                <span className="ml-2 text-blue-400">
+                  • {selectedProjects.size} 個已選取
+                </span>
+              )}
+            </p>
+          </div>
+          <div className="hidden md:block">
+            {isSelectionMode ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCancelSelection}
+                  className="px-4 py-2 border border-gray-600 rounded hover:bg-gray-800 transition-colors"
+                >
+                  <X className="w-4 h-4 inline-block mr-1" />
+                  取消
+                </button>
+                {selectedProjects.size > 0 && (
+                  <button
+                    onClick={handleBulkDelete}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4 inline-block mr-1" />
+                    刪除選取的 ({selectedProjects.size})
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsSelectionMode(true)}
+                  disabled={projects.length === 0}
+                  className="px-4 py-2 border border-gray-600 rounded hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  選取專案
+                </button>
+                <CreateButton onClick={handleCreateProject} />
+              </div>
             )}
           </div>
         </div>
-      </header>
 
-      <div className="max-w-7xl mx-auto p-6">
-        {/* 上傳區域 */}
-        {!videoUrl && (
-          <div className="bg-gray-800 rounded-xl p-8 text-center">
+        {/* Search Bar */}
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div className="flex-1 max-w-72 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
-              type="file"
-              ref={fileInputRef}
-              accept="video/*"
-              onChange={handleFileChange}
-              className="hidden"
-              disabled={isProcessing}
+              type="text"
+              placeholder="搜尋專案..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isProcessing}
-              className={`px-8 py-4 rounded-lg font-medium text-white transition-colors ${
-                isProcessing
-                  ? "bg-gray-600 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700"
+          </div>
+        </div>
+
+        {/* Select All */}
+        {isSelectionMode && filteredProjects.length > 0 && (
+          <button
+            onClick={() => handleSelectAll(!allSelected)}
+            className="w-full mb-6 p-4 bg-gray-800 rounded-lg border border-gray-700 flex items-center gap-2 hover:bg-gray-700 transition-colors"
+          >
+            <div
+              className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                allSelected
+                  ? "bg-blue-600 border-blue-600"
+                  : "border-gray-500"
               }`}
             >
-              {isProcessing ? "處理中..." : "上傳影片"}
-            </button>
-            {error && <p className="mt-4 text-red-400">{error}</p>}
-          </div>
+              {allSelected && (
+                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              )}
+            </div>
+            <span className="text-sm font-medium">
+              {allSelected ? "取消全選" : "全選"}
+            </span>
+            <span className="text-sm text-gray-400">
+              ({selectedProjects.size} / {filteredProjects.length} 已選取)
+            </span>
+          </button>
         )}
 
-        {/* 編輯器區域 */}
-        {videoUrl && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* 左側: 影片播放器 */}
-            <div className="lg:col-span-2">
-              <div className="bg-gray-800 rounded-xl p-4">
-                <VideoPlayer
-                  videoUrl={videoUrl}
-                  subtitles={subtitles}
-                  currentSubtitle={currentSubtitle}
-                  onTimeUpdate={handleTimeUpdate}
-                  onVideoEnd={handleVideoEnd}
-                  onSubtitlePositionChange={(x, y) => {
-                    if (!currentSubtitle) return;
-                    // 更新當前字幕的位置
-                    setSubtitles((prev) =>
-                      prev.map((sub) =>
-                        sub.id === currentSubtitle.id
-                          ? {
-                              ...sub,
-                              style: {
-                                ...sub.style!,
-                                position: { x, y },
-                              },
-                            }
-                          : sub
-                      )
-                    );
-                  }}
-                  isDraggableSubtitle={true}
-                />
-              </div>
-
-              {/* 樣式控制面板 */}
-              <div className="bg-gray-800 rounded-xl p-6 mt-6">
-                <h2 className="text-lg font-semibold mb-4">字幕樣式</h2>
-
-                {/* 字體大小 */}
-                <div className="mb-6">
-                  <label className="block text-sm text-gray-400 mb-2">
-                    字體大小: {globalStyle.fontSize}px
-                  </label>
-                  <input
-                    type="range"
-                    min="16"
-                    max="48"
-                    value={globalStyle.fontSize}
-                    onChange={(e) =>
-                      updateGlobalStyle({ fontSize: Number(e.target.value) })
-                    }
-                    className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-
-                {/* 顏色選擇 */}
-                <div className="mb-6">
-                  <label className="block text-sm text-gray-400 mb-2">
-                    字幕顏色
-                  </label>
-                  <div className="flex gap-3">
-                    {[
-                      { name: "白色", color: "#FFFFFF" },
-                      { name: "黃色", color: "#FDE047" },
-                      { name: "紅色", color: "#EF4444" },
-                      { name: "藍色", color: "#3B82F6" },
-                      { name: "綠色", color: "#22C55E" },
-                    ].map((item) => (
-                      <button
-                        key={item.color}
-                        onClick={() => updateGlobalStyle({ color: item.color })}
-                        className={`w-12 h-12 rounded-lg border-2 transition-all ${
-                          globalStyle.color === item.color
-                            ? "border-white scale-110"
-                            : "border-gray-600 hover:border-gray-400"
-                        }`}
-                        style={{ backgroundColor: item.color }}
-                        title={item.name}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/* 提示 */}
-                <div className="text-sm text-gray-400 bg-gray-700 rounded p-3">
-                  💡 提示: 直接在影片上拖曳字幕可調整位置
+        {/* Project Grid */}
+        {isLoading ? (
+          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+            {Array.from({ length: 8 }, (_, index) => (
+              <div
+                key={`skeleton-${index}`}
+                className="overflow-hidden bg-gray-800 border border-gray-700 rounded-lg p-0"
+              >
+                <div className="aspect-square w-full bg-gray-700 animate-pulse" />
+                <div className="px-4 pt-5 pb-4 flex flex-col gap-2">
+                  <div className="h-4 w-3/4 bg-gray-700 animate-pulse rounded" />
+                  <div className="h-4 w-24 bg-gray-700 animate-pulse rounded" />
                 </div>
               </div>
-            </div>
-
-            {/* 右側: 字幕列表 */}
-            <div className="lg:col-span-1">
-              <div className="bg-gray-800 rounded-xl p-6 sticky top-6">
-                <h2 className="text-lg font-semibold mb-4">字幕列表</h2>
-                <div className="space-y-2 max-h-[600px] overflow-y-auto">
-                  {subtitles.map((sub) => (
-                    <div
-                      key={sub.id}
-                      className={`p-3 rounded cursor-pointer transition-colors ${
-                        currentSubtitle?.id === sub.id
-                          ? "bg-blue-600"
-                          : "bg-gray-700 hover:bg-gray-600"
-                      }`}
-                    >
-                      <p className="text-xs text-gray-400 mb-1">
-                        {formatTime(sub.startTime)} -{" "}
-                        {formatTime(sub.endTime)}
-                      </p>
-                      <p className="text-sm">{sub.text}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            ))}
+          </div>
+        ) : projects.length === 0 ? (
+          <NoProjects onCreateProject={handleCreateProject} />
+        ) : filteredProjects.length === 0 ? (
+          <NoResults
+            searchQuery={searchQuery}
+            onClearSearch={() => setSearchQuery("")}
+          />
+        ) : (
+          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+            {filteredProjects.map((project) => (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                isSelectionMode={isSelectionMode}
+                isSelected={selectedProjects.has(project.id)}
+                onSelect={handleSelectProject}
+                onDelete={handleDeleteProject}
+                onProjectClick={handleProjectClick}
+                onBulkEdit={openBulkEditor}
+                onExport={exportVideo}
+              />
+            ))}
           </div>
         )}
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }
 
-// Helper function to format time (ms) to MM:SS
-function formatTime(time: number | string): string {
-  const ms = typeof time === "number" ? time : 0;
-  const seconds = Math.floor(ms / 1000) % 60;
-  const minutes = Math.floor(ms / (1000 * 60));
-  return `${minutes.toString().padStart(2, "0")}:${seconds
-    .toString()
-    .padStart(2, "0")}`;
+// Project Card Component
+interface ProjectCardProps {
+  project: Project;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onSelect?: (projectId: string, checked: boolean) => void;
+  onDelete?: (projectId: string) => void;
+  onProjectClick?: (projectId: string) => void;
+  onBulkEdit?: (projectId: string) => void;
+  onExport?: (projectId: string) => void;
 }
 
-// Helper function to format time (ms) to SRT format (HH:MM:SS,mmm)
-function formatTimeToSRT(ms: number): string {
-  const hours = Math.floor(ms / 3600000);
-  const minutes = Math.floor((ms % 3600000) / 60000);
-  const seconds = Math.floor((ms % 60000) / 1000);
-  const milliseconds = ms % 1000;
+function ProjectCard({
+  project,
+  isSelectionMode = false,
+  isSelected = false,
+  onSelect,
+  onDelete,
+  onProjectClick,
+  onBulkEdit,
+  onExport,
+}: ProjectCardProps) {
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
-  return `${hours.toString().padStart(2, "0")}:${minutes
-    .toString()
-    .padStart(2, "0")}:${seconds.toString().padStart(2, "0")},${milliseconds
-    .toString()
-    .padStart(3, "0")}`;
+  const formatDate = (date: Date): string => {
+    return date.toLocaleDateString("zh-TW", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  };
+
+  // 狀態文字和顏色
+  const getStatusText = (status: Project['status']) => {
+    switch (status) {
+      case 'idle': return '待上傳';
+      case 'uploading': return '上傳中';
+      case 'transcribing': return '字幕識別中';
+      case 'translating': return '翻譯中';
+      case 'ready': return '已完成';
+      case 'error': return '錯誤';
+      default: return '待上傳';
+    }
+  };
+
+  const getStatusColor = (status: Project['status']) => {
+    switch (status) {
+      case 'idle': return 'text-gray-400';
+      case 'uploading': return 'text-blue-400';
+      case 'transcribing': return 'text-yellow-400';
+      case 'translating': return 'text-yellow-400';
+      case 'ready': return 'text-green-400';
+      case 'error': return 'text-red-400';
+      default: return 'text-gray-400';
+    }
+  };
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    if (isSelectionMode) {
+      e.preventDefault();
+      onSelect?.(project.id, !isSelected);
+    } else if (project.status === 'idle') {
+      // 點擊專案 = 觸發影片上傳 (只有 idle 狀態才能上傳)
+      e.preventDefault();
+      onProjectClick?.(project.id);
+    }
+  };
+
+  const cardContent = (
+    <div
+      className={`overflow-hidden bg-gray-800 border rounded-lg p-0 transition-all ${
+        isSelectionMode && isSelected
+          ? "ring-2 ring-blue-500 border-blue-500"
+          : "border-gray-700 hover:border-gray-600"
+      }`}
+    >
+      {/* Thumbnail */}
+      <div className="relative aspect-square bg-gray-700 transition-opacity group-hover:opacity-80">
+        {isSelectionMode && (
+          <div className="absolute top-3 left-3 z-10">
+            <div className="w-6 h-6 rounded-full bg-gray-900/80 backdrop-blur-sm border border-gray-600 flex items-center justify-center">
+              <div
+                className={`w-4 h-4 rounded-sm border-2 flex items-center justify-center ${
+                  isSelected
+                    ? "bg-blue-600 border-blue-600"
+                    : "border-gray-400"
+                }`}
+              >
+                {isSelected && (
+                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="absolute inset-0 flex items-center justify-center">
+          {project.thumbnail ? (
+            <img
+              src={project.thumbnail}
+              alt="專案縮圖"
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full bg-gray-700 flex items-center justify-center">
+              <Video className="h-12 w-12 text-gray-500" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Info */}
+      <div className="px-4 pt-5 pb-4 flex flex-col gap-2">
+        <div className="flex items-start justify-between">
+          <h3 className="font-medium text-sm leading-snug group-hover:text-gray-200 transition-colors line-clamp-2 flex-1">
+            {project.name}
+          </h3>
+          {!isSelectionMode && (
+            <div className="relative ml-2">
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDropdownOpen(!isDropdownOpen);
+                }}
+                className={`w-6 h-6 p-0 text-gray-400 hover:text-white transition-all ${
+                  isDropdownOpen
+                    ? "opacity-100"
+                    : "opacity-0 group-hover:opacity-100"
+                }`}
+              >
+                <MoreHorizontal className="w-5 h-5" />
+              </button>
+              {isDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-40 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-10">
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDropdownOpen(false);
+                      // TODO: 重命名功能
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 transition-colors rounded-t-lg"
+                  >
+                    重新命名
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDropdownOpen(false);
+                      // TODO: 複製功能
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 transition-colors"
+                  >
+                    複製
+                  </button>
+                  <div className="border-t border-gray-700" />
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDropdownOpen(false);
+                      setIsDeleteDialogOpen(true);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-gray-700 transition-colors rounded-b-lg"
+                  >
+                    刪除
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-1.5 text-xs text-gray-400">
+          <div className="flex items-center gap-1.5">
+            <Calendar className="w-3 h-3" />
+            <span>{formatDate(project.createdAt)}</span>
+          </div>
+          <span className={`font-medium ${getStatusColor(project.status)}`}>
+            {getStatusText(project.status)}
+          </span>
+        </div>
+        
+        {/* 進度條 (上傳/處理中才顯示) */}
+        {['uploading', 'transcribing', 'translating'].includes(project.status) && (
+          <div className="mt-2">
+            <div className="w-full bg-gray-700 rounded-full h-1.5">
+              <div
+                className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
+                style={{ width: `${project.progress}%` }}
+              />
+            </div>
+            <p className="text-xs text-gray-400 mt-1">{project.progress}%</p>
+          </div>
+        )}
+        
+        {/* 錯誤訊息 */}
+        {project.status === 'error' && project.errorMessage && (
+          <p className="text-xs text-red-400 mt-1">{project.errorMessage}</p>
+        )}
+        
+        {/* 操作按鈕 (只有 ready 狀態才顯示) */}
+        {project.status === 'ready' && !isSelectionMode && (
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onBulkEdit?.(project.id);
+              }}
+              className="flex-1 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 rounded transition-colors flex items-center justify-center gap-1"
+            >
+              <Edit className="w-3 h-3" />
+              批量編輯
+            </button>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onExport?.(project.id);
+              }}
+              className="flex-1 px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 rounded transition-colors flex items-center justify-center gap-1"
+            >
+              <Upload className="w-3 h-3" />
+              輸出影片
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Delete Confirmation Dialog */}
+      {isDeleteDialogOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDeleteDialogOpen(false);
+          }}
+        >
+          <div
+            className="bg-gray-800 border border-gray-700 rounded-lg p-6 max-w-md w-full mx-4"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <h3 className="text-lg font-bold mb-2">刪除專案</h3>
+            <p className="text-gray-400 mb-6">
+              確定要刪除「{project.name}」嗎?此操作無法復原。
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDeleteDialogOpen(false);
+                }}
+                className="px-4 py-2 border border-gray-600 rounded hover:bg-gray-700 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDelete?.(project.id);
+                  setIsDeleteDialogOpen(false);
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded transition-colors"
+              >
+                刪除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // 根據狀態決定是否顯示為可點擊卡片
+  if (isSelectionMode) {
+    return (
+      <div
+        onClick={handleCardClick}
+        className="block group cursor-pointer w-full text-left"
+      >
+        {cardContent}
+      </div>
+    );
+  } else if (project.status === 'idle') {
+    // idle 狀態 = 點擊上傳影片
+    return (
+      <div
+        onClick={handleCardClick}
+        className="block group cursor-pointer w-full text-left"
+      >
+        {cardContent}
+      </div>
+    );
+  } else if (project.status === 'ready') {
+    // ready 狀態 = 可以進入編輯器
+    return (
+      <Link href={`/editor-pro`} className="block group">
+        {cardContent}
+      </Link>
+    );
+  } else {
+    // 處理中或錯誤狀態 = 不可點擊
+    return <div className="block group">{cardContent}</div>;
+  }
+}
+
+// Create Button Component
+function CreateButton({ onClick }: { onClick?: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+    >
+      <Plus className="w-4 h-4" />
+      <span className="text-sm font-medium">新增專案</span>
+    </button>
+  );
+}
+
+// No Projects Component
+function NoProjects({ onCreateProject }: { onCreateProject: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center mb-4">
+        <Video className="h-8 w-8 text-gray-500" />
+      </div>
+      <h3 className="text-lg font-medium mb-2">尚無專案</h3>
+      <p className="text-gray-400 mb-6 max-w-md">
+        開始建立您的第一個影片專案。匯入媒體、編輯並匯出專業影片。
+      </p>
+      <button
+        onClick={onCreateProject}
+        className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+      >
+        <Plus className="h-4 w-4" />
+        建立您的第一個專案
+      </button>
+    </div>
+  );
+}
+
+// No Results Component
+function NoResults({
+  searchQuery,
+  onClearSearch,
+}: {
+  searchQuery: string;
+  onClearSearch: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center mb-4">
+        <Search className="h-8 w-8 text-gray-500" />
+      </div>
+      <h3 className="text-lg font-medium mb-2">找不到結果</h3>
+      <p className="text-gray-400 mb-6 max-w-md">
+        您搜尋的「{searchQuery}」沒有找到任何結果。
+      </p>
+      <button
+        onClick={onClearSearch}
+        className="px-4 py-2 border border-gray-600 rounded hover:bg-gray-700 transition-colors"
+      >
+        清除搜尋
+      </button>
+    </div>
+  );
 }
