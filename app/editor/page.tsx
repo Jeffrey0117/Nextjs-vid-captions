@@ -92,6 +92,48 @@ export default function ProjectsPage() {
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updates } : p));
   };
 
+  // 產生影片封面圖
+  const generateVideoThumbnail = async (videoFile: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      video.preload = 'metadata';
+      video.muted = true;
+      
+      video.onloadeddata = () => {
+        // 設定 canvas 尺寸
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        // 截取第 1 秒的影格
+        video.currentTime = 1;
+      };
+      
+      video.onseeked = () => {
+        // 繪製影格到 canvas
+        ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // 轉換為 Data URL
+        const thumbnail = canvas.toDataURL('image/jpeg', 0.8);
+        
+        // 清理資源
+        URL.revokeObjectURL(video.src);
+        
+        resolve(thumbnail);
+      };
+      
+      video.onerror = () => {
+        // 失敗時返回空字串
+        resolve('');
+      };
+      
+      // 載入影片
+      video.src = URL.createObjectURL(videoFile);
+    });
+  };
+
   const handleCreateProject = () => {
     const newId = Date.now().toString();
     const newProject: Project = {
@@ -126,6 +168,10 @@ export default function ProjectsPage() {
     
     // 模擬上傳進度
     updateProject(projectId, { status: 'uploading', progress: 100 });
+    
+    // 產生影片封面圖
+    const thumbnailUrl = await generateVideoThumbnail(file);
+    updateProject(projectId, { thumbnail: thumbnailUrl });
     
     // 自動執行字幕識別+翻譯
     await autoProcessVideo(projectId, file);
@@ -164,7 +210,7 @@ export default function ProjectsPage() {
       updateProject(projectId, { status: 'translating', progress: 50 });
       
       const translateRes = await fetch('/api/translate', {
-        method: 'POST',
+        method: 'PUT', // 修正:改用 PUT method (API route 定義)
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           texts: parsedSegments.map(s => s.text),
@@ -172,7 +218,10 @@ export default function ProjectsPage() {
         }),
       });
       
-      if (!translateRes.ok) throw new Error('翻譯失敗');
+      if (!translateRes.ok) {
+        const errorData = await translateRes.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || '翻譯失敗');
+      }
       
       const { translations } = await translateRes.json();
       
