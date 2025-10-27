@@ -74,6 +74,9 @@ interface SubtitleStore {
   get segments(): SubtitleSegment[];
   getActiveTrack: () => SubtitleTrack | null;
   getAllSegments: () => SubtitleSegment[];
+  
+  // 批量載入專案字幕 (用於從 localStorage 載入)
+  loadProjectSegments: (segments: SubtitleSegment[]) => void;
 }
 
 // 簡單的 ID 生成器
@@ -413,5 +416,65 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       .filter(t => t.visible && !t.muted)
       .flatMap(t => t.segments)
       .sort((a, b) => a.startTime - b.startTime);
+  },
+  
+  // 批量載入專案字幕
+  loadProjectSegments: (segments) => {
+    const state = get();
+    
+    // 決定目標軌道 (優先使用第一個軌道)
+    let targetTrackId = state.tracks[0]?.id;
+    
+    // 如果沒有軌道,自動創建第一個
+    if (!targetTrackId) {
+      const newTrack: SubtitleTrack = {
+        id: generateId(),
+        name: '字幕軌道 1',
+        segments: [],
+        muted: false,
+        visible: true,
+        locked: false,
+        color: '#5DBAA0',
+        height: 60,
+      };
+      set({ tracks: [newTrack], selectedTrackId: newTrack.id });
+      targetTrackId = newTrack.id;
+    }
+    
+    // 確保每個 segment 都有完整的 style 屬性 (如果沒有則使用預設值)
+    const normalizedSegments = segments.map(seg => ({
+      ...seg,
+      style: {
+        fontSize: 32,
+        fontFamily: 'Arial',
+        fontWeight: 'normal' as const,
+        fontStyle: 'normal' as const,
+        textDecoration: 'none' as const,
+        color: '#FFFFFF',
+        opacity: 1,
+        backgroundColor: 'transparent',
+        position: 'bottom' as const,
+        enableShadow: true,
+        shadowColor: '#000000',
+        shadowOffsetX: 4,
+        shadowOffsetY: 4,
+        shadowBlur: 8,
+        positionX: 50,
+        positionY: 90,
+        maxWidth: 80,
+        scale: 1.0,
+        ...seg.style, // 保留原有的樣式設定
+      },
+    }));
+    
+    // 清空現有字幕並載入新字幕到第一個軌道
+    set((state) => ({
+      tracks: state.tracks.map(t =>
+        t.id === targetTrackId
+          ? { ...t, segments: normalizedSegments.sort((a, b) => a.startTime - b.startTime) }
+          : t
+      ),
+      selectedTrackId: targetTrackId, // 確保選中該軌道
+    }));
   },
 }));

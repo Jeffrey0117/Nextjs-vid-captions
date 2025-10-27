@@ -7,6 +7,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import SubtitlePropertiesPanel from '../components/SubtitlePropertiesPanel';
 import BulkSubtitleEditor from '../components/BulkSubtitleEditor';
 import SubtitlePlayhead from '../components/SubtitlePlayhead';
+import { parseSrt } from '@/lib/parseSrt';
 
 export default function EditorProPage() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -73,7 +74,8 @@ export default function EditorProPage() {
     addTrack,
     deleteTrack,
     selectTrack,
-    getAllSegments
+    getAllSegments,
+    loadProjectSegments
   } = useSubtitleStore();
 
   // 取得當前播放的字幕 (從所有可見軌道中尋找)
@@ -90,6 +92,46 @@ export default function EditorProPage() {
     }
   }, [currentSubtitle, selectedSegmentId, selectSegment]);
 
+  // 載入 URL 參數中的專案資料
+  useEffect(() => {
+    const loadProjectFromUrl = async () => {
+      // 檢查 URL 參數
+      const params = new URLSearchParams(window.location.search);
+      const projectId = params.get('projectId');
+      
+      if (!projectId) return;
+      
+      // 從 localStorage 載入專案資料
+      const savedProjects = localStorage.getItem('subtitle-projects');
+      if (!savedProjects) return;
+      
+      const projects = JSON.parse(savedProjects);
+      const project = projects.find((p: any) => p.id === projectId);
+      
+      if (!project) {
+        console.error('專案不存在:', projectId);
+        return;
+      }
+      
+      // 載入影片
+      if (project.videoUrl) {
+        setVideoUrl(project.videoUrl);
+      }
+      
+      // 載入字幕 (如果有 SRT 內容)
+      if (project.srtContent) {
+        console.log('🔍 載入專案字幕:', project.name);
+        importFromSrt(project.srtContent);
+      } else if (project.segments && project.segments.length > 0) {
+        // 如果有 segments 資料,直接載入
+        console.log('🔍 載入專案 segments:', project.segments.length);
+        loadProjectSegments(project.segments);
+      }
+    };
+    
+    loadProjectFromUrl();
+  }, []); // 只在組件掛載時執行一次
+  
   // 清理 URL
   useEffect(() => {
     return () => {

@@ -1,153 +1,198 @@
-# /editor 快速編輯頁面實現計劃
+# 專案卡片點擊跳轉到 editor-pro 並載入影片功能規劃
 
-## 需求概述
-- **路徑**: http://localhost:3005/editor
-- **核心功能**: 不轉頁面的快速字幕編輯工作流程
-- **工作流程**: 點擊專案 → 上傳影片 → 自動字幕識別 → 自動中文翻譯 → 批量編輯 → 輸出影片
+## 需求分析
 
-## 已完成功能 ✅
+用戶在 `/editor` 頁面上傳影片並完成字幕識別/翻譯後,點擊專案卡片應該:
+1. 跳轉到 `/editor-pro` 頁面
+2. 自動載入該專案的影片
+3. 自動載入該專案的字幕資料
 
-### 1. 專案管理系統
-- ✅ 專案列表顯示 (grid 佈局)
-- ✅ 專案卡片 (縮圖、名稱、日期、狀態)
-- ✅ localStorage 持久化
-- ✅ 搜尋功能
-- ✅ 批量選取和刪除
+## 現有架構分析
 
-### 2. 狀態追蹤系統
+### 1. `/editor` 頁面 (app/editor/page.tsx)
+- 使用 localStorage 儲存專案列表 (`subtitle-projects`)
+- 專案資料結構:
+  ```typescript
+  {
+    id: string;
+    name: string;
+    videoUrl: string;
+    thumbnail: string;
+    status: 'idle' | 'uploading' | 'transcribing' | 'translating' | 'ready' | 'error';
+    progress: number;
+    srtContent?: string;
+    createdAt: number;
+  }
+  ```
+- 目前專案卡片只有刪除和批量編輯功能,沒有點擊跳轉
+
+### 2. `/editor-pro` 頁面 (app/editor-pro/page.tsx)
+- 使用 `useSubtitleStore()` 管理字幕狀態
+- 影片載入方式:用戶手動上傳或從 MediaPanel 選擇
+- 沒有從 URL 參數載入專案的功能
+
+### 3. subtitle-store (app/stores/subtitle-store.ts)
+- 管理字幕軌道、影片 URL、選中狀態等
+- 提供 `loadVideo()` 方法載入影片
+- 提供 `addSegments()` 方法批量添加字幕
+
+## 實現方案
+
+### 步驟 1: 修改專案卡片添加點擊事件
+**檔案**: app/editor/page.tsx
+
+在專案卡片的 `onClick` 事件中:
 ```typescript
-status: 'idle' | 'uploading' | 'transcribing' | 'translating' | 'ready' | 'error'
-progress: 0-100
+const handleProjectClick = (project: Project) => {
+  if (project.status !== 'ready') return; // 只有 ready 狀態才能編輯
+  
+  // 儲存當前專案 ID 到 localStorage
+  localStorage.setItem('current-editing-project', project.id);
+  
+  // 跳轉到 editor-pro
+  router.push(`/editor-pro?projectId=${project.id}`);
+};
 ```
-- ✅ 進度條顯示
-- ✅ 狀態文字和顏色
-- ✅ 錯誤訊息顯示
 
-### 3. 自動處理流程
-- ✅ 點擊專案 → 觸發檔案選擇器
-- ✅ 上傳影片並生成預覽 URL
-- ✅ 自動執行 Whisper 字幕識別
-- ✅ 自動執行 Google Translate 翻譯
-- ✅ 合併字幕資料並儲存
+### 步驟 2: 修改 editor-pro 頁面支援 URL 參數載入
+**檔案**: app/editor-pro/page.tsx
 
-### 4. 批量編輯器整合
-- ✅ 全螢幕 Modal
-- ✅ 載入字幕到 Zustand store
-- ✅ 完成後儲存回專案
-
-### 5. 影片輸出功能
-- ✅ 整合 FFmpeg 字幕燒錄
-- ✅ 自動下載輸出影片
-
-## 當前錯誤修正 🔧
-
-### 問題 1: API 參數名不一致
-**錯誤**: 前端傳 `video`,後端接收 `file`
-
-**修正**: 統一使用 `file` 參數名
-
-### 問題 2: API 回應欄位不一致
-**錯誤**: 後端返回 `srtContent`,前端期望 `srt`
-
-**修正**: 統一使用 `srt` 欄位名
-
-## 修正檔案
-
-### app/editor/page.tsx:144-156
-將 `formData.append('video', videoFile)` 改為 `formData.append('file', videoFile)`
-將 `const { srt }` 改為 `const { srtContent }`
-
-### app/api/transcribe/route.ts:54-57
-將 `srtContent` 改為 `srt` 以符合前端期望
-
-## 技術架構
-
-### 前端狀態管理
+添加 URL 參數檢測和自動載入邏輯:
 ```typescript
-// 專案資料結構
-interface Project {
-  id: string;
-  name: string;
-  createdAt: Date;
-  thumbnail?: string | null;
-  videoFile?: File | null;
-  videoUrl?: string | null;
-  status: 'idle' | 'uploading' | 'transcribing' | 'translating' | 'ready' | 'error';
-  progress: number;
-  errorMessage?: string;
-  segments?: SubtitleSegment[];
+useEffect(() => {
+  const searchParams = new URLSearchParams(window.location.search);
+  const projectId = searchParams.get('projectId');
+  
+  if (projectId) {
+    loadProjectFromLocalStorage(projectId);
+  }
+}, []);
+
+const loadProjectFromLocalStorage = (projectId: string) => {
+  const projectsData = localStorage.getItem('subtitle-projects');
+  if (!projectsData) return;
+  
+  const projects = JSON.parse(projectsData);
+  const project = projects.find((p: any) => p.id === projectId);
+  
+  if (!project || project.status !== 'ready') return;
+  
+  // 1. 載入影片
+  loadVideo(project.videoUrl);
+  
+  // 2. 解析 SRT 字幕
+  if (project.srtContent) {
+    const parsedSegments = parseSrt(project.srtContent);
+    
+    // 3. 清空現有字幕並添加新字幕
+    // 使用 subtitle-store 的方法
+    const store = useSubtitleStore.getState();
+    store.tracks[0].segments = []; // 清空
+    parsedSegments.forEach(seg => {
+      store.addSegment(seg.start, seg.end, seg.text);
+    });
+  }
+};
+```
+
+### 步驟 3: 優化 subtitle-store 添加批量載入方法
+**檔案**: app/stores/subtitle-store.ts
+
+添加新方法:
+```typescript
+loadProjectSegments: (segments: Array<{start: number; end: number; text: string}>) => {
+  set((state) => {
+    // 清空第一軌道的所有字幕
+    if (state.tracks[0]) {
+      state.tracks[0].segments = [];
+    }
+    
+    // 批量添加字幕
+    segments.forEach(seg => {
+      const id = Math.random().toString(36).substring(7);
+      state.tracks[0].segments.push({
+        id,
+        start: seg.start,
+        end: seg.end,
+        text: seg.text,
+        // 使用全域樣式
+        fontSize: state.fontSize,
+        fontFamily: state.fontFamily,
+        color: state.color,
+        backgroundColor: state.backgroundColor,
+        // ... 其他樣式屬性
+      });
+    });
+  });
 }
-
-// Zustand Store
-- tracks: 字幕軌道陣列
-- setSegments: 設定字幕資料
-- reset: 重置 store
 ```
 
-### API 端點
-1. **POST /api/transcribe**
-   - 輸入: FormData { file: File, language: 'zh' }
-   - 輸出: { srt: string, videoUrl: string, status: 'completed' }
-   - 功能: Whisper AI 字幕識別
+## 修改檔案清單
 
-2. **POST /api/translate**
-   - 輸入: { texts: string[], targetLang: 'zh-TW' }
-   - 輸出: { translations: string[] }
-   - 功能: Google Translate 批量翻譯
+### 1. app/editor/page.tsx
+- [ ] 添加 `useRouter()` hook
+- [ ] 修改專案卡片 onClick 事件
+- [ ] 添加 `handleProjectClick()` 函數
+- [ ] 只有 status='ready' 的專案才能點擊
 
-3. **POST /api/burn-subtitles**
-   - 輸入: FormData { video: File, segments: JSON }
-   - 輸出: Blob (影片檔案)
-   - 功能: FFmpeg 字幕燒錄
+### 2. app/editor-pro/page.tsx
+- [ ] 添加 `useEffect` 檢測 URL 參數
+- [ ] 添加 `loadProjectFromLocalStorage()` 函數
+- [ ] 呼叫 `parseSrt()` 解析字幕
+- [ ] 呼叫 store 的 `loadProjectSegments()` 方法
+- [ ] 呼叫 store 的 `loadVideo()` 方法
 
-### 資料流程
+### 3. app/stores/subtitle-store.ts
+- [ ] 添加 `loadProjectSegments()` 方法
+- [ ] 確保清空舊字幕再載入新字幕
+- [ ] 保持字幕樣式一致性
+
+## 技術細節
+
+### URL 參數格式
 ```
-使用者點擊專案卡片
-  ↓
-觸發檔案選擇器
-  ↓
-選擇影片檔案
-  ↓
-更新專案狀態 (uploading)
-  ↓
-呼叫 autoProcessVideo()
-  ├─ Step 1: /api/transcribe (Whisper 識別)
-  │   └─ 更新狀態 (transcribing, progress: 0-50)
-  ├─ Step 2: /api/translate (Google 翻譯)
-  │   └─ 更新狀態 (translating, progress: 50-100)
-  └─ Step 3: 合併資料並儲存
-      └─ 更新狀態 (ready, progress: 100)
+/editor-pro?projectId=abc123
 ```
 
-## UI/UX 設計
+### localStorage 資料流
+```
+/editor 頁面
+  ↓ 儲存專案到 localStorage (subtitle-projects)
+  ↓ 點擊專案卡片
+  ↓ 跳轉到 /editor-pro?projectId=abc123
+  ↓ editor-pro 讀取 localStorage
+  ↓ 載入影片和字幕到 subtitle-store
+  ↓ 使用者開始編輯
+```
 
-### 專案卡片狀態
-- **idle**: 顯示「待上傳」,點擊可上傳影片
-- **uploading/transcribing/translating**: 顯示進度條
-- **ready**: 顯示「批量編輯」和「輸出影片」按鈕
-- **error**: 顯示錯誤訊息,紅色文字
+### parseSrt() 函數使用
+```typescript
+import { parseSrt } from '@/lib/parseSrt';
 
-### 批量編輯器
-- 全螢幕 Modal (z-50)
-- 頂部工具列:標題 + 完成按鈕
-- 內容區:使用 BulkSubtitleEditor 元件
-- 完成後自動儲存到專案
+const segments = parseSrt(project.srtContent);
+// 返回: Array<{ start: number; end: number; text: string }>
+```
 
-## 已整合的元件
-- ✅ BulkSubtitleEditor (批量編輯器)
-- ✅ VideoPlayer (影片播放器)
-- ✅ SubtitleBox (字幕預覽框)
-- ✅ parseSrt (SRT 格式解析)
-- ✅ generateAss (ASS 格式生成)
+## 使用者體驗流程
 
-## 後續優化建議
-1. 添加上傳進度追蹤 (XMLHttpRequest)
-2. 添加字幕預覽功能 (在卡片上)
-3. 支援批量處理多個專案
-4. 添加專案重命名功能
-5. 添加專案複製功能
-6. 支援專案匯出/匯入 (JSON)
-7. 添加快捷鍵支援
+1. 使用者在 `/editor` 上傳影片
+2. 系統自動字幕識別 → 翻譯中文
+3. 專案卡片顯示「已完成」狀態
+4. **使用者點擊專案卡片**
+5. **跳轉到 `/editor-pro` 並自動載入影片和字幕**
+6. 使用者在專業編輯器中調整字幕
+7. 輸出最終影片
 
-## 總結
-整個快速編輯頁面已經完成 95%,只需修正 API 參數名和回應欄位即可正常運作。所有核心功能都已實現,包括專案管理、自動處理流程、批量編輯和影片輸出。
+## 錯誤處理
+
+- [ ] 專案不存在時顯示錯誤訊息
+- [ ] 專案 status 不是 'ready' 時不允許點擊
+- [ ] 影片 URL 失效時顯示錯誤
+- [ ] SRT 解析失敗時顯示錯誤
+
+## 後續優化
+
+- [ ] 添加載入動畫 (Loading spinner)
+- [ ] 添加麵包屑導航 (返回專案列表)
+- [ ] 支援保存編輯後的字幕回 localStorage
+- [ ] 支援多專案切換

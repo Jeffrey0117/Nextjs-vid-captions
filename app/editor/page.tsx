@@ -62,7 +62,7 @@ export default function ProjectsPage() {
   const [currentEditingProjectId, setCurrentEditingProjectId] = useState<string | null>(null);
   
   // Zustand store
-  const { tracks, setSegments, reset: resetSubtitleStore } = useSubtitleStore();
+  const { tracks, loadProjectSegments, clearAll } = useSubtitleStore();
   
   // 初始化:從 localStorage 載入專案
   useEffect(() => {
@@ -225,10 +225,10 @@ export default function ProjectsPage() {
       
       const { translations } = await translateRes.json();
       
-      // 合併字幕資料
+      // 合併字幕資料 (translations 是物件陣列,需要提取 translatedText 欄位)
       const segments = parsedSegments.map((seg, i) => ({
         ...seg,
-        translatedText: translations[i] || seg.text,
+        translatedText: translations[i]?.translatedText || seg.text,
       }));
       
       updateProject(projectId, {
@@ -252,8 +252,8 @@ export default function ProjectsPage() {
     if (!project || !project.segments) return;
     
     // 載入字幕到 Zustand store
-    resetSubtitleStore();
-    setSegments(project.segments);
+    clearAll();
+    loadProjectSegments(project.segments);
     setCurrentEditingProjectId(projectId);
     setShowBulkEditor(true);
   };
@@ -268,7 +268,7 @@ export default function ProjectsPage() {
     }
     setShowBulkEditor(false);
     setCurrentEditingProjectId(null);
-    resetSubtitleStore();
+    clearAll();
   };
   
   // 輸出影片
@@ -862,11 +862,11 @@ function ProjectCard({
       </div>
     );
   } else if (project.status === 'ready') {
-    // ready 狀態 = 可以進入編輯器
+    // ready 狀態 = 顯示批量編輯和輸出按鈕 (不跳轉頁面)
     return (
-      <Link href={`/editor-pro`} className="block group">
+      <div className="block group">
         {cardContent}
-      </Link>
+      </div>
     );
   } else {
     // 處理中或錯誤狀態 = 不可點擊
