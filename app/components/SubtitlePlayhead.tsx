@@ -133,40 +133,60 @@ export default function SubtitlePlayhead({
   const totalHeight = timelineHeight - 4; // 留 4px 呼吸空間
 
   return (
-    <div
-      ref={playheadRef}
-      className="absolute pointer-events-auto z-40"
-      style={{
-        left: `${playheadX}px`,
-        top: 0,
-        height: `${totalHeight}px`, // 播放頭從頂部延伸到底部
-        width: '2px', // 稍微加寬點擊區域,提升可點擊性
-      }}
-      onMouseDown={handleMouseDown}
-    >
-      {/* 垂直紅線 - 從頂部延伸到底部 (改用醒目的紅色) */}
+    <>
+      {/* 寬點擊區域 - 透明背景,左右各延伸 8px,確保好點擊 */}
       <div
-        className={`absolute left-0 w-0.5 h-full cursor-col-resize transition-colors ${
-          isDragging ? 'bg-red-600' : 'bg-red-500'
-        }`}
+        ref={playheadRef}
+        className="absolute cursor-col-resize z-40"
+        style={{
+          left: `${playheadX - 8}px`, // 左邊延伸 8px
+          top: 0,
+          height: `${totalHeight}px`,
+          width: '16px', // 總寬度 16px (左右各 8px)
+        }}
+        onMouseDown={handleMouseDown}
       />
       
-      {/* 頂部圓點 (改用醒目的紅色) */}
+      {/* 垂直紅線 - 純視覺效果,不接收點擊 (pointer-events-none) */}
       <div
-        className={`absolute top-1 left-1/2 transform -translate-x-1/2 w-3 h-3 rounded-full border-2 transition-colors ${
+        className={`absolute w-0.5 pointer-events-none z-40 transition-colors ${
+          isDragging ? 'bg-red-600' : 'bg-red-500'
+        }`}
+        style={{
+          left: `${playheadX}px`,
+          top: 0,
+          height: `${totalHeight}px`,
+        }}
+      />
+      
+      {/* 頂部圓點 - 獨立可點擊 */}
+      <div
+        className={`absolute w-3 h-3 rounded-full border-2 transition-colors cursor-col-resize z-40 ${
           isDragging
             ? 'bg-red-600 border-red-400'
             : 'bg-red-500 border-red-300'
         }`}
+        style={{
+          left: `${playheadX - 6}px`, // 6px = 3px (圓點半徑) + 3px (微調)
+          top: '4px',
+        }}
+        onMouseDown={handleMouseDown}
       />
       
       {/* 拖曳時顯示當前時間 */}
       {isDragging && (
-        <div className="absolute top-5 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded whitespace-nowrap pointer-events-none">
+        <div
+          className="absolute bg-black/80 text-white text-xs px-2 py-1 rounded whitespace-nowrap pointer-events-none z-50"
+          style={{
+            left: `${playheadX}px`,
+            top: '20px',
+            transform: 'translateX(-50%)',
+          }}
+        >
           {formatTime(currentTime)}
         </div>
       )}
-    </div>
+    </>
   );
 }
 

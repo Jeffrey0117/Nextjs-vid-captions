@@ -79,84 +79,84 @@ export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEdit
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 rounded-lg border border-gray-700 w-full max-w-3xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3">
+      <div className="bg-gray-900 rounded-lg border border-gray-700 w-full max-w-2xl max-h-[85vh] flex flex-col">
         {/* 標題列 */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-700">
-          <h2 className="text-xl font-bold">批量編輯字幕</h2>
-          <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between p-3 border-b border-gray-700">
+          <h2 className="text-base font-bold">批量編輯字幕</h2>
+          <div className="flex items-center gap-3">
             {/* 取代功能按鈕 */}
             <button
               onClick={() => setShowReplace(!showReplace)}
-              className={`p-2 hover:bg-gray-800 rounded transition ${showReplace ? 'bg-blue-600' : ''}`}
+              className={`p-1.5 hover:bg-gray-800 rounded transition ${showReplace ? 'bg-blue-600' : ''}`}
               title="尋找與取代"
             >
-              <Replace size={20} />
+              <Replace size={16} />
             </button>
             {/* 字體大小控制 */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-400">字體大小:</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-400">字體:</span>
               <input
                 type="range"
                 min="10"
                 max="32"
                 value={fontSize}
                 onChange={(e) => setFontSize(Number(e.target.value))}
-                className="w-24"
+                className="w-20"
               />
-              <span className="text-sm text-gray-400 w-10">{fontSize}px</span>
+              <span className="text-xs text-gray-400 w-8">{fontSize}px</span>
             </div>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-800 rounded transition"
+              className="p-1.5 hover:bg-gray-800 rounded transition"
             >
-              <X size={20} />
+              <X size={16} />
             </button>
           </div>
         </div>
 
         {/* 取代功能區 */}
         {showReplace && (
-          <div className="p-4 border-b border-gray-700 bg-gray-800/50 space-y-3">
-            <div className="flex gap-2">
+          <div className="p-3 border-b border-gray-700 bg-gray-800/50 space-y-2">
+            <div className="flex gap-1.5">
               <input
                 type="text"
                 value={findText}
                 onChange={(e) => setFindText(e.target.value)}
                 placeholder="尋找文字..."
-                className="flex-1 px-3 py-2 bg-gray-900 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
+                className="flex-1 px-2 py-1.5 text-xs bg-gray-900 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
               />
               <input
                 type="text"
                 value={replaceText}
                 onChange={(e) => setReplaceText(e.target.value)}
                 placeholder="取代為..."
-                className="flex-1 px-3 py-2 bg-gray-900 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
+                className="flex-1 px-2 py-1.5 text-xs bg-gray-900 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
               />
               <button
                 onClick={handleReplaceAll}
                 disabled={!findText}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed rounded transition"
+                className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed rounded transition"
               >
                 全部取代
               </button>
             </div>
-            <p className="text-xs text-gray-400">
+            <p className="text-[0.65rem] text-gray-400">
               輸入要尋找的文字和取代內容,點擊「全部取代」可一次取代所有字幕中的文字
             </p>
           </div>
         )}
 
         {/* 字幕列表 */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-1.5">
+        <div className="flex-1 overflow-y-auto p-3 space-y-1">
           {segments.map((segment, index) => (
             <div
               key={segment.id}
-              className="flex items-center gap-3 p-2 bg-gray-800 rounded border border-gray-700 hover:border-gray-600 transition"
+              className="flex items-center gap-2 p-1.5 bg-gray-800 rounded border border-gray-700 hover:border-gray-600 transition"
             >
               {/* 序號 */}
-              <div className="flex-shrink-0 w-10 text-center">
-                <span className="text-xs font-bold text-gray-400">#{index + 1}</span>
+              <div className="flex-shrink-0 w-8 text-center">
+                <span className="text-[0.65rem] font-bold text-gray-400">#{index + 1}</span>
               </div>
 
               {/* 文字編輯區 */}
@@ -168,7 +168,7 @@ export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEdit
                   [segment.id]: e.target.value
                 })}
                 style={{ fontSize: `${fontSize}px` }}
-                className="flex-1 px-3 py-1.5 bg-gray-900 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
+                className="flex-1 px-2 py-1 bg-gray-900 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
                 placeholder="字幕內容"
               />
 
@@ -176,7 +176,7 @@ export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEdit
               {showReplace && findText && (
                 <button
                   onClick={() => handleReplaceCurrent(segment.id)}
-                  className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded transition text-xs"
+                  className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition text-[0.65rem]"
                   title="取代此條字幕"
                 >
                   取代
@@ -187,20 +187,20 @@ export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEdit
         </div>
 
         {/* 底部按鈕 */}
-        <div className="flex items-center justify-between p-4 border-t border-gray-700">
-          <p className="text-sm text-gray-400">
+        <div className="flex items-center justify-between p-3 border-t border-gray-700">
+          <p className="text-xs text-gray-400">
             共 {segments.length} 條字幕
           </p>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             <button
               onClick={onClose}
-              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition"
+              className="px-3 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 rounded-lg transition"
             >
               取消
             </button>
             <button
               onClick={handleSave}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition"
+              className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 rounded-lg transition"
             >
               儲存變更
             </button>

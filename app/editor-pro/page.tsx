@@ -25,6 +25,7 @@ export default function EditorProPage() {
   const [dragStartY, setDragStartY] = useState(0);
   const [dragStartPositionX, setDragStartPositionX] = useState(50);
   const [dragStartPositionY, setDragStartPositionY] = useState(0);
+  const [draggingSubtitleId, setDraggingSubtitleId] = useState<string | null>(null);
   const [applyToAll, setApplyToAll] = useState(false);
   const [timelineDragState, setTimelineDragState] = useState<{
     isDragging: boolean;
@@ -282,11 +283,12 @@ export default function EditorProPage() {
   };
 
   const handleTranslateAll = async () => {
-    if (segments.length === 0) return;
+    const currentSegments = tracks[0]?.segments || [];
+    if (currentSegments.length === 0) return;
 
     setIsTranslating(true);
     try {
-      const texts = segments.map(seg => seg.text);
+      const texts = currentSegments.map(seg => seg.text);
 
       const response = await fetch('/api/translate', {
         method: 'PUT',
@@ -301,18 +303,28 @@ export default function EditorProPage() {
       const data = await response.json();
 
       if (data.success) {
+        console.log('🔍 翻譯結果:', data.translations);
         data.translations.forEach((translation: any, index: number) => {
           if (translation.success) {
-            updateSegment(segments[index].id, {
+            updateSegment(currentSegments[index].id, {
               translatedText: translation.translatedText,
             });
           }
         });
+        
+        // Debug: 檢查更新後的 store 狀態
+        setTimeout(() => {
+          const state = useSubtitleStore.getState();
+          console.log('🔍 翻譯後 Store 狀態:', state.tracks[0]?.segments);
+        }, 100);
+        
         alert('翻譯完成!');
+      } else {
+        throw new Error(data.error || '翻譯失敗');
       }
     } catch (error) {
       console.error('翻譯失敗:', error);
-      alert('翻譯失敗,請稍後再試');
+      alert(`翻譯失敗: ${error instanceof Error ? error.message : '未知錯誤'}`);
     } finally {
       setIsTranslating(false);
     }
@@ -332,7 +344,9 @@ export default function EditorProPage() {
   };
 
   const handleExportVideo = async () => {
-    if (!videoFile || segments.length === 0) {
+    // 從 tracks 獲取實際的 segments (reactive state)
+    const actualSegments = tracks[0]?.segments || [];
+    if (!videoFile || actualSegments.length === 0) {
       alert('請先上傳影片並添加字幕');
       return;
     }
@@ -343,7 +357,7 @@ export default function EditorProPage() {
     try {
       const formData = new FormData();
       formData.append('video', videoFile);
-      formData.append('subtitles', JSON.stringify(segments));
+      formData.append('subtitles', JSON.stringify(actualSegments));
 
       // 模擬進度
       const progressInterval = setInterval(() => {
@@ -445,56 +459,154 @@ export default function EditorProPage() {
     setDragStartY(e.clientY);
     setDragStartPositionX(currentSubtitle.style.positionX);
     setDragStartPositionY(currentSubtitle.style.positionY);
+    setDraggingSubtitleId(currentSubtitle.id); // 記錄拖曳的字幕 ID
   };
 
-  const handleSubtitleDrag = (e: React.MouseEvent) => {
-    if (!isDragging || !currentSubtitle) return;
-    
-    const previewContainer = e.currentTarget.parentElement?.parentElement;
-    if (!previewContainer) return;
-    
-    const rect = previewContainer.getBoundingClientRect();
-    const deltaX = e.clientX - dragStartX;
-    const deltaY = e.clientY - dragStartY;
-    const percentChangeX = (deltaX / rect.width) * 100;
-    const percentChangeY = (deltaY / rect.height) * 100;
-    
-    // 允許超出範圍 (-50 到 150),讓字幕可以移動到影片外
-    const newPositionX = Math.max(-50, Math.min(150, dragStartPositionX + percentChangeX));
-    const newPositionY = Math.max(-50, Math.min(150, dragStartPositionY + percentChangeY));
-    
-    if (applyToAll) {
-      // 套用到所有字幕
-      segments.forEach(seg => {
-        updateSegment(seg.id, {
-          style: {
-            ...seg.style,
-            positionX: Math.round(newPositionX),
-            positionY: Math.round(newPositionY)
-          },
-        });
-      });
-    } else {
-      // 只更新當前字幕
-      updateSegment(currentSubtitle.id, {
-        style: {
-          ...currentSubtitle.style,
-          positionX: Math.round(newPositionX),
-          positionY: Math.round(newPositionY)
-        },
-      });
-    }
-  };
 
   const handleSubtitleDragEnd = () => {
     setIsDragging(false);
+    setDraggingSubtitleId(null);
   };
+
+  // Document-level 字幕拖曳監聽 (確保滑鼠移出字幕時仍可拖曳)
+  useEffect(() => {
+    if (!isDragging || !draggingSubtitleId) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const previewContainer = document.querySelector('video')?.parentElement;
+      if (!previewContainer) return;
+      
+      const rect = previewContainer.getBoundingClientRect();
+      const deltaX = e.clientX - dragStartX;
+      const deltaY = e.clientY - dragStartY;
+      const percentChangeX = (deltaX / rect.width) * 100;
+      const percentChangeY = (deltaY / rect.height) * 100;
+      
+      // 允許超出範圍 (-50 到 150),讓字幕可以移動到影片外
+      const newPositionX = Math.max(-50, Math.min(150, dragStartPositionX + percentChangeX));
+      const newPositionY = Math.max(-50, Math.min(150, dragStartPositionY + percentChangeY));
+      
+      if (applyToAll) {
+        // 套用到所有字幕
+        const allSegments = tracks[0]?.segments || [];
+        allSegments.forEach(seg => {
+          updateSegment(seg.id, {
+            style: {
+              ...seg.style,
+              positionX: Math.round(newPositionX),
+              positionY: Math.round(newPositionY)
+            },
+          });
+        });
+      } else {
+        // 只更新拖曳開始時的那個字幕 (使用固定的 draggingSubtitleId)
+        const draggingSegment = tracks[0]?.segments.find(s => s.id === draggingSubtitleId);
+        if (draggingSegment) {
+          updateSegment(draggingSubtitleId, {
+            style: {
+              ...draggingSegment.style,
+              positionX: Math.round(newPositionX),
+              positionY: Math.round(newPositionY)
+            },
+          });
+        }
+      }
+    };
+
+    const handleMouseUp = () => {
+      handleSubtitleDragEnd();
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, draggingSubtitleId, dragStartX, dragStartY, dragStartPositionX, dragStartPositionY, applyToAll, tracks, updateSegment]);
+
+  // Document-level 字幕縮放拖曳監聽
+  useEffect(() => {
+    if (!resizeDragType || !draggingSubtitleId) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaX = e.clientX - resizeDragStart.x;
+      const deltaY = e.clientY - resizeDragStart.y;
+      
+      // 左右拖曳調整最大寬度 (允許文字框拉寬)
+      if (resizeDragType === 'left' || resizeDragType === 'right') {
+        const previewContainer = document.querySelector('video')?.parentElement;
+        if (!previewContainer) return;
+        
+        const rect = previewContainer.getBoundingClientRect();
+        // 根據拖曳方向調整寬度變化計算
+        const direction = resizeDragType === 'right' ? 1 : -1;
+        const widthChange = (deltaX * direction / rect.width) * 100;
+        // 允許調整範圍 10-100 vw
+        const newMaxWidth = Math.max(10, Math.min(100, resizeDragStart.maxWidth + widthChange));
+        
+        if (applyToAll) {
+          const allSegments = tracks[0]?.segments || [];
+          allSegments.forEach(seg => {
+            updateSegment(seg.id, {
+              style: { ...seg.style, maxWidth: Math.round(newMaxWidth) },
+            });
+          });
+        } else {
+          const draggingSegment = tracks[0]?.segments.find(s => s.id === draggingSubtitleId);
+          if (draggingSegment) {
+            updateSegment(draggingSubtitleId, {
+              style: { ...draggingSegment.style, maxWidth: Math.round(newMaxWidth) },
+            });
+          }
+        }
+      } else {
+        // 四角拖曳調整縮放
+        const delta = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        const direction = (deltaX + deltaY) > 0 ? 1 : -1;
+        const scaleChange = (direction * delta) / 200;
+        
+        const newScale = Math.max(0.5, Math.min(3.0, resizeDragStart.scale + scaleChange));
+
+        if (applyToAll) {
+          const allSegments = tracks[0]?.segments || [];
+          allSegments.forEach(seg => {
+            updateSegment(seg.id, {
+              style: { ...seg.style, scale: newScale },
+            });
+          });
+        } else {
+          const draggingSegment = tracks[0]?.segments.find(s => s.id === draggingSubtitleId);
+          if (draggingSegment) {
+            updateSegment(draggingSubtitleId, {
+              style: { ...draggingSegment.style, scale: newScale },
+            });
+          }
+        }
+      }
+    };
+
+    const handleMouseUp = () => {
+      setResizeDragType(null);
+      setDraggingSubtitleId(null);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizeDragType, draggingSubtitleId, resizeDragStart, applyToAll, tracks, updateSegment]);
 
   // 字幕縮放拖曳處理
   const handleResizeDragStart = (e: React.MouseEvent, corner: 'tl' | 'tr' | 'bl' | 'br' | 'left' | 'right') => {
     if (!currentSubtitle) return;
     e.stopPropagation();
     setResizeDragType(corner);
+    setDraggingSubtitleId(currentSubtitle.id); // 記錄拖曳的字幕 ID
     setResizeDragStart({
       x: e.clientX,
       y: e.clientY,
@@ -750,7 +862,7 @@ export default function EditorProPage() {
 
         <button
           onClick={handleExportVideo}
-          disabled={!videoFile || tracks.length === 0 || tracks.every(t => t.segments.length === 0) || isExporting}
+          disabled={!videoFile || (tracks.length > 0 && tracks[0]?.segments.length === 0) || isExporting}
           className="flex items-center gap-1 px-2 py-1 bg-emerald-600 hover:bg-emerald-700 rounded transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Film size={12} />
@@ -925,24 +1037,11 @@ export default function EditorProPage() {
                         className="absolute inset-0 flex items-center justify-center select-none pointer-events-none"
                       >
                         <div
-                          className="absolute"
+                          className="absolute pointer-events-auto"
                           style={{
                             top: `${currentSubtitle.style.positionY}%`,
                             left: `${currentSubtitle.style.positionX}%`,
                             transform: 'translate(-50%, -50%)',
-                            pointerEvents: 'none',
-                          }}
-                          onMouseMove={(e) => {
-                            handleSubtitleDrag(e);
-                            handleResizeDrag(e);
-                          }}
-                          onMouseUp={() => {
-                            handleSubtitleDragEnd();
-                            handleResizeDragEnd();
-                          }}
-                          onMouseLeave={() => {
-                            handleSubtitleDragEnd();
-                            handleResizeDragEnd();
                           }}
                         >
                           {/* 可拖曳縮放的容器 */}
