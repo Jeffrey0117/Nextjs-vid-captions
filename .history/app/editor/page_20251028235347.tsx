@@ -392,7 +392,7 @@ export default function ProjectsPage() {
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
-              <BulkSubtitleEditor isOpen={showBulkEditor} onClose={closeBulkEditor} />
+              <BulkSubtitleEditor />
             </div>
           </div>
         </div>

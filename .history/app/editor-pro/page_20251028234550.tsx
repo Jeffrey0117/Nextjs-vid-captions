@@ -1021,17 +1021,6 @@ export default function EditorProPage() {
         <h1 className="text-sm font-bold mr-2">OpenCut 字幕編輯器</h1>
         
         <button
-          onClick={() => window.location.href = '/editor'}
-          className="flex items-center gap-1 px-2 py-1 bg-gray-600 hover:bg-gray-700 rounded transition text-xs"
-          title="回到專案頁面"
-        >
-          <ArrowLeftToLine size={12} />
-          回到專案
-        </button>
-
-        <div className="h-5 w-px bg-gray-700 mx-1" />
-        
-        <button
           onClick={() => fileInputRef.current?.click()}
           className="flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded transition text-xs"
         >
@@ -1101,7 +1090,7 @@ export default function EditorProPage() {
 
         <button
           onClick={handleExportVideo}
-          disabled={(!videoFile && !videoUrl) || (tracks.length > 0 && tracks[0]?.segments.length === 0) || isExporting}
+          disabled={!videoFile || (tracks.length > 0 && tracks[0]?.segments.length === 0) || isExporting}
           className="flex items-center gap-1 px-2 py-1 bg-emerald-600 hover:bg-emerald-700 rounded transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Film size={12} />

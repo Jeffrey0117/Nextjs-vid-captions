@@ -560,7 +560,7 @@ export default function EditorProPage() {
   const handleExportVideo = async () => {
     // 從 tracks 獲取實際的 segments (reactive state)
     const actualSegments = tracks[0]?.segments || [];
-    if ((!videoFile && !videoUrl) || actualSegments.length === 0) {
+    if (!videoFile || actualSegments.length === 0) {
       alert('請先上傳影片並添加字幕');
       return;
     }
@@ -570,21 +570,7 @@ export default function EditorProPage() {
 
     try {
       const formData = new FormData();
-      
-      // 如果有 videoFile，使用它；否則從 videoUrl 獲取文件
-      if (videoFile) {
-        formData.append('video', videoFile);
-      } else if (videoUrl) {
-        // 從 videoUrl 獲取影片數據
-        const response = await fetch(videoUrl);
-        if (!response.ok) {
-          throw new Error('無法獲取影片文件');
-        }
-        const blob = await response.blob();
-        const file = new File([blob], 'video.mp4', { type: blob.type || 'video/mp4' });
-        formData.append('video', file);
-      }
-      
+      formData.append('video', videoFile);
       formData.append('subtitles', JSON.stringify(actualSegments));
 
       // 模擬進度
@@ -1021,17 +1007,6 @@ export default function EditorProPage() {
         <h1 className="text-sm font-bold mr-2">OpenCut 字幕編輯器</h1>
         
         <button
-          onClick={() => window.location.href = '/editor'}
-          className="flex items-center gap-1 px-2 py-1 bg-gray-600 hover:bg-gray-700 rounded transition text-xs"
-          title="回到專案頁面"
-        >
-          <ArrowLeftToLine size={12} />
-          回到專案
-        </button>
-
-        <div className="h-5 w-px bg-gray-700 mx-1" />
-        
-        <button
           onClick={() => fileInputRef.current?.click()}
           className="flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded transition text-xs"
         >
@@ -1101,7 +1076,7 @@ export default function EditorProPage() {
 
         <button
           onClick={handleExportVideo}
-          disabled={(!videoFile && !videoUrl) || (tracks.length > 0 && tracks[0]?.segments.length === 0) || isExporting}
+          disabled={!videoFile || (tracks.length > 0 && tracks[0]?.segments.length === 0) || isExporting}
           className="flex items-center gap-1 px-2 py-1 bg-emerald-600 hover:bg-emerald-700 rounded transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Film size={12} />
@@ -1139,7 +1114,7 @@ export default function EditorProPage() {
           <Panel defaultSize={70} minSize={40}>
             <PanelGroup direction="vertical">
               {/* 上方: 媒體面板 + 預覽 */}
-              <Panel defaultSize={60} minSize={30}>
+              <Panel defaultSize={70} minSize={30}>
                 <PanelGroup direction="horizontal">
                   {/* 最左側: OpenCut 風格媒體面板 */}
                   <Panel defaultSize={20} minSize={15} maxSize={40}>

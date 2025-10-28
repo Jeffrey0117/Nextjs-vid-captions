@@ -86,14 +86,6 @@ export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEdit
         <div className="flex items-center justify-between p-3 border-b border-gray-700">
           <h2 className="text-base font-bold">批量編輯字幕</h2>
           <div className="flex items-center gap-3">
-            {/* 顯示原文按鈕 */}
-            <button
-              onClick={() => setShowOriginalText(!showOriginalText)}
-              className={`p-1.5 hover:bg-gray-800 rounded transition ${showOriginalText ? 'bg-green-600' : ''}`}
-              title="顯示原文參考"
-            >
-              {showOriginalText ? <Eye size={16} /> : <EyeOff size={16} />}
-            </button>
             {/* 取代功能按鈕 */}
             <button
               onClick={() => setShowReplace(!showReplace)}
@@ -157,49 +149,39 @@ export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEdit
         )}
 
         {/* 字幕列表 */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        <div className="flex-1 overflow-y-auto p-3 space-y-1">
           {segments.map((segment, index) => (
             <div
               key={segment.id}
-              className="p-1.5 bg-gray-800 rounded border border-gray-700 hover:border-gray-600 transition"
+              className="flex items-center gap-2 p-1.5 bg-gray-800 rounded border border-gray-700 hover:border-gray-600 transition"
             >
-              <div className="flex items-center gap-2">
-                {/* 序號 */}
-                <div className="flex-shrink-0 w-8 text-center">
-                  <span className="text-[0.65rem] font-bold text-gray-400">#{index + 1}</span>
-                </div>
-
-                {/* 文字編輯區 */}
-                <input
-                  type="text"
-                  value={editedTexts[segment.id] || ''}
-                  onChange={(e) => setEditedTexts({
-                    ...editedTexts,
-                    [segment.id]: e.target.value
-                  })}
-                  style={{ fontSize: `${fontSize}px` }}
-                  className="flex-1 px-2 py-1 bg-gray-900 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
-                  placeholder="字幕內容"
-                />
-
-                {/* 單條取代按鈕 */}
-                {showReplace && findText && (
-                  <button
-                    onClick={() => handleReplaceCurrent(segment.id)}
-                    className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition text-[0.65rem]"
-                    title="取代此條字幕"
-                  >
-                    取代
-                  </button>
-                )}
+              {/* 序號 */}
+              <div className="flex-shrink-0 w-8 text-center">
+                <span className="text-[0.65rem] font-bold text-gray-400">#{index + 1}</span>
               </div>
-              
-              {/* 原文顯示區 */}
-              {showOriginalText && segment.text && (
-                <div className="mt-1 ml-10 px-2 py-1 bg-gray-900/50 rounded text-gray-400 text-sm border-l-2 border-gray-600">
-                  <span className="text-xs text-gray-500 mr-2">原文:</span>
-                  {segment.text}
-                </div>
+
+              {/* 文字編輯區 */}
+              <input
+                type="text"
+                value={editedTexts[segment.id] || ''}
+                onChange={(e) => setEditedTexts({
+                  ...editedTexts,
+                  [segment.id]: e.target.value
+                })}
+                style={{ fontSize: `${fontSize}px` }}
+                className="flex-1 px-2 py-1 bg-gray-900 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
+                placeholder="字幕內容"
+              />
+
+              {/* 單條取代按鈕 */}
+              {showReplace && findText && (
+                <button
+                  onClick={() => handleReplaceCurrent(segment.id)}
+                  className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition text-[0.65rem]"
+                  title="取代此條字幕"
+                >
+                  取代
+                </button>
               )}
             </div>
           ))}
