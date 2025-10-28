@@ -11,9 +11,10 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const videoFile = formData.get("video") as File;
+    const videoPath = formData.get("videoPath") as string;
     const subtitlesJson = formData.get("subtitles") as string;
 
-    if (!videoFile || !subtitlesJson) {
+    if ((!videoFile && !videoPath) || !subtitlesJson) {
       return NextResponse.json(
         { error: "Missing video or subtitles" },
         { status: 400 }
@@ -28,11 +29,24 @@ export async function POST(request: Request) {
       fs.mkdirSync(tempDir, { recursive: true });
     }
 
-    // 保存影片檔案
-    const videoBuffer = Buffer.from(await videoFile.arrayBuffer());
-    const videoFileName = `video_${Date.now()}.${videoFile.name.split(".").pop()}`;
-    const videoPath = path.join(tempDir, videoFileName);
-    await fs.promises.writeFile(videoPath, videoBuffer);
+    let finalVideoPath: string;
+
+    if (videoPath) {
+      // 使用已存在的影片檔案
+      finalVideoPath = path.join(tempDir, videoPath);
+      if (!fs.existsSync(finalVideoPath)) {
+        return NextResponse.json(
+          { error: "Video file not found" },
+          { status: 404 }
+        );
+      }
+    } else {
+      // 保存新上傳的影片檔案
+      const videoBuffer = Buffer.from(await videoFile.arrayBuffer());
+      const videoFileName = `video_${Date.now()}.${videoFile.name.split(".").pop()}`;
+      finalVideoPath = path.join(tempDir, videoFileName);
+      await fs.promises.writeFile(finalVideoPath, videoBuffer);
+    }
 
     // 生成 ASS 字幕檔
     const assContent = generateAssSubtitle(subtitles);
@@ -47,7 +61,7 @@ export async function POST(request: Request) {
     try {
       // 執行 FFmpeg 命令燒錄字幕
       console.log("Starting FFmpeg subtitle burn...");
-      console.log("Video path:", videoPath);
+      console.log("Video path:", finalVideoPath);
       console.log("ASS path:", assPath);
       console.log("Output path:", outputPath);
       
@@ -56,7 +70,7 @@ export async function POST(request: Request) {
       
       if (process.platform === 'win32') {
         // Windows: 將反斜線轉換為正斜線,並在 ass filter 中使用雙反斜線轉義
-        const videoPathNormalized = videoPath.replace(/\\/g, '/');
+        const videoPathNormalized = finalVideoPath.replace(/\\/g, '/');
         const outputPathNormalized = outputPath.replace(/\\/g, '/');
         // ASS filter 路徑需要四個反斜線(\\\\) 來表示一個實際的反斜線
         const assPathEscaped = assPath.replace(/\\/g, '\\\\\\\\').replace(/:/g, '\\\\:');
@@ -67,7 +81,7 @@ export async function POST(request: Request) {
       } else {
         // Unix/Linux/Mac: 直接使用原始路徑
         // 基本參數配置 (移除可能導致錯誤的進階參數)
-        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "ass=${assPath}" -c:v libx264 -c:a copy "${outputPath}"`;
+        ffmpegCommand = `ffmpeg -i "${finalVideoPath}" -vf "ass=${assPath}" -c:v libx264 -c:a copy "${outputPath}"`;
       }
       
       console.log("FFmpeg command:", ffmpegCommand);
@@ -107,7 +121,8 @@ export async function POST(request: Request) {
       
       // 清理失敗的檔案
       try {
-        if (fs.existsSync(videoPath)) await fs.promises.unlink(videoPath);
+        // 只清理新上傳的影片檔案，不要清理已存在的檔案
+        if (!videoPath && fs.existsSync(finalVideoPath)) await fs.promises.unlink(finalVideoPath);
         if (fs.existsSync(assPath)) await fs.promises.unlink(assPath);
         if (fs.existsSync(outputPath)) await fs.promises.unlink(outputPath);
       } catch (cleanupError) {

@@ -571,11 +571,16 @@ export default function EditorProPage() {
     try {
       const formData = new FormData();
       
-      // 如果有 videoFile，使用它；否則從 videoUrl 獲取文件
-      if (videoFile) {
+      // 優先使用伺服器路徑，避免重新上傳影片
+      if (videoUrl && videoUrl.startsWith('/temp/')) {
+        // 伺服器路徑，直接傳遞檔案名稱
+        const fileName = videoUrl.replace('/temp/', '');
+        formData.append('videoPath', fileName);
+      } else if (videoFile) {
+        // 使用檔案物件
         formData.append('video', videoFile);
       } else if (videoUrl) {
-        // 從 videoUrl 獲取影片數據
+        // 從其他 URL 獲取影片數據
         const response = await fetch(videoUrl);
         if (!response.ok) {
           throw new Error('無法獲取影片文件');
