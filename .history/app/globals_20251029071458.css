@@ -49,25 +49,17 @@ body {
   background-color: rgba(156, 163, 175, 0.7);
 }
 
-/* 垂直滑桿樣式 - 使用旋轉的水平滑桿 */
+/* 垂直滑桿樣式 */
 .vertical-slider {
-  -webkit-appearance: none;
+  -webkit-appearance: slider-vertical;
   appearance: none;
-  width: 200px; /* 實際是高度 */
-  height: 20px; /* 實際是寬度 */
+  width: 20px;
+  height: 120px;
   background: #374151;
   border-radius: 10px;
   outline: none;
   cursor: pointer;
-  transform: rotate(-90deg); /* 逆時針旋轉90度變成垂直 */
-  transform-origin: center;
-}
-
-.vertical-slider::-webkit-slider-track {
-  width: 200px;
-  height: 20px;
-  background: #374151;
-  border-radius: 10px;
+  transform: rotate(180deg); /* 翻轉讓較大值在上方 */
 }
 
 .vertical-slider::-webkit-slider-thumb {
@@ -87,8 +79,8 @@ body {
 
 /* Firefox 垂直滑桿 */
 .vertical-slider::-moz-range-track {
-  width: 200px;
-  height: 20px;
+  width: 20px;
+  height: 120px;
   background: #374151;
   border-radius: 10px;
   border: none;

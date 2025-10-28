@@ -1,7 +1,7 @@
 'use client';
 
 import { useSubtitleStore } from '../stores/subtitle-store';
-import { X, Replace, Eye, EyeOff, Monitor, Move, Languages } from 'lucide-react';
+import { X, Replace, Eye, EyeOff, Monitor, Move } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 
 interface BulkSubtitleEditorProps {
@@ -13,6 +13,7 @@ interface BulkSubtitleEditorProps {
 export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSubtitleEditorProps) {
   const { tracks, updateSegment } = useSubtitleStore();
   const [editedTexts, setEditedTexts] = useState<{ [key: string]: string }>({});
+  const [fontSize, setFontSize] = useState<number>(14);
   const [findText, setFindText] = useState<string>('');
   const [replaceText, setReplaceText] = useState<string>('');
   const [showReplace, setShowReplace] = useState<boolean>(false);
@@ -90,7 +91,7 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
       // 從 localStorage 讀取字體大小
       const savedFontSize = localStorage.getItem('bulkEditorFontSize');
       if (savedFontSize) {
-        setSubtitleFontSize(Number(savedFontSize));
+        setFontSize(Number(savedFontSize));
       }
       
       // 載入第一個字幕的位置作為預設位置
@@ -105,8 +106,8 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
 
   // 儲存字體大小到 localStorage
   useEffect(() => {
-    localStorage.setItem('bulkEditorFontSize', subtitleFontSize.toString());
-  }, [subtitleFontSize]);
+    localStorage.setItem('bulkEditorFontSize', fontSize.toString());
+  }, [fontSize]);
 
 
 
@@ -242,83 +243,6 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
     }
   };
 
-  // DeepL 翻譯功能
-  const translateAllSubtitles = async () => {
-    if (segments.length === 0) {
-      alert('沒有字幕可以翻譯');
-      return;
-    }
-
-    setIsTranslating(true);
-    setTranslationProgress(0);
-
-    try {
-      // 批量翻譯所有字幕
-      for (let i = 0; i < segments.length; i++) {
-        const segment = segments[i];
-        
-        // 優先翻譯原文，如果沒有原文則翻譯現有的翻譯文字
-        const textToTranslate = segment.text || segment.translatedText;
-        
-        if (textToTranslate && textToTranslate.trim()) {
-          try {
-            const response = await fetch('/api/deepl-translate', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ text: textToTranslate }),
-            });
-
-            if (!response.ok) {
-              throw new Error(`翻譯請求失敗: ${response.status}`);
-            }
-
-            const data = await response.json();
-            
-            if (data.success && data.translatedText) {
-              console.log(`翻譯 ${i + 1}:`, {
-                原文: textToTranslate,
-                翻譯結果: data.translatedText
-              });
-              
-              // 更新字幕的翻譯文字
-              updateSegment(segment.id, {
-                translatedText: data.translatedText
-              });
-              
-              // 同時更新編輯狀態中的文字
-              setEditedTexts(prev => ({
-                ...prev,
-                [segment.id]: data.translatedText
-              }));
-            } else {
-              console.error(`翻譯 ${i + 1} 失敗: API 返回無效數據`, data);
-            }
-          } catch (error) {
-            console.error(`翻譯字幕 ${i + 1} 失敗:`, error);
-            // 繼續翻譯其他字幕，不中斷整個過程
-          }
-        }
-
-        // 更新進度
-        setTranslationProgress(Math.round(((i + 1) / segments.length) * 100));
-        
-        // 添加小延遲避免 API 請求過於頻繁
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
-
-      console.log('所有翻譯完成，當前 editedTexts:', editedTexts);
-      alert(`翻譯完成！已翻譯 ${segments.length} 條字幕`);
-    } catch (error) {
-      console.error('批量翻譯失敗:', error);
-      alert('翻譯失敗: ' + (error as Error).message);
-    } finally {
-      setIsTranslating(false);
-      setTranslationProgress(0);
-    }
-  };
-
 
 
   if (!isOpen) return null;
@@ -354,23 +278,6 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
             >
               <Replace size={16} />
             </button>
-            {/* DeepL 翻譯按鈕 */}
-            <button
-              onClick={translateAllSubtitles}
-              disabled={isTranslating}
-              className={`p-1.5 hover:bg-gray-800 rounded transition relative ${
-                isTranslating ? 'bg-orange-600 cursor-not-allowed' : 'hover:bg-orange-600'
-              }`}
-              title={isTranslating ? `翻譯中... ${translationProgress}%` : 'DeepL 翻譯所有字幕'}
-            >
-              <Languages size={16} />
-              {isTranslating && (
-                <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                  {translationProgress}%
-                </div>
-              )}
-            </button>
-            
             {/* 字體大小控制 */}
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-gray-400">字體:</span>
@@ -378,15 +285,11 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
                 type="range"
                 min="10"
                 max="32"
-                value={subtitleFontSize}
-                onChange={(e) => {
-                  const newFontSize = Number(e.target.value);
-                  setSubtitleFontSize(newFontSize);
-                  applyFontSizeToAllSegments(newFontSize);
-                }}
+                value={fontSize}
+                onChange={(e) => setFontSize(Number(e.target.value))}
                 className="w-20"
               />
-              <span className="text-xs text-gray-400 w-8">{subtitleFontSize}px</span>
+              <span className="text-xs text-gray-400 w-8">{fontSize}px</span>
             </div>
             <button
               onClick={onClose}
@@ -445,12 +348,12 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
                 {/* 文字編輯區 */}
                 <input
                   type="text"
-                  value={editedTexts[segment.id] || segment.translatedText || segment.text || ''}
+                  value={editedTexts[segment.id] || ''}
                   onChange={(e) => setEditedTexts({
                     ...editedTexts,
                     [segment.id]: e.target.value
                   })}
-                  style={{ fontSize: `${subtitleFontSize}px` }}
+                  style={{ fontSize: `${fontSize}px` }}
                   className="flex-1 px-2 py-1 bg-gray-900 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
                   placeholder="字幕內容"
                 />

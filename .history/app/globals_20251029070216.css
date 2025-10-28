@@ -49,23 +49,19 @@ body {
   background-color: rgba(156, 163, 175, 0.7);
 }
 
-/* 垂直滑桿樣式 - 使用旋轉的水平滑桿 */
+/* 垂直滑桿樣式 */
 .vertical-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 200px; /* 實際是高度 */
-  height: 20px; /* 實際是寬度 */
-  background: #374151;
-  border-radius: 10px;
+  writing-mode: bt-lr; /* IE */
+  -webkit-appearance: slider-vertical; /* WebKit */
+  width: 20px;
+  height: 120px;
+  background: transparent;
   outline: none;
-  cursor: pointer;
-  transform: rotate(-90deg); /* 逆時針旋轉90度變成垂直 */
-  transform-origin: center;
 }
 
-.vertical-slider::-webkit-slider-track {
-  width: 200px;
-  height: 20px;
+.vertical-slider::-webkit-slider-runnable-track {
+  width: 20px;
+  height: 120px;
   background: #374151;
   border-radius: 10px;
 }
@@ -78,20 +74,18 @@ body {
   background: #8b5cf6;
   border-radius: 50%;
   cursor: pointer;
-  border: none;
 }
 
 .vertical-slider::-webkit-slider-thumb:hover {
   background: #7c3aed;
 }
 
-/* Firefox 垂直滑桿 */
+/* Firefox */
 .vertical-slider::-moz-range-track {
-  width: 200px;
-  height: 20px;
+  width: 20px;
+  height: 120px;
   background: #374151;
   border-radius: 10px;
-  border: none;
 }
 
 .vertical-slider::-moz-range-thumb {

@@ -308,7 +308,6 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
         await new Promise(resolve => setTimeout(resolve, 200));
       }
 
-      console.log('所有翻譯完成，當前 editedTexts:', editedTexts);
       alert(`翻譯完成！已翻譯 ${segments.length} 條字幕`);
     } catch (error) {
       console.error('批量翻譯失敗:', error);
@@ -445,7 +444,7 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
                 {/* 文字編輯區 */}
                 <input
                   type="text"
-                  value={editedTexts[segment.id] || segment.translatedText || segment.text || ''}
+                  value={editedTexts[segment.id] || ''}
                   onChange={(e) => setEditedTexts({
                     ...editedTexts,
                     [segment.id]: e.target.value

@@ -257,8 +257,8 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
       for (let i = 0; i < segments.length; i++) {
         const segment = segments[i];
         
-        // 優先翻譯原文，如果沒有原文則翻譯現有的翻譯文字
-        const textToTranslate = segment.text || segment.translatedText;
+        // 如果沒有翻譯文字，就翻譯原文
+        const textToTranslate = segment.translatedText || segment.text;
         
         if (textToTranslate && textToTranslate.trim()) {
           try {
@@ -277,11 +277,6 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
             const data = await response.json();
             
             if (data.success && data.translatedText) {
-              console.log(`翻譯 ${i + 1}:`, {
-                原文: textToTranslate,
-                翻譯結果: data.translatedText
-              });
-              
               // 更新字幕的翻譯文字
               updateSegment(segment.id, {
                 translatedText: data.translatedText
@@ -292,8 +287,6 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
                 ...prev,
                 [segment.id]: data.translatedText
               }));
-            } else {
-              console.error(`翻譯 ${i + 1} 失敗: API 返回無效數據`, data);
             }
           } catch (error) {
             console.error(`翻譯字幕 ${i + 1} 失敗:`, error);
@@ -308,7 +301,6 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
         await new Promise(resolve => setTimeout(resolve, 200));
       }
 
-      console.log('所有翻譯完成，當前 editedTexts:', editedTexts);
       alert(`翻譯完成！已翻譯 ${segments.length} 條字幕`);
     } catch (error) {
       console.error('批量翻譯失敗:', error);
@@ -445,12 +437,12 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
                 {/* 文字編輯區 */}
                 <input
                   type="text"
-                  value={editedTexts[segment.id] || segment.translatedText || segment.text || ''}
+                  value={editedTexts[segment.id] || ''}
                   onChange={(e) => setEditedTexts({
                     ...editedTexts,
                     [segment.id]: e.target.value
                   })}
-                  style={{ fontSize: `${subtitleFontSize}px` }}
+                  style={{ fontSize: `${fontSize}px` }}
                   className="flex-1 px-2 py-1 bg-gray-900 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
                   placeholder="字幕內容"
                 />
