@@ -94,7 +94,15 @@ export default function ProjectsPage() {
 
   // 更新專案狀態
   const updateProject = (projectId: string, updates: Partial<Project>) => {
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updates } : p));
+    try {
+      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updates } : p));
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+        alert('儲存空間不足！請點擊「清理空間」按鈕來釋放儲存空間。');
+        throw error;
+      }
+      throw error;
+    }
   };
 
   // 產生影片封面圖
@@ -429,11 +437,7 @@ export default function ProjectsPage() {
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
-              <BulkSubtitleEditor 
-                isOpen={showBulkEditor} 
-                onClose={closeBulkEditor}
-                videoUrl={currentEditingProjectId ? projects.find(p => p.id === currentEditingProjectId)?.videoUrl || undefined : undefined}
-              />
+              <BulkSubtitleEditor isOpen={showBulkEditor} onClose={closeBulkEditor} />
             </div>
           </div>
         </div>

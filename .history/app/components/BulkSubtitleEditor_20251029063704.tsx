@@ -416,18 +416,15 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
                     onLoadStart={() => {
                       console.log('開始載入影片:', videoUrl);
                       console.log('處理後的 src:', getVideoSrc(videoUrl));
-                      setVideoError(false); // 重置錯誤狀態
                     }}
                     onError={(e) => {
                       console.error('影片載入錯誤:', e);
                       console.error('原始 URL:', videoUrl);
                       console.error('處理後 URL:', getVideoSrc(videoUrl));
                       console.error('錯誤詳情:', e.target);
-                      setVideoError(true); // 設置錯誤狀態
                     }}
                     onCanPlay={() => {
                       console.log('影片可以播放');
-                      setVideoError(false); // 成功載入，清除錯誤狀態
                       if (videoRef.current) {
                         videoRef.current.currentTime = previewTime;
                         videoRef.current.pause();
@@ -435,25 +432,15 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
                     }}
                   />
                   {/* 載入錯誤時的備用顯示 */}
-                  {videoError && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-gray-800/80">
-                      <div className="text-center p-4">
-                        <span className="text-red-400 text-sm block mb-2">影片載入失敗</span>
-                        <span className="text-gray-500 text-xs block mb-2">URL: {videoUrl}</span>
-                        <button 
-                          onClick={() => {
-                            setVideoError(false);
-                            if (videoRef.current) {
-                              videoRef.current.load(); // 重新載入影片
-                            }
-                          }}
-                          className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs"
-                        >
-                          重試
-                        </button>
-                      </div>
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-800/50" 
+                       id="video-error-fallback" 
+                       style={{ display: 'none' }}>
+                    <div className="text-center">
+                      <span className="text-gray-400 text-sm">影片載入失敗</span>
+                      <br />
+                      <span className="text-gray-500 text-xs">URL: {videoUrl}</span>
                     </div>
-                  )}
+                  </div>
                 </div>
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">

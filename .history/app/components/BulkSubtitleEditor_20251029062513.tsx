@@ -21,35 +21,8 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
   const [showPreview, setShowPreview] = useState<boolean>(false);
   const [subtitlePosition, setSubtitlePosition] = useState({ x: 50, y: 85 }); // 預設位置 (百分比)
   const [isDragging, setIsDragging] = useState(false);
-  const [previewTime, setPreviewTime] = useState(1); // 預覽時間（秒）
-  const [videoError, setVideoError] = useState(false); // 影片載入錯誤狀態
   const previewRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-
-  // 調試：檢查 videoUrl
-  useEffect(() => {
-    if (isOpen) {
-      console.log('BulkSubtitleEditor videoUrl:', videoUrl);
-    }
-  }, [isOpen, videoUrl]);
-
-  // 處理不同格式的影片 URL
-  const getVideoSrc = (url: string): string => {
-    // 如果是相對路徑（/temp/video_xxx.mp4），轉換為完整 URL
-    if (url.startsWith('/temp/')) {
-      return url; // 相對路徑，瀏覽器會自動補全
-    }
-    // 如果是 data: URL 或 blob: URL，直接使用
-    if (url.startsWith('data:') || url.startsWith('blob:')) {
-      return url;
-    }
-    // 如果是完整 HTTP URL，直接使用
-    if (url.startsWith('http')) {
-      return url;
-    }
-    // 其他情況，假設是相對路徑
-    return url;
-  };
 
   // 從 tracks 計算 segments (reactive)
   const segments = tracks.length > 0 ? tracks[0].segments : [];
@@ -110,17 +83,6 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
       document.removeEventListener('mouseup', handleGlobalMouseUp);
     };
   }, [isDragging]);
-
-  // 處理預覽時間變化
-  useEffect(() => {
-    if (videoRef.current && showPreview) {
-      const video = videoRef.current;
-      if (video.readyState >= 2) { // HAVE_CURRENT_DATA 或更高
-        video.currentTime = previewTime;
-        video.pause(); // 確保暫停
-      }
-    }
-  }, [previewTime, showPreview]);
 
   const handleSave = () => {
     // 批量更新所有字幕
@@ -341,43 +303,16 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
           <div className="border-t border-gray-700 p-3 bg-gray-800/50">
             <div className="flex justify-between items-center mb-2">
               <h3 className="text-sm font-medium text-gray-300">字幕位置調整</h3>
-              <div className="flex items-center gap-2">
-                {videoUrl && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400">預覽時間:</span>
-                    <input
-                      type="range"
-                      min="0"
-                      max="30"
-                      step="0.5"
-                      value={previewTime}
-                      onChange={(e) => {
-                        const time = Number(e.target.value);
-                        setPreviewTime(time);
-                        if (videoRef.current) {
-                          // 確保影片已載入後再設定時間
-                          if (videoRef.current.readyState >= 2) {
-                            videoRef.current.currentTime = time;
-                          }
-                        }
-                      }}
-                      className="w-24"
-                    />
-                    <span className="text-xs text-gray-400 w-8">{previewTime.toFixed(1)}s</span>
-                  </div>
-                )}
-                <button
-                  onClick={applyPositionToAll}
-                  className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-xs transition"
-                >
-                  套用到所有字幕
-                </button>
-              </div>
+              <button
+                onClick={applyPositionToAll}
+                className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-xs transition"
+              >
+                套用到所有字幕
+              </button>
             </div>
             <div 
               ref={previewRef}
-              className="relative w-full bg-black rounded border border-gray-600 overflow-hidden cursor-crosshair flex items-center justify-center"
-              style={{ height: '400px' }} // 更高的高度
+              className="relative w-full h-48 bg-black rounded border border-gray-600 overflow-hidden cursor-crosshair"
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
@@ -385,76 +320,19 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
             >
               {/* 真實影片畫面 */}
               {videoUrl ? (
-                <div className="relative w-full h-full flex items-center justify-center">
-                  <video
-                    ref={videoRef}
-                    src={getVideoSrc(videoUrl)}
-                    className="max-w-full max-h-full object-contain"
-                    style={{ 
-                      width: 'auto', 
-                      height: 'auto',
-                      maxWidth: '100%',
-                      maxHeight: '100%'
-                    }}
-                    muted
-                    playsInline
-                    preload="metadata"
-                    controls={false}
-                    crossOrigin="anonymous"
-                    onLoadedMetadata={() => {
-                      console.log('影片元數據載入完成');
-                      if (videoRef.current) {
-                        videoRef.current.currentTime = previewTime;
-                      }
-                    }}
-                    onSeeked={() => {
-                      console.log('影片跳轉到時間:', previewTime);
-                      if (videoRef.current && !videoRef.current.paused) {
-                        videoRef.current.pause();
-                      }
-                    }}
-                    onLoadStart={() => {
-                      console.log('開始載入影片:', videoUrl);
-                      console.log('處理後的 src:', getVideoSrc(videoUrl));
-                      setVideoError(false); // 重置錯誤狀態
-                    }}
-                    onError={(e) => {
-                      console.error('影片載入錯誤:', e);
-                      console.error('原始 URL:', videoUrl);
-                      console.error('處理後 URL:', getVideoSrc(videoUrl));
-                      console.error('錯誤詳情:', e.target);
-                      setVideoError(true); // 設置錯誤狀態
-                    }}
-                    onCanPlay={() => {
-                      console.log('影片可以播放');
-                      setVideoError(false); // 成功載入，清除錯誤狀態
-                      if (videoRef.current) {
-                        videoRef.current.currentTime = previewTime;
-                        videoRef.current.pause();
-                      }
-                    }}
-                  />
-                  {/* 載入錯誤時的備用顯示 */}
-                  {videoError && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-gray-800/80">
-                      <div className="text-center p-4">
-                        <span className="text-red-400 text-sm block mb-2">影片載入失敗</span>
-                        <span className="text-gray-500 text-xs block mb-2">URL: {videoUrl}</span>
-                        <button 
-                          onClick={() => {
-                            setVideoError(false);
-                            if (videoRef.current) {
-                              videoRef.current.load(); // 重新載入影片
-                            }
-                          }}
-                          className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs"
-                        >
-                          重試
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <video
+                  ref={videoRef}
+                  src={videoUrl}
+                  className="w-full h-full object-contain"
+                  muted
+                  playsInline
+                  onLoadedData={() => {
+                    // 當影片載入後，跳到第一秒來顯示內容
+                    if (videoRef.current) {
+                      videoRef.current.currentTime = 1;
+                    }
+                  }}
+                />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
                   <span className="text-gray-500 text-sm">影片預覽區域</span>
@@ -463,22 +341,16 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
               
               {/* 字幕預覽 */}
               <div
-                className="absolute text-white px-3 py-2 rounded-lg font-medium shadow-lg cursor-move select-none border border-purple-500/50"
+                className="absolute bg-black/80 text-white px-2 py-1 rounded text-sm font-medium shadow-lg cursor-move select-none"
                 style={{
                   left: `${subtitlePosition.x}%`,
                   top: `${subtitlePosition.y}%`,
                   transform: 'translate(-50%, -50%)',
-                  backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                  textShadow: '2px 2px 4px rgba(0, 0, 0, 0.8)',
-                  fontSize: '16px',
-                  lineHeight: '1.4',
                 }}
                 onMouseDown={handleMouseDown}
               >
-                <div className="flex items-center justify-center gap-1">
-                  <Move size={14} className="text-purple-400" />
-                  <span>範例字幕文字</span>
-                </div>
+                <Move size={12} className="inline mr-1" />
+                範例字幕文字
               </div>
               
               {/* 位置資訊顯示 */}
@@ -487,10 +359,7 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
               </div>
             </div>
             <p className="text-xs text-gray-400 mt-1">
-              {videoUrl 
-                ? "調整時間滑桿來選擇影片畫面，拖拽字幕到想要的位置，然後點擊「套用到所有字幕」" 
-                : "拖拽字幕到想要的位置，然後點擊「套用到所有字幕」來批量調整位置"
-              }
+              拖拽字幕到想要的位置，然後點擊「套用到所有字幕」來批量調整位置
             </p>
           </div>
         )}

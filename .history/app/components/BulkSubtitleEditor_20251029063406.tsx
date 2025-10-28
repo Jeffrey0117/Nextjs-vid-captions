@@ -22,7 +22,6 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
   const [subtitlePosition, setSubtitlePosition] = useState({ x: 50, y: 85 }); // 預設位置 (百分比)
   const [isDragging, setIsDragging] = useState(false);
   const [previewTime, setPreviewTime] = useState(1); // 預覽時間（秒）
-  const [videoError, setVideoError] = useState(false); // 影片載入錯誤狀態
   const previewRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -32,24 +31,6 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
       console.log('BulkSubtitleEditor videoUrl:', videoUrl);
     }
   }, [isOpen, videoUrl]);
-
-  // 處理不同格式的影片 URL
-  const getVideoSrc = (url: string): string => {
-    // 如果是相對路徑（/temp/video_xxx.mp4），轉換為完整 URL
-    if (url.startsWith('/temp/')) {
-      return url; // 相對路徑，瀏覽器會自動補全
-    }
-    // 如果是 data: URL 或 blob: URL，直接使用
-    if (url.startsWith('data:') || url.startsWith('blob:')) {
-      return url;
-    }
-    // 如果是完整 HTTP URL，直接使用
-    if (url.startsWith('http')) {
-      return url;
-    }
-    // 其他情況，假設是相對路徑
-    return url;
-  };
 
   // 從 tracks 計算 segments (reactive)
   const segments = tracks.length > 0 ? tracks[0].segments : [];
@@ -376,8 +357,8 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
             </div>
             <div 
               ref={previewRef}
-              className="relative w-full bg-black rounded border border-gray-600 overflow-hidden cursor-crosshair flex items-center justify-center"
-              style={{ height: '400px' }} // 更高的高度
+              className="relative w-full bg-black rounded border border-gray-600 overflow-hidden cursor-crosshair"
+              style={{ height: '300px' }} // 增加高度
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
@@ -385,76 +366,32 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
             >
               {/* 真實影片畫面 */}
               {videoUrl ? (
-                <div className="relative w-full h-full flex items-center justify-center">
-                  <video
-                    ref={videoRef}
-                    src={getVideoSrc(videoUrl)}
-                    className="max-w-full max-h-full object-contain"
-                    style={{ 
-                      width: 'auto', 
-                      height: 'auto',
-                      maxWidth: '100%',
-                      maxHeight: '100%'
-                    }}
-                    muted
-                    playsInline
-                    preload="metadata"
-                    controls={false}
-                    crossOrigin="anonymous"
-                    onLoadedMetadata={() => {
-                      console.log('影片元數據載入完成');
-                      if (videoRef.current) {
-                        videoRef.current.currentTime = previewTime;
-                      }
-                    }}
-                    onSeeked={() => {
-                      console.log('影片跳轉到時間:', previewTime);
-                      if (videoRef.current && !videoRef.current.paused) {
-                        videoRef.current.pause();
-                      }
-                    }}
-                    onLoadStart={() => {
-                      console.log('開始載入影片:', videoUrl);
-                      console.log('處理後的 src:', getVideoSrc(videoUrl));
-                      setVideoError(false); // 重置錯誤狀態
-                    }}
-                    onError={(e) => {
-                      console.error('影片載入錯誤:', e);
-                      console.error('原始 URL:', videoUrl);
-                      console.error('處理後 URL:', getVideoSrc(videoUrl));
-                      console.error('錯誤詳情:', e.target);
-                      setVideoError(true); // 設置錯誤狀態
-                    }}
-                    onCanPlay={() => {
-                      console.log('影片可以播放');
-                      setVideoError(false); // 成功載入，清除錯誤狀態
-                      if (videoRef.current) {
-                        videoRef.current.currentTime = previewTime;
-                        videoRef.current.pause();
-                      }
-                    }}
-                  />
-                  {/* 載入錯誤時的備用顯示 */}
-                  {videoError && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-gray-800/80">
-                      <div className="text-center p-4">
-                        <span className="text-red-400 text-sm block mb-2">影片載入失敗</span>
-                        <span className="text-gray-500 text-xs block mb-2">URL: {videoUrl}</span>
-                        <button 
-                          onClick={() => {
-                            setVideoError(false);
-                            if (videoRef.current) {
-                              videoRef.current.load(); // 重新載入影片
-                            }
-                          }}
-                          className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs"
-                        >
-                          重試
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <video
+                  ref={videoRef}
+                  src={videoUrl}
+                  className="w-full h-full object-contain bg-black"
+                  muted
+                  playsInline
+                  preload="metadata"
+                  onLoadedMetadata={() => {
+                    // 當影片元數據載入後，設定時間並載入該幀
+                    if (videoRef.current) {
+                      videoRef.current.currentTime = previewTime;
+                    }
+                  }}
+                  onSeeked={() => {
+                    // 確保在跳轉到指定時間後暫停
+                    if (videoRef.current && !videoRef.current.paused) {
+                      videoRef.current.pause();
+                    }
+                  }}
+                  onLoadStart={() => {
+                    console.log('開始載入影片:', videoUrl);
+                  }}
+                  onError={(e) => {
+                    console.error('影片載入錯誤:', e);
+                  }}
+                />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
                   <span className="text-gray-500 text-sm">影片預覽區域</span>

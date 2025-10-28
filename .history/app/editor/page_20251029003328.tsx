@@ -429,11 +429,7 @@ export default function ProjectsPage() {
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
-              <BulkSubtitleEditor 
-                isOpen={showBulkEditor} 
-                onClose={closeBulkEditor}
-                videoUrl={currentEditingProjectId ? projects.find(p => p.id === currentEditingProjectId)?.videoUrl || undefined : undefined}
-              />
+              <BulkSubtitleEditor isOpen={showBulkEditor} onClose={closeBulkEditor} />
             </div>
           </div>
         </div>

@@ -86,15 +86,25 @@ export default function ProjectsPage() {
       try {
         localStorage.setItem('subtitle-projects', JSON.stringify(projects));
       } catch (error) {
-        console.error('localStorage 儲存失敗:', error);
-        alert('專案資料儲存失敗，請重新整理頁面後再試。');
+        if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+          console.error('localStorage 空間不足');
+          alert('儲存空間不足！請點擊「清理空間」按鈕來釋放儲存空間。');
+        }
       }
     }
   }, [projects]);
 
   // 更新專案狀態
   const updateProject = (projectId: string, updates: Partial<Project>) => {
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updates } : p));
+    try {
+      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updates } : p));
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+        alert('儲存空間不足！請點擊「清理空間」按鈕來釋放儲存空間。');
+        throw error;
+      }
+      throw error;
+    }
   };
 
   // 產生影片封面圖
@@ -322,7 +332,39 @@ export default function ProjectsPage() {
     clearAll();
   };
 
+  // 清理舊專案資料以釋放空間
+  const clearOldProjects = () => {
+    const oldProjects = projects.filter(p => {
+      const createdAt = new Date(p.createdAt);
+      const daysSinceCreated = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+      return daysSinceCreated > 7; // 清理7天前的專案
+    });
 
+    if (oldProjects.length > 0) {
+      // 只保留最近7天的專案
+      const recentProjects = projects.filter(p => {
+        const createdAt = new Date(p.createdAt);
+        const daysSinceCreated = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+        return daysSinceCreated <= 7;
+      });
+      
+      setProjects(recentProjects);
+      alert(`已清理 ${oldProjects.length} 個舊專案，釋放儲存空間。`);
+    } else {
+      // 如果沒有舊專案，清理最大的專案
+      const sortedBySize = [...projects].sort((a, b) => {
+        const sizeA = (a.videoUrl?.length || 0) + JSON.stringify(a.segments || []).length;
+        const sizeB = (b.videoUrl?.length || 0) + JSON.stringify(b.segments || []).length;
+        return sizeB - sizeA;
+      });
+      
+      if (sortedBySize.length > 1) {
+        const projectsToKeep = sortedBySize.slice(1); // 移除最大的專案
+        setProjects(projectsToKeep);
+        alert(`已清理最大的專案，釋放儲存空間。`);
+      }
+    }
+  };
   
   // 輸出影片
   const exportVideo = async (projectId: string) => {
@@ -429,11 +471,7 @@ export default function ProjectsPage() {
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
-              <BulkSubtitleEditor 
-                isOpen={showBulkEditor} 
-                onClose={closeBulkEditor}
-                videoUrl={currentEditingProjectId ? projects.find(p => p.id === currentEditingProjectId)?.videoUrl || undefined : undefined}
-              />
+              <BulkSubtitleEditor isOpen={showBulkEditor} onClose={closeBulkEditor} />
             </div>
           </div>
         </div>
@@ -469,7 +507,16 @@ export default function ProjectsPage() {
               )}
             </div>
           ) : (
-            <CreateButton onClick={handleCreateProject} />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={clearOldProjects}
+                className="px-2 py-1.5 text-xs border border-gray-600 rounded hover:bg-gray-800 transition-colors"
+                title="清理舊專案"
+              >
+                清理
+              </button>
+              <CreateButton onClick={handleCreateProject} />
+            </div>
           )}
         </div>
       </div>

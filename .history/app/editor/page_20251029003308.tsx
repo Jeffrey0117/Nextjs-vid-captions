@@ -86,15 +86,25 @@ export default function ProjectsPage() {
       try {
         localStorage.setItem('subtitle-projects', JSON.stringify(projects));
       } catch (error) {
-        console.error('localStorage 儲存失敗:', error);
-        alert('專案資料儲存失敗，請重新整理頁面後再試。');
+        if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+          console.error('localStorage 空間不足');
+          alert('儲存空間不足！請點擊「清理空間」按鈕來釋放儲存空間。');
+        }
       }
     }
   }, [projects]);
 
   // 更新專案狀態
   const updateProject = (projectId: string, updates: Partial<Project>) => {
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updates } : p));
+    try {
+      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updates } : p));
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+        alert('儲存空間不足！請點擊「清理空間」按鈕來釋放儲存空間。');
+        throw error;
+      }
+      throw error;
+    }
   };
 
   // 產生影片封面圖
@@ -429,11 +439,7 @@ export default function ProjectsPage() {
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
-              <BulkSubtitleEditor 
-                isOpen={showBulkEditor} 
-                onClose={closeBulkEditor}
-                videoUrl={currentEditingProjectId ? projects.find(p => p.id === currentEditingProjectId)?.videoUrl || undefined : undefined}
-              />
+              <BulkSubtitleEditor isOpen={showBulkEditor} onClose={closeBulkEditor} />
             </div>
           </div>
         </div>

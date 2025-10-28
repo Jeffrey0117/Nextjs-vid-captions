@@ -427,7 +427,6 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
                     }}
                     onCanPlay={() => {
                       console.log('影片可以播放');
-                      setVideoError(false); // 成功載入，清除錯誤狀態
                       if (videoRef.current) {
                         videoRef.current.currentTime = previewTime;
                         videoRef.current.pause();

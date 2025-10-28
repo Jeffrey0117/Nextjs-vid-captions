@@ -432,7 +432,7 @@ export default function ProjectsPage() {
               <BulkSubtitleEditor 
                 isOpen={showBulkEditor} 
                 onClose={closeBulkEditor}
-                videoUrl={currentEditingProjectId ? projects.find(p => p.id === currentEditingProjectId)?.videoUrl || undefined : undefined}
+                videoUrl={currentEditingProjectId ? projects.find(p => p.id === currentEditingProjectId)?.videoUrl : undefined}
               />
             </div>
           </div>
