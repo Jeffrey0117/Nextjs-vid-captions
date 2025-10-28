@@ -244,21 +244,18 @@ export default function EditorProPage() {
           let startTime = 0;
           let endTime = 1;
           
-          // 處理時間格式 - 需要將毫秒轉換為秒數
+          // 處理時間格式 - 可能是數字或字符串
           if (typeof seg.startTime === 'number') {
-            // 如果時間大於 100，假設是毫秒，需要轉換為秒
-            startTime = seg.startTime > 100 ? seg.startTime / 1000 : seg.startTime;
+            startTime = seg.startTime;
           } else if (typeof seg.startTime === 'string') {
-            const parsed = parseFloat(seg.startTime) || 0;
-            startTime = parsed > 100 ? parsed / 1000 : parsed;
+            // 如果是字符串，可能需要解析
+            startTime = parseFloat(seg.startTime) || 0;
           }
           
           if (typeof seg.endTime === 'number') {
-            // 如果時間大於 100，假設是毫秒，需要轉換為秒
-            endTime = seg.endTime > 100 ? seg.endTime / 1000 : seg.endTime;
+            endTime = seg.endTime;
           } else if (typeof seg.endTime === 'string') {
-            const parsed = parseFloat(seg.endTime) || startTime + 1;
-            endTime = parsed > 100 ? parsed / 1000 : parsed;
+            endTime = parseFloat(seg.endTime) || startTime + 1;
           }
           
           console.log(`字幕 ${index + 1}:`, {

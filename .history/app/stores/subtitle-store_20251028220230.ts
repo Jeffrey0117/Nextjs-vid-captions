@@ -420,8 +420,6 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
   
   // 批量載入專案字幕
   loadProjectSegments: (segments) => {
-    console.log('🔍 loadProjectSegments 被調用，傳入的 segments:', segments.slice(0, 2));
-    
     const state = get();
     
     // 決定目標軌道 (優先使用第一個軌道)
@@ -444,8 +442,11 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     }
     
     // 確保每個 segment 都有完整的 style 屬性和正確的 id 格式
-    const normalizedSegments = segments.map((seg: any, index: number) => {
-      const defaultStyle = {
+    const normalizedSegments = segments.map((seg, index) => ({
+      ...seg,
+      id: String(seg.id || index + 1), // 確保 id 是字符串格式
+      style: {
+        // 預設樣式
         fontSize: 32,
         fontFamily: 'Arial',
         fontWeight: 'normal' as const,
@@ -464,16 +465,10 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
         positionY: 90,
         maxWidth: 80,
         scale: 1.0,
-      };
-      
-      return {
-        ...seg,
-        id: String(seg.id || index + 1), // 確保 id 是字符串格式
-        style: { ...defaultStyle, ...(seg.style || {}) }, // 合併樣式
-      };
-    });
-    
-    console.log('🔍 標準化後的 segments:', normalizedSegments.slice(0, 2));
+        // 保留原有的樣式設定 (會覆蓋上面的預設值)
+        ...(seg.style || {}),
+      },
+    }));
     
     // 清空現有字幕並載入新字幕到第一個軌道
     set((state) => ({
@@ -484,7 +479,5 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       ),
       selectedTrackId: targetTrackId, // 確保選中該軌道
     }));
-    
-    console.log('✅ 字幕載入完成');
   },
 }));

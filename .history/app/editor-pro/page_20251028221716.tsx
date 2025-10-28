@@ -121,12 +121,9 @@ export default function EditorProPage() {
       
       console.log('🔍 正在載入專案 ID:', projectId);
       
-      // 從 localStorage 載入專案資料
-      const savedProjects = localStorage.getItem('subtitle-projects');
-      if (!savedProjects) {
-        console.error('❌ localStorage 中沒有專案資料');
-        // 🧪 如果沒有 localStorage 資料，直接用測試資料
-        console.log('🧪 使用測試資料代替');
+      // 🧪 測試：直接載入硬編碼的字幕資料
+      if (projectId === '1761584936803') {
+        console.log('🧪 載入測試字幕資料');
         const testSegments = [
           {
             id: '1',
@@ -157,38 +154,18 @@ export default function EditorProPage() {
         return;
       }
       
+      // 從 localStorage 載入專案資料
+      const savedProjects = localStorage.getItem('subtitle-projects');
+      if (!savedProjects) {
+        console.error('❌ localStorage 中沒有專案資料');
+        alert('找不到專案資料,請返回 /editor 重新選擇專案');
+        return;
+      }
+      
       const projects = JSON.parse(savedProjects);
       console.log('🔍 localStorage 共有', projects.length, '個專案');
-      console.log('🔍 所有專案 ID:', projects.map((p: any) => p.id));
-      console.log('🔍 尋找專案 ID:', projectId);
       
       const project = projects.find((p: any) => p.id === projectId);
-      
-      // 如果找不到專案，嘗試使用最新的專案
-      if (!project && projects.length > 0) {
-        console.log('🔄 找不到指定專案，使用最新專案');
-        const latestProject = projects[projects.length - 1];
-        console.log('🔍 使用專案:', latestProject.id, latestProject.name);
-        
-        if (latestProject.segments && latestProject.segments.length > 0) {
-          if (latestProject.videoUrl) {
-            setVideoUrl(latestProject.videoUrl);
-          }
-          
-          const processedSegments = latestProject.segments.map((seg: any, index: number) => ({
-            ...seg,
-            id: String(seg.id || index + 1),
-            startTime: typeof seg.startTime === 'number' ? seg.startTime : 0,
-            endTime: typeof seg.endTime === 'number' ? seg.endTime : 1,
-            text: seg.text || '',
-            translatedText: seg.translatedText || seg.text || ''
-          }));
-          
-          loadProjectSegments(processedSegments);
-          console.log('✅ 使用最新專案的字幕載入完成');
-          return;
-        }
-      }
       
       if (!project) {
         console.error('❌ 專案不存在:', projectId);
@@ -232,55 +209,12 @@ export default function EditorProPage() {
       if (project.segments && project.segments.length > 0) {
         console.log('✅ 載入專案 segments:', project.segments.length);
         console.log('🔍 第一條字幕:', project.segments[0]);
-        console.log('🔍 前3條字幕時間:', project.segments.slice(0, 3).map((s: any) => ({
+        console.log('🔍 前3條字幕時間:', project.segments.slice(0, 3).map(s => ({
           startTime: s.startTime,
           endTime: s.endTime,
-          text: s.text,
-          translatedText: s.translatedText
+          text: s.text
         })));
-        
-        // 確保字幕資料格式正確
-        const processedSegments = project.segments.map((seg: any, index: number) => {
-          let startTime = 0;
-          let endTime = 1;
-          
-          // 處理時間格式 - 需要將毫秒轉換為秒數
-          if (typeof seg.startTime === 'number') {
-            // 如果時間大於 100，假設是毫秒，需要轉換為秒
-            startTime = seg.startTime > 100 ? seg.startTime / 1000 : seg.startTime;
-          } else if (typeof seg.startTime === 'string') {
-            const parsed = parseFloat(seg.startTime) || 0;
-            startTime = parsed > 100 ? parsed / 1000 : parsed;
-          }
-          
-          if (typeof seg.endTime === 'number') {
-            // 如果時間大於 100，假設是毫秒，需要轉換為秒
-            endTime = seg.endTime > 100 ? seg.endTime / 1000 : seg.endTime;
-          } else if (typeof seg.endTime === 'string') {
-            const parsed = parseFloat(seg.endTime) || startTime + 1;
-            endTime = parsed > 100 ? parsed / 1000 : parsed;
-          }
-          
-          console.log(`字幕 ${index + 1}:`, {
-            原始startTime: seg.startTime,
-            原始endTime: seg.endTime,
-            處理後startTime: startTime,
-            處理後endTime: endTime,
-            text: seg.text,
-            translatedText: seg.translatedText
-          });
-          
-          return {
-            ...seg,
-            id: String(seg.id || index + 1),
-            startTime,
-            endTime,
-            text: seg.text || '',
-            translatedText: seg.translatedText || seg.text || ''
-          };
-        });
-        
-        loadProjectSegments(processedSegments);
+        loadProjectSegments(project.segments);
         
         // 確認載入成功
         setTimeout(() => {
@@ -291,8 +225,7 @@ export default function EditorProPage() {
             firstSegmentTime: state.tracks[0]?.segments[0] ? {
               startTime: state.tracks[0].segments[0].startTime,
               endTime: state.tracks[0].segments[0].endTime,
-              text: state.tracks[0].segments[0].text,
-              translatedText: state.tracks[0].segments[0].translatedText
+              text: state.tracks[0].segments[0].text
             } : null
           });
         }, 100);
@@ -1246,6 +1179,16 @@ export default function EditorProPage() {
                     />
                     
                     {/* 字幕疊加層 */}
+                    {/* 調試：總是顯示一個測試字幕 */}
+                    <div className="absolute top-4 left-4 bg-black text-white p-2 text-sm">
+                      當前時間: {currentTime.toFixed(1)}s<br/>
+                      字幕軌道數: {tracks.length}<br/>
+                      字幕段數: {tracks[0]?.segments?.length || 0}<br/>
+                      找到字幕: {currentSubtitle ? '是' : '否'}<br/>
+                      {currentSubtitle && <>
+                        字幕內容: {currentSubtitle.translatedText || currentSubtitle.text}
+                      </>}
+                    </div>
                     {currentSubtitle && (
                       <div
                         className="absolute inset-0 flex items-center justify-center pointer-events-none"

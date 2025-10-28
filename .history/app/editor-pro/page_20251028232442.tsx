@@ -240,45 +240,14 @@ export default function EditorProPage() {
         })));
         
         // 確保字幕資料格式正確
-        const processedSegments = project.segments.map((seg: any, index: number) => {
-          let startTime = 0;
-          let endTime = 1;
-          
-          // 處理時間格式 - 需要將毫秒轉換為秒數
-          if (typeof seg.startTime === 'number') {
-            // 如果時間大於 100，假設是毫秒，需要轉換為秒
-            startTime = seg.startTime > 100 ? seg.startTime / 1000 : seg.startTime;
-          } else if (typeof seg.startTime === 'string') {
-            const parsed = parseFloat(seg.startTime) || 0;
-            startTime = parsed > 100 ? parsed / 1000 : parsed;
-          }
-          
-          if (typeof seg.endTime === 'number') {
-            // 如果時間大於 100，假設是毫秒，需要轉換為秒
-            endTime = seg.endTime > 100 ? seg.endTime / 1000 : seg.endTime;
-          } else if (typeof seg.endTime === 'string') {
-            const parsed = parseFloat(seg.endTime) || startTime + 1;
-            endTime = parsed > 100 ? parsed / 1000 : parsed;
-          }
-          
-          console.log(`字幕 ${index + 1}:`, {
-            原始startTime: seg.startTime,
-            原始endTime: seg.endTime,
-            處理後startTime: startTime,
-            處理後endTime: endTime,
-            text: seg.text,
-            translatedText: seg.translatedText
-          });
-          
-          return {
-            ...seg,
-            id: String(seg.id || index + 1),
-            startTime,
-            endTime,
-            text: seg.text || '',
-            translatedText: seg.translatedText || seg.text || ''
-          };
-        });
+        const processedSegments = project.segments.map((seg: any, index: number) => ({
+          ...seg,
+          id: String(seg.id || index + 1),
+          startTime: typeof seg.startTime === 'number' ? seg.startTime : 0,
+          endTime: typeof seg.endTime === 'number' ? seg.endTime : 1,
+          text: seg.text || '',
+          translatedText: seg.translatedText || seg.text || ''
+        }));
         
         loadProjectSegments(processedSegments);
         
