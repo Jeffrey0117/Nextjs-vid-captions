@@ -1,8 +1,8 @@
 'use client';
 
 import { useSubtitleStore } from '../stores/subtitle-store';
-import { X, Replace, Eye, EyeOff } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { X, Replace, Eye, EyeOff, Monitor, Move } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
 
 interface BulkSubtitleEditorProps {
   isOpen: boolean;
@@ -17,6 +17,10 @@ export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEdit
   const [replaceText, setReplaceText] = useState<string>('');
   const [showReplace, setShowReplace] = useState<boolean>(false);
   const [showOriginalText, setShowOriginalText] = useState<boolean>(false);
+  const [showPreview, setShowPreview] = useState<boolean>(false);
+  const [subtitlePosition, setSubtitlePosition] = useState({ x: 50, y: 85 }); // 預設位置 (百分比)
+  const [isDragging, setIsDragging] = useState(false);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   // 從 tracks 計算 segments (reactive)
   const segments = tracks.length > 0 ? tracks[0].segments : [];
@@ -35,6 +39,14 @@ export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEdit
       if (savedFontSize) {
         setFontSize(Number(savedFontSize));
       }
+      
+      // 載入第一個字幕的位置作為預設位置
+      if (segments.length > 0 && segments[0].style) {
+        setSubtitlePosition({
+          x: segments[0].style.positionX || 50,
+          y: segments[0].style.positionY || 85
+        });
+      }
     }
   }, [isOpen, segments]);
 
@@ -42,6 +54,33 @@ export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEdit
   useEffect(() => {
     localStorage.setItem('bulkEditorFontSize', fontSize.toString());
   }, [fontSize]);
+
+  // 處理全域滑鼠事件以支援拖拽
+  useEffect(() => {
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (!isDragging || !previewRef.current) return;
+      
+      const rect = previewRef.current.getBoundingClientRect();
+      const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+      const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
+      
+      setSubtitlePosition({ x, y });
+    };
+
+    const handleGlobalMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      document.addEventListener('mousemove', handleGlobalMouseMove);
+      document.addEventListener('mouseup', handleGlobalMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleGlobalMouseMove);
+      document.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, [isDragging]);
 
   const handleSave = () => {
     // 批量更新所有字幕
@@ -55,7 +94,9 @@ export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEdit
         }
       }
     });
-    onClose();
+    
+    // 顯示儲存成功訊息，但不自動關閉
+    alert(`已儲存 ${segments.length} 條字幕的文字變更`);
   };
 
   const handleReplaceAll = () => {
@@ -77,6 +118,48 @@ export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEdit
     });
   };
 
+  // 處理字幕位置拖拽
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    updatePosition(e);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    updatePosition(e);
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const updatePosition = (e: React.MouseEvent) => {
+    if (!previewRef.current) return;
+    
+    const rect = previewRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
+    
+    setSubtitlePosition({ x, y });
+  };
+
+  // 套用位置變更到所有字幕
+  const applyPositionToAll = () => {
+    // 批量更新所有字幕的位置
+    segments.forEach(segment => {
+      updateSegment(segment.id, {
+        style: {
+          ...segment.style,
+          positionX: subtitlePosition.x,
+          positionY: subtitlePosition.y
+        }
+      });
+    });
+    
+    alert(`字幕位置已套用到 ${segments.length} 條字幕\nX: ${subtitlePosition.x.toFixed(1)}%, Y: ${subtitlePosition.y.toFixed(1)}%`);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -86,6 +169,14 @@ export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEdit
         <div className="flex items-center justify-between p-3 border-b border-gray-700">
           <h2 className="text-base font-bold">批量編輯字幕</h2>
           <div className="flex items-center gap-3">
+            {/* 字幕位置預覽按鈕 */}
+            <button
+              onClick={() => setShowPreview(!showPreview)}
+              className={`p-1.5 hover:bg-gray-800 rounded transition ${showPreview ? 'bg-purple-600' : ''}`}
+              title="調整字幕位置"
+            >
+              <Monitor size={16} />
+            </button>
             {/* 顯示原文按鈕 */}
             <button
               onClick={() => setShowOriginalText(!showOriginalText)}
@@ -205,6 +296,56 @@ export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEdit
           ))}
         </div>
 
+        {/* 字幕位置預覽區 */}
+        {showPreview && (
+          <div className="border-t border-gray-700 p-3 bg-gray-800/50">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-sm font-medium text-gray-300">字幕位置調整</h3>
+              <button
+                onClick={applyPositionToAll}
+                className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-xs transition"
+              >
+                套用到所有字幕
+              </button>
+            </div>
+            <div 
+              ref={previewRef}
+              className="relative w-full h-48 bg-black rounded border border-gray-600 overflow-hidden cursor-crosshair"
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+            >
+              {/* 模擬影片畫面 */}
+              <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
+                <span className="text-gray-500 text-sm">影片預覽區域</span>
+              </div>
+              
+              {/* 字幕預覽 */}
+              <div
+                className="absolute bg-black/80 text-white px-2 py-1 rounded text-sm font-medium shadow-lg cursor-move select-none"
+                style={{
+                  left: `${subtitlePosition.x}%`,
+                  top: `${subtitlePosition.y}%`,
+                  transform: 'translate(-50%, -50%)',
+                }}
+                onMouseDown={handleMouseDown}
+              >
+                <Move size={12} className="inline mr-1" />
+                範例字幕文字
+              </div>
+              
+              {/* 位置資訊顯示 */}
+              <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
+                X: {subtitlePosition.x.toFixed(1)}%, Y: {subtitlePosition.y.toFixed(1)}%
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              拖拽字幕到想要的位置，然後點擊「套用到所有字幕」來批量調整位置
+            </p>
+          </div>
+        )}
+
         {/* 底部按鈕 */}
         <div className="flex items-center justify-between p-3 border-t border-gray-700">
           <p className="text-xs text-gray-400">
@@ -212,16 +353,19 @@ export default function BulkSubtitleEditor({ isOpen, onClose }: BulkSubtitleEdit
           </p>
           <div className="flex gap-1.5">
             <button
-              onClick={onClose}
-              className="px-3 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 rounded-lg transition"
-            >
-              取消
-            </button>
-            <button
               onClick={handleSave}
               className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 rounded-lg transition"
             >
-              儲存變更
+              儲存文字變更
+            </button>
+            <button
+              onClick={() => {
+                handleSave();
+                onClose();
+              }}
+              className="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 rounded-lg transition"
+            >
+              完成並關閉
             </button>
           </div>
         </div>
