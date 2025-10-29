@@ -454,83 +454,6 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       .sort((a, b) => a.startTime - b.startTime);
   },
   
-  // 樣式模板管理方法
-  saveStyleTemplate: (name, style, isDefault = false) => {
-    set((state) => {
-      const newTemplate: StyleTemplate = {
-        id: generateId(),
-        name,
-        style: { ...style },
-        isDefault,
-        createdAt: Date.now(),
-      };
-      
-      // 如果設定為預設，取消其他模板的預設狀態
-      const updatedTemplates = isDefault
-        ? state.styleTemplates.map(t => ({ ...t, isDefault: false }))
-        : state.styleTemplates;
-      
-      return {
-        styleTemplates: [...updatedTemplates, newTemplate],
-      };
-    });
-  },
-
-  applyStyleTemplate: (templateId, segmentId, applyToAll = false) => {
-    const state = get();
-    const template = state.styleTemplates.find(t => t.id === templateId);
-    if (!template) return;
-
-    const segments = state.tracks.length > 0 ? state.tracks[0].segments : [];
-    
-    if (applyToAll) {
-      // 套用到所有字幕
-      segments.forEach(seg => {
-        state.updateSegment(seg.id, {
-          style: { ...template.style },
-        });
-      });
-    } else if (segmentId) {
-      // 套用到指定字幕
-      state.updateSegment(segmentId, {
-        style: { ...template.style },
-      });
-    } else if (state.selectedSegmentId) {
-      // 套用到當前選中的字幕
-      state.updateSegment(state.selectedSegmentId, {
-        style: { ...template.style },
-      });
-    }
-  },
-
-  deleteStyleTemplate: (templateId) => {
-    set((state) => ({
-      styleTemplates: state.styleTemplates.filter(t => t.id !== templateId),
-    }));
-  },
-
-  updateStyleTemplate: (templateId, updates) => {
-    set((state) => ({
-      styleTemplates: state.styleTemplates.map(t =>
-        t.id === templateId ? { ...t, ...updates } : t
-      ),
-    }));
-  },
-
-  getDefaultTemplate: () => {
-    const state = get();
-    return state.styleTemplates.find(t => t.isDefault) || null;
-  },
-
-  setDefaultTemplate: (templateId) => {
-    set((state) => ({
-      styleTemplates: state.styleTemplates.map(t => ({
-        ...t,
-        isDefault: t.id === templateId,
-      })),
-    }));
-  },
-  
   // 批量載入專案字幕
   loadProjectSegments: (segments) => {
     console.log('🔍 loadProjectSegments 被調用，傳入的 segments:', segments.slice(0, 2));
@@ -562,7 +485,7 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       return {
         ...seg,
         id: String(seg.id || index + 1), // 確保 id 是字符串格式
-        style: { ...DEFAULT_STYLE, ...(seg.style || {}) }, // 合併樣式
+        style: { ...defaultStyle, ...(seg.style || {}) }, // 合併樣式
       };
     });
     
