@@ -324,14 +324,8 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
   if (!isOpen) return null;
 
   return (
-    <div 
-      className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3"
-      onClick={onClose}
-    >
-      <div 
-        className="bg-gray-900 rounded-lg border border-gray-700 w-full max-w-2xl max-h-[85vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3">
+      <div className="bg-gray-900 rounded-lg border border-gray-700 w-full max-w-2xl max-h-[85vh] flex flex-col">
         {/* 標題列 */}
         <div className="flex items-center justify-between p-3 border-b border-gray-700">
           <h2 className="text-base font-bold">批量編輯字幕</h2>

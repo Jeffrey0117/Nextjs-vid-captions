@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     console.log('開始翻譯...');
 
     // 翻譯文字到中文（繁體）
-    const result = await deeplClient.translateText(text, null, 'ZH-HANT' as any);
+    const result = await deeplClient.translateText(text, null, 'ZH-HANT');
 
     console.log('DeepL API 結果:', result);
 
