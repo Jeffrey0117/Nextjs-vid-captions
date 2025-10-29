@@ -244,8 +244,8 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
     }
   };
 
-  // 通用翻譯函數
-  const translateAllSubtitles = async (apiEndpoint: string, serviceName: string) => {
+  // DeepL 翻譯功能 - 批量模式
+  const translateAllSubtitles = async () => {
     if (segments.length === 0) {
       alert('沒有字幕可以翻譯');
       return;
@@ -265,10 +265,10 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
         return;
       }
 
-      console.log(`開始 ${serviceName} 批量翻譯:`, textsToTranslate);
+      console.log('開始批量翻譯:', textsToTranslate);
 
       // 一次性發送所有文字到 API
-      const response = await fetch(apiEndpoint, {
+      const response = await fetch('/api/deepl-translate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -283,7 +283,7 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
       const data = await response.json();
       
       if (data.success && data.translatedTexts && Array.isArray(data.translatedTexts)) {
-        console.log(`${serviceName} 批量翻譯結果:`, data.translatedTexts);
+        console.log('批量翻譯結果:', data.translatedTexts);
         
         // 將翻譯結果應用到對應的字幕
         let textIndex = 0;
@@ -315,30 +315,22 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
           setTranslationProgress(Math.round(((segmentIndex + 1) / segments.length) * 100));
         });
 
-        console.log(`${serviceName} 批量翻譯完成，當前 editedTexts:`, editedTexts);
-        alert(`${serviceName} 翻譯完成！已翻譯 ${segments.length} 條字幕`);
+        console.log('批量翻譯完成，當前 editedTexts:', editedTexts);
+        alert(`翻譯完成！已翻譯 ${segments.length} 條字幕`);
       } else {
-        console.error(`${serviceName} 批量翻譯失敗: API 返回無效數據`, data);
-        alert(`${serviceName} 翻譯失敗: API 返回無效數據`);
+        console.error('批量翻譯失敗: API 返回無效數據', data);
+        alert('翻譯失敗: API 返回無效數據');
       }
     } catch (error) {
-      console.error(`${serviceName} 批量翻譯失敗:`, error);
-      alert(`${serviceName} 翻譯失敗: ` + (error as Error).message);
+      console.error('批量翻譯失敗:', error);
+      alert('翻譯失敗: ' + (error as Error).message);
     } finally {
       setIsTranslating(false);
       setTranslationProgress(0);
     }
   };
 
-  // DeepL 翻譯
-  const translateWithDeepL = () => {
-    translateAllSubtitles('/api/deepl-translate', 'DeepL');
-  };
 
-  // Grok 翻譯
-  const translateWithGrok = () => {
-    translateAllSubtitles('/api/grok-translate', 'Grok');
-  };
 
   if (!isOpen) return null;
 
@@ -379,14 +371,14 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
             >
               <Replace size={16} />
             </button>
-            {/* 翻譯選擇按鈕 */}
+            {/* DeepL 翻譯按鈕 */}
             <button
-              onClick={() => setShowTranslationModal(true)}
+              onClick={translateAllSubtitles}
               disabled={isTranslating}
               className={`p-1.5 hover:bg-gray-800 rounded transition relative ${
                 isTranslating ? 'bg-orange-600 cursor-not-allowed' : 'hover:bg-orange-600'
               }`}
-              title={isTranslating ? `翻譯中... ${translationProgress}%` : '選擇翻譯服務'}
+              title={isTranslating ? `翻譯中... ${translationProgress}%` : 'DeepL 翻譯所有字幕'}
             >
               <Languages size={16} />
               {isTranslating && (
@@ -711,14 +703,6 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
           </div>
         </div>
       </div>
-
-      {/* 翻譯選擇模態視窗 */}
-      <TranslationSelectionModal
-        isOpen={showTranslationModal}
-        onClose={() => setShowTranslationModal(false)}
-        onSelectDeepL={translateWithDeepL}
-        onSelectGrok={translateWithGrok}
-      />
     </div>
   );
 }

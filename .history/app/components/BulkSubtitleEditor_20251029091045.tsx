@@ -330,15 +330,7 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
     }
   };
 
-  // DeepL 翻譯
-  const translateWithDeepL = () => {
-    translateAllSubtitles('/api/deepl-translate', 'DeepL');
-  };
 
-  // Grok 翻譯
-  const translateWithGrok = () => {
-    translateAllSubtitles('/api/grok-translate', 'Grok');
-  };
 
   if (!isOpen) return null;
 
@@ -379,14 +371,14 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
             >
               <Replace size={16} />
             </button>
-            {/* 翻譯選擇按鈕 */}
+            {/* DeepL 翻譯按鈕 */}
             <button
-              onClick={() => setShowTranslationModal(true)}
+              onClick={translateAllSubtitles}
               disabled={isTranslating}
               className={`p-1.5 hover:bg-gray-800 rounded transition relative ${
                 isTranslating ? 'bg-orange-600 cursor-not-allowed' : 'hover:bg-orange-600'
               }`}
-              title={isTranslating ? `翻譯中... ${translationProgress}%` : '選擇翻譯服務'}
+              title={isTranslating ? `翻譯中... ${translationProgress}%` : 'DeepL 翻譯所有字幕'}
             >
               <Languages size={16} />
               {isTranslating && (
@@ -711,14 +703,6 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
           </div>
         </div>
       </div>
-
-      {/* 翻譯選擇模態視窗 */}
-      <TranslationSelectionModal
-        isOpen={showTranslationModal}
-        onClose={() => setShowTranslationModal(false)}
-        onSelectDeepL={translateWithDeepL}
-        onSelectGrok={translateWithGrok}
-      />
     </div>
   );
 }

@@ -32,8 +32,8 @@ export async function POST(request: Request) {
 
     // 處理結果 - DeepL 批量翻譯會返回陣列
     const translatedTexts = Array.isArray(result) 
-      ? result.map((r: any) => r.text) 
-      : [(result as any).text];
+      ? result.map(r => r.text) 
+      : [result.text];
 
     console.log('翻譯完成:', {
       原文數量: textToTranslate.length,

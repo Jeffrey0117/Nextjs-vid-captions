@@ -711,14 +711,6 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
           </div>
         </div>
       </div>
-
-      {/* 翻譯選擇模態視窗 */}
-      <TranslationSelectionModal
-        isOpen={showTranslationModal}
-        onClose={() => setShowTranslationModal(false)}
-        onSelectDeepL={translateWithDeepL}
-        onSelectGrok={translateWithGrok}
-      />
     </div>
   );
 }
