@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Stroke Subtitles</title>
+</head>
+<body>
+    <h1>測試描邊字幕渲染</h1>
+    
+    <button onclick="testStrokeSubtitles()">測試描邊字幕</button>
+    
+    <div id="result"></div>
+    
+    <script>
+        async function testStrokeSubtitles() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '正在測試...';
+            
+            // 測試字幕資料 - 包含描邊效果
+            const subtitles = [
+                {
+                    startTime: 0,
+                    endTime: 3,
+                    text: '這是測試字幕 - 有黑色描邊',
+                    style: {
+                        fontSize: 32,
+                        fontFamily: 'Arial',
+                        fontWeight: 'bold',
+                        color: '#FFFFFF',
+                        enableStroke: true,
+                        strokeColor: '#000000',
+                        strokeWidth: 3,
+                        positionX: 50,
+                        positionY: 80
+                    }
+                },
+                {
+                    startTime: 3,
+                    endTime: 6,
+                    text: '第二段字幕 - 紅色描邊',
+                    style: {
+                        fontSize: 28,
+                        fontFamily: 'Arial',
+                        fontWeight: 'normal',
+                        color: '#FFFF00',
+                        enableStroke: true,
+                        strokeColor: '#FF0000',
+                        strokeWidth: 2,
+                        positionX: 50,
+                        positionY: 85
+                    }
+                }
+            ];
+            
+            const formData = new FormData();
+            formData.append('videoPath', 'test-video.mp4');
+            formData.append('subtitles', JSON.stringify(subtitles));
+            
+            try {
+                const response = await fetch('/api/render-video/drawtext', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = URL.createObjectURL(blob);
+                    
+                    resultDiv.innerHTML = `
+                        <p>✅ 渲染成功！檔案大小: ${(blob.size / 1024 / 1024).toFixed(2)} MB</p>
+                        <video controls width="600" style="max-width: 100%;">
+                            <source src="${url}" type="video/mp4">
+                        </video>
+                        <br>
+                        <a href="${url}" download="stroke_test.mp4">下載影片</a>
+                    `;
+                } else {
+                    const error = await response.text();
+                    resultDiv.innerHTML = `❌ 錯誤: ${error}`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `❌ 請求失敗: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

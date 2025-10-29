@@ -19,6 +19,7 @@ export default function EditorProPage() {
   const [isTranslating, setIsTranslating] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
+  const [renderMethod, setRenderMethod] = useState<'ffmpeg' | 'canvas'>('canvas');
   const [targetLang, setTargetLang] = useState('zh-TW');
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -597,7 +598,22 @@ export default function EditorProPage() {
         setExportProgress(prev => Math.min(prev + 10, 90));
       }, 500);
 
-      const response = await fetch('/api/burn-subtitles', {
+      // 根據選擇的渲染方式調用不同的 API
+      let apiEndpoint: string;
+      if (renderMethod === 'canvas') {
+        apiEndpoint = '/api/render-video/drawtext'; // 使用 FFmpeg drawtext 高品質渲染
+      } else {
+        apiEndpoint = '/api/burn-subtitles';
+      }
+      
+      console.log('🎬 Using API endpoint:', apiEndpoint);
+      console.log('📊 Form data contents:', {
+        hasVideoFile: !!videoFile,
+        videoPath: videoUrl?.startsWith('/temp/') ? videoUrl.replace('/temp/', '') : null,
+        segmentsCount: actualSegments.length
+      });
+      
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         body: formData,
       });
@@ -607,7 +623,10 @@ export default function EditorProPage() {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || '輸出失敗');
+        console.error('🚨 Server response error:', error);
+        console.error('Response status:', response.status);
+        console.error('Response headers:', Object.fromEntries(response.headers.entries()));
+        throw new Error(`${error.error || '輸出失敗'}: ${error.details || ''}`);
       }
 
       // 下載影片
@@ -1103,6 +1122,23 @@ export default function EditorProPage() {
           <Edit3 size={12} />
           批量編輯
         </button>
+
+        {/* 渲染方式選擇器 */}
+        <div className="flex items-center gap-1">
+          <select
+            value={renderMethod}
+            onChange={(e) => setRenderMethod(e.target.value as 'ffmpeg' | 'canvas')}
+            className="px-2 py-1 text-xs bg-gray-800 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
+            disabled={isExporting}
+            title={renderMethod === 'canvas' ? 
+              '使用高級 ASS 渲染，支援更好的字體效果、陰影和位置控制' : 
+              '基本 FFmpeg 渲染，速度較快但效果有限'
+            }
+          >
+            <option value="canvas">Canvas 渲染 (高質量)</option>
+            <option value="ffmpeg">FFmpeg 渲染 (兼容)</option>
+          </select>
+        </div>
 
         <button
           onClick={handleExportVideo}

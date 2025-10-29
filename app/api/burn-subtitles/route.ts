@@ -110,10 +110,11 @@ export async function POST(request: Request) {
       }
 
       // 回傳影片檔案
-      return new Response(outputBuffer, {
+      return new Response(new Uint8Array(outputBuffer), {
         headers: {
           "Content-Type": "video/mp4",
           "Content-Disposition": `attachment; filename="subtitled_video.mp4"`,
+          "Content-Length": outputBuffer.length.toString(),
         },
       });
     } catch (ffmpegError: any) {

@@ -21,6 +21,9 @@ export interface SubtitleSegment {
     shadowOffsetX: number; // 陰影 X 偏移 (-50 to 50)
     shadowOffsetY: number; // 陰影 Y 偏移 (-50 to 50)
     shadowBlur: number; // 陰影模糊半徑 (0-50)
+    enableStroke: boolean; // 描邊開關
+    strokeColor: string; // 描邊顏色
+    strokeWidth: number; // 描邊寬度 (0-10)
     positionX: number; // 水平位置百分比 (0-100, 50=中間)
     positionY: number; // 垂直位置百分比 (0-100)
     maxWidth: number; // 最大寬度 vw 單位 (10-100)
@@ -122,7 +125,7 @@ const formatSrtTime = (seconds: number): string => {
 // 預設樣式常數
 const DEFAULT_STYLE: SubtitleSegment['style'] = {
   fontSize: 32,
-  fontFamily: 'Arial',
+  fontFamily: 'Noto Sans TC',
   fontWeight: 'normal',
   fontStyle: 'normal',
   textDecoration: 'none',
@@ -135,6 +138,9 @@ const DEFAULT_STYLE: SubtitleSegment['style'] = {
   shadowOffsetX: 4,
   shadowOffsetY: 4,
   shadowBlur: 8,
+  enableStroke: true,
+  strokeColor: '#000000',
+  strokeWidth: 2,
   positionX: 50,
   positionY: 90,
   maxWidth: 80,
@@ -350,6 +356,9 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
               shadowOffsetX: 4,
               shadowOffsetY: 4,
               shadowBlur: 8,
+              enableStroke: false,
+              strokeColor: '#000000',
+              strokeWidth: 2,
               positionX: 50,
               positionY: 90,
               maxWidth: 80,
@@ -470,8 +479,15 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
         ? state.styleTemplates.map(t => ({ ...t, isDefault: false }))
         : state.styleTemplates;
       
+      const newTemplates = [...updatedTemplates, newTemplate];
+      
+      // 持久化到 localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('subtitle-style-templates', JSON.stringify(newTemplates));
+      }
+      
       return {
-        styleTemplates: [...updatedTemplates, newTemplate],
+        styleTemplates: newTemplates,
       };
     });
   },

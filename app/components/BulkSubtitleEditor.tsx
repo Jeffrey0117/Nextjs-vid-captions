@@ -65,11 +65,7 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
     if (isOpen && segments.length > 0) {
       const firstSegment = segments[0];
       if (firstSegment.style) {
-        // 設置字體大小
-        if (firstSegment.style.fontSize) {
-          setSubtitleFontSize(firstSegment.style.fontSize);
-        }
-        // 設置位置
+        // 設置位置（這個是字幕位置，應該保留）
         if (firstSegment.style.positionX !== undefined && firstSegment.style.positionY !== undefined) {
           setSubtitlePosition({ 
             x: firstSegment.style.positionX, 
@@ -396,9 +392,9 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
               )}
             </button>
             
-            {/* 字體大小控制 */}
+            {/* UI顯示字體大小控制 */}
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-400">字體:</span>
+              <span className="text-xs text-gray-400">UI字體:</span>
               <input
                 type="range"
                 min="10"
@@ -407,7 +403,7 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
                 onChange={(e) => {
                   const newFontSize = Number(e.target.value);
                   setSubtitleFontSize(newFontSize);
-                  applyFontSizeToAllSegments(newFontSize);
+                  // 注意：這裡不調用 applyFontSizeToAllSegments，只影響UI顯示
                 }}
                 className="w-20"
               />
@@ -652,9 +648,9 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
                 </div>
               </div>
               
-              {/* 右側字體大小控制 */}
+              {/* 右側字幕字體大小控制 */}
               <div className="w-16 flex flex-col items-center bg-gray-800 p-3 rounded border border-gray-600">
-                <span className="text-xs text-gray-400 mb-2">字體大小</span>
+                <span className="text-xs text-gray-400 mb-2">字幕大小</span>
                 <div className="flex flex-col items-center justify-center" style={{ height: '240px', width: '40px' }}>
                   <span className="text-xs text-gray-500 mb-2">32px</span>
                   <div className="flex items-center justify-center" style={{ height: '200px', width: '40px' }}>

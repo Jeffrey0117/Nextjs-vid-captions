@@ -1,0 +1,707 @@
+'use client';
+
+import { useSubtitleStore, SubtitleSegment } from '../stores/subtitle-store';
+import { HexColorPicker } from 'react-colorful';
+import { useState } from 'react';
+import { Type, Bold, Italic, Underline, Strikethrough, Palette, Eye, Square, Save, X, Plus } from 'lucide-react';
+
+interface SubtitlePropertiesPanelProps {
+  selectedSegmentId: string | null;
+  applyToAll: boolean;
+  setApplyToAll: (value: boolean) => void;
+}
+
+export default function SubtitlePropertiesPanel({
+  selectedSegmentId,
+  applyToAll,
+  setApplyToAll
+}: SubtitlePropertiesPanelProps) {
+  const { tracks, updateSegment } = useSubtitleStore();
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showBgColorPicker, setShowBgColorPicker] = useState(false);
+  const [showShadowColorPicker, setShowShadowColorPicker] = useState(false);
+
+  // 從 tracks 計算 segments (reactive)
+  const segments = tracks.length > 0 ? tracks[0].segments : [];
+  const selectedSegment = segments.find(seg => seg.id === selectedSegmentId);
+
+  if (!selectedSegment) {
+    return (
+      <div className="h-full flex items-center justify-center text-gray-500">
+        <div className="text-center">
+          <Type size={48} className="mx-auto mb-4 opacity-50" />
+          <p>請選擇字幕片段進行編輯</p>
+        </div>
+      </div>
+    );
+  }
+
+  const updateStyle = (updates: Partial<SubtitleSegment['style']>) => {
+    if (applyToAll) {
+      // 套用到所有字幕
+      segments.forEach(seg => {
+        updateSegment(seg.id, {
+          style: { ...seg.style, ...updates },
+        });
+      });
+    } else {
+      // 只更新選中的字幕
+      updateSegment(selectedSegment.id, {
+        style: { ...selectedSegment.style, ...updates },
+      });
+    }
+  };
+
+  return (
+    <div className="h-full overflow-y-auto p-3 space-y-4">
+      {/* 樣式模板區域 */}
+      <StyleTemplateSection 
+        selectedSegment={selectedSegment}
+        applyToAll={applyToAll}
+      />
+
+      {/* 套用到所有字幕 */}
+      <div className="flex items-center gap-2 p-2 bg-blue-900 border border-blue-700 rounded-lg">
+        <input
+          type="checkbox"
+          id="apply-to-all"
+          checked={applyToAll}
+          onChange={(e) => setApplyToAll(e.target.checked)}
+          className="w-4 h-4"
+        />
+        <label htmlFor="apply-to-all" className="text-xs font-medium cursor-pointer">
+          套用到所有字幕
+        </label>
+      </div>
+
+      {/* 文字內容 */}
+      <div>
+        <label className="block text-xs font-medium mb-1.5">字幕內容</label>
+        <textarea
+          value={selectedSegment.text}
+          onChange={(e) => updateSegment(selectedSegment.id, { text: e.target.value })}
+          className="w-full px-2 py-1.5 text-xs bg-gray-800 border border-gray-700 rounded-lg resize-none focus:outline-none focus:border-blue-500"
+          rows={2}
+        />
+      </div>
+
+      {/* 譯文 */}
+      {selectedSegment.translatedText && (
+        <div>
+          <label className="block text-xs font-medium mb-1.5">翻譯文字</label>
+          <textarea
+            value={selectedSegment.translatedText}
+            onChange={(e) => updateSegment(selectedSegment.id, { translatedText: e.target.value })}
+            className="w-full px-2 py-1.5 text-xs bg-gray-800 border border-gray-700 rounded-lg resize-none focus:outline-none focus:border-blue-500"
+            rows={2}
+          />
+        </div>
+      )}
+
+      {/* 字型樣式 */}
+      <div>
+        <label className="block text-xs font-medium mb-1.5">樣式</label>
+        <div className="flex gap-1.5">
+          <button
+            onClick={() => updateStyle({
+              fontWeight: selectedSegment.style.fontWeight === 'bold' ? 'normal' : 'bold'
+            })}
+            className={`flex-1 px-2 py-1.5 rounded-lg border transition ${
+              selectedSegment.style.fontWeight === 'bold'
+                ? 'bg-blue-600 border-blue-500'
+                : 'bg-gray-800 border-gray-700 hover:bg-gray-750'
+            }`}
+          >
+            <Bold size={14} className="mx-auto" />
+          </button>
+          <button
+            onClick={() => updateStyle({
+              fontStyle: selectedSegment.style.fontStyle === 'italic' ? 'normal' : 'italic'
+            })}
+            className={`flex-1 px-2 py-1.5 rounded-lg border transition ${
+              selectedSegment.style.fontStyle === 'italic'
+                ? 'bg-blue-600 border-blue-500'
+                : 'bg-gray-800 border-gray-700 hover:bg-gray-750'
+            }`}
+          >
+            <Italic size={14} className="mx-auto" />
+          </button>
+          <button
+            onClick={() => updateStyle({
+              textDecoration: selectedSegment.style.textDecoration === 'underline' ? 'none' : 'underline'
+            })}
+            className={`flex-1 px-2 py-1.5 rounded-lg border transition ${
+              selectedSegment.style.textDecoration === 'underline'
+                ? 'bg-blue-600 border-blue-500'
+                : 'bg-gray-800 border-gray-700 hover:bg-gray-750'
+            }`}
+          >
+            <Underline size={14} className="mx-auto" />
+          </button>
+          <button
+            onClick={() => updateStyle({
+              textDecoration: selectedSegment.style.textDecoration === 'line-through' ? 'none' : 'line-through'
+            })}
+            className={`flex-1 px-2 py-1.5 rounded-lg border transition ${
+              selectedSegment.style.textDecoration === 'line-through'
+                ? 'bg-blue-600 border-blue-500'
+                : 'bg-gray-800 border-gray-700 hover:bg-gray-750'
+            }`}
+          >
+            <Strikethrough size={14} className="mx-auto" />
+          </button>
+        </div>
+      </div>
+
+      {/* 字型大小 */}
+      <div>
+        <label className="block text-xs font-medium mb-1.5">
+          字型大小: {selectedSegment.style.fontSize}px
+        </label>
+        <div className="flex gap-1.5 items-center">
+          <input
+            type="range"
+            min="16"
+            max="120"
+            value={selectedSegment.style.fontSize}
+            onChange={(e) => updateStyle({ fontSize: parseInt(e.target.value) })}
+            className="flex-1"
+          />
+          <input
+            type="number"
+            min="16"
+            max="120"
+            value={selectedSegment.style.fontSize}
+            onChange={(e) => updateStyle({ fontSize: parseInt(e.target.value) })}
+            className="w-12 px-1.5 py-0.5 text-xs bg-gray-800 border border-gray-700 rounded text-center"
+          />
+        </div>
+      </div>
+
+      {/* 文字顏色 */}
+      <div>
+        <label className="block text-xs font-medium mb-1.5">文字顏色</label>
+        <div className="relative">
+          <button
+            onClick={() => setShowColorPicker(!showColorPicker)}
+            className="w-full flex items-center gap-2 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-750 transition"
+          >
+            <div
+              className="w-6 h-6 rounded border-2 border-gray-600"
+              style={{ backgroundColor: selectedSegment.style.color }}
+            />
+            <span className="font-mono text-xs">{selectedSegment.style.color}</span>
+          </button>
+          {showColorPicker && (
+            <div className="absolute top-full mt-2 z-50 p-3 bg-gray-900 border border-gray-700 rounded-lg shadow-xl">
+              <HexColorPicker
+                color={selectedSegment.style.color}
+                onChange={(color) => updateStyle({ color })}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 透明度 */}
+      <div>
+        <label className="block text-xs font-medium mb-1.5">
+          透明度: {Math.round(selectedSegment.style.opacity * 100)}%
+        </label>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={selectedSegment.style.opacity * 100}
+          onChange={(e) => updateStyle({ opacity: parseInt(e.target.value) / 100 })}
+          className="w-full"
+        />
+      </div>
+
+      {/* 字體選擇 */}
+      <div>
+        <label className="block text-xs font-medium mb-1.5">字體系列</label>
+        <select
+          value={selectedSegment.style.fontFamily}
+          onChange={(e) => updateStyle({ fontFamily: e.target.value })}
+          className="w-full px-2 py-1.5 text-xs bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
+        >
+          <optgroup label="系統字體">
+            <option value="Arial">Arial</option>
+            <option value="Helvetica">Helvetica</option>
+            <option value="Microsoft JhengHei">微軟正黑體</option>
+            <option value="SimSun">宋體</option>
+          </optgroup>
+          <optgroup label="Google Fonts - 英文">
+            <option value="Roboto">Roboto</option>
+            <option value="Open Sans">Open Sans</option>
+            <option value="Montserrat">Montserrat</option>
+            <option value="Poppins">Poppins</option>
+            <option value="Inter">Inter</option>
+            <option value="Oswald">Oswald</option>
+            <option value="Raleway">Raleway</option>
+            <option value="Ubuntu">Ubuntu</option>
+          </optgroup>
+          <optgroup label="Google Fonts - 中文">
+            <option value="Noto Sans TC">Noto Sans TC</option>
+            <option value="Noto Serif TC">Noto Serif TC</option>
+            <option value="Ma Shan Zheng">Ma Shan Zheng</option>
+            <option value="Zhi Mang Xing">Zhi Mang Xing</option>
+            <option value="ZCOOL XiaoWei">ZCOOL XiaoWei</option>
+            <option value="ZCOOL KuaiLe">ZCOOL KuaiLe</option>
+            <option value="Liu Jian Mao Cao">Liu Jian Mao Cao</option>
+          </optgroup>
+          <optgroup label="特效字體">
+            <option value="Orbitron">Orbitron (科技風)</option>
+            <option value="Bangers">Bangers (漫畫風)</option>
+            <option value="Creepster">Creepster (恐怖風)</option>
+            <option value="Bungee">Bungee (立體感)</option>
+            <option value="Fredoka One">Fredoka One (圓潤)</option>
+            <option value="Righteous">Righteous (復古)</option>
+          </optgroup>
+        </select>
+      </div>
+
+      {/* 陰影效果 */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <input
+            type="checkbox"
+            id="enable-shadow"
+            checked={selectedSegment.style.enableShadow}
+            onChange={(e) => updateStyle({ enableShadow: e.target.checked })}
+            className="w-3.5 h-3.5"
+          />
+          <label htmlFor="enable-shadow" className="text-xs font-medium cursor-pointer">
+            啟用陰影效果
+          </label>
+        </div>
+
+        {selectedSegment.style.enableShadow && (
+          <div className="space-y-3 pl-4 border-l-2 border-gray-700">
+            {/* 陰影顏色 */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5">陰影顏色</label>
+              <div className="relative">
+                <button
+                  onClick={() => setShowShadowColorPicker(!showShadowColorPicker)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-750 transition"
+                >
+                  <div
+                    className="w-6 h-6 rounded border-2 border-gray-600"
+                    style={{ backgroundColor: selectedSegment.style.shadowColor }}
+                  />
+                  <span className="font-mono text-xs">{selectedSegment.style.shadowColor}</span>
+                </button>
+                {showShadowColorPicker && (
+                  <div className="absolute top-full mt-2 z-50 p-3 bg-gray-900 border border-gray-700 rounded-lg shadow-xl">
+                    <HexColorPicker
+                      color={selectedSegment.style.shadowColor}
+                      onChange={(color) => updateStyle({ shadowColor: color })}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 陰影 X 偏移 */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5">
+                X 偏移: {selectedSegment.style.shadowOffsetX}px
+              </label>
+              <div className="flex gap-1.5 items-center">
+                <input
+                  type="range"
+                  min="-50"
+                  max="50"
+                  value={selectedSegment.style.shadowOffsetX}
+                  onChange={(e) => updateStyle({ shadowOffsetX: parseInt(e.target.value) })}
+                  className="flex-1"
+                />
+                <input
+                  type="number"
+                  min="-50"
+                  max="50"
+                  value={selectedSegment.style.shadowOffsetX}
+                  onChange={(e) => updateStyle({ shadowOffsetX: parseInt(e.target.value) })}
+                  className="w-12 px-1.5 py-0.5 text-xs bg-gray-800 border border-gray-700 rounded text-center"
+                />
+              </div>
+            </div>
+
+            {/* 陰影 Y 偏移 */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5">
+                Y 偏移: {selectedSegment.style.shadowOffsetY}px
+              </label>
+              <div className="flex gap-1.5 items-center">
+                <input
+                  type="range"
+                  min="-50"
+                  max="50"
+                  value={selectedSegment.style.shadowOffsetY}
+                  onChange={(e) => updateStyle({ shadowOffsetY: parseInt(e.target.value) })}
+                  className="flex-1"
+                />
+                <input
+                  type="number"
+                  min="-50"
+                  max="50"
+                  value={selectedSegment.style.shadowOffsetY}
+                  onChange={(e) => updateStyle({ shadowOffsetY: parseInt(e.target.value) })}
+                  className="w-12 px-1.5 py-0.5 text-xs bg-gray-800 border border-gray-700 rounded text-center"
+                />
+              </div>
+            </div>
+
+            {/* 陰影模糊半徑 */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5">
+                模糊半徑: {selectedSegment.style.shadowBlur}px
+              </label>
+              <div className="flex gap-1.5 items-center">
+                <input
+                  type="range"
+                  min="0"
+                  max="50"
+                  value={selectedSegment.style.shadowBlur}
+                  onChange={(e) => updateStyle({ shadowBlur: parseInt(e.target.value) })}
+                  className="flex-1"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  max="50"
+                  value={selectedSegment.style.shadowBlur}
+                  onChange={(e) => updateStyle({ shadowBlur: parseInt(e.target.value) })}
+                  className="w-12 px-1.5 py-0.5 text-xs bg-gray-800 border border-gray-700 rounded text-center"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 描邊效果 */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <input
+            type="checkbox"
+            id="enable-stroke"
+            checked={selectedSegment.style.enableStroke}
+            onChange={(e) => updateStyle({ enableStroke: e.target.checked })}
+            className="w-3.5 h-3.5"
+          />
+          <label htmlFor="enable-stroke" className="text-xs font-medium cursor-pointer">
+            啟用描邊效果
+          </label>
+        </div>
+
+        {selectedSegment.style.enableStroke && (
+          <div className="space-y-3 pl-4 border-l-2 border-gray-700">
+            {/* 描邊顏色 */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5">描邊顏色</label>
+              <div className="relative">
+                <button
+                  onClick={() => setShowStrokeColorPicker(!showStrokeColorPicker)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-750 transition"
+                >
+                  <div
+                    className="w-6 h-6 rounded border-2 border-gray-600"
+                    style={{ backgroundColor: selectedSegment.style.strokeColor }}
+                  />
+                  <span className="font-mono text-xs">{selectedSegment.style.strokeColor}</span>
+                </button>
+                {showStrokeColorPicker && (
+                  <div className="absolute top-full mt-2 z-50 p-3 bg-gray-900 border border-gray-700 rounded-lg shadow-xl">
+                    <HexColorPicker
+                      color={selectedSegment.style.strokeColor}
+                      onChange={(color) => updateStyle({ strokeColor: color })}
+                    />
+                    <button
+                      onClick={() => setShowStrokeColorPicker(false)}
+                      className="mt-2 w-full px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded"
+                    >
+                      確定
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 描邊寬度 */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5">
+                描邊寬度: {selectedSegment.style.strokeWidth}px
+              </label>
+              <div className="flex gap-1.5 items-center">
+                <input
+                  type="range"
+                  min="0"
+                  max="10"
+                  value={selectedSegment.style.strokeWidth}
+                  onChange={(e) => updateStyle({ strokeWidth: parseInt(e.target.value) })}
+                  className="flex-1"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  max="10"
+                  value={selectedSegment.style.strokeWidth}
+                  onChange={(e) => updateStyle({ strokeWidth: parseInt(e.target.value) })}
+                  className="w-12 px-1.5 py-0.5 text-xs bg-gray-800 border border-gray-700 rounded text-center"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 縮放比例 */}
+      <div>
+        <label className="block text-xs font-medium mb-1.5">
+          縮放比例: {selectedSegment.style.scale.toFixed(1)}x
+        </label>
+        <p className="text-[0.65rem] text-gray-400 mb-1.5">提示: 也可以直接拖曳字幕邊框縮放</p>
+        <div className="flex gap-1.5 items-center">
+          <input
+            type="range"
+            min="50"
+            max="300"
+            step="10"
+            value={selectedSegment.style.scale * 100}
+            onChange={(e) => updateStyle({ scale: parseInt(e.target.value) / 100 })}
+            className="flex-1"
+          />
+          <input
+            type="number"
+            min="0.5"
+            max="3.0"
+            step="0.1"
+            value={selectedSegment.style.scale}
+            onChange={(e) => updateStyle({ scale: parseFloat(e.target.value) })}
+            className="w-12 px-1.5 py-0.5 text-xs bg-gray-800 border border-gray-700 rounded text-center"
+          />
+        </div>
+      </div>
+
+      {/* 背景顏色 */}
+      <div>
+        <label className="block text-xs font-medium mb-1.5">背景顏色</label>
+        <div className="space-y-1.5">
+          <div className="relative">
+            <button
+              onClick={() => setShowBgColorPicker(!showBgColorPicker)}
+              className="w-full flex items-center gap-2 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-750 transition"
+              disabled={selectedSegment.style.backgroundColor === 'transparent'}
+            >
+              <div
+                className="w-6 h-6 rounded border-2 border-gray-600"
+                style={{
+                  backgroundColor: selectedSegment.style.backgroundColor === 'transparent'
+                    ? '#000000'
+                    : selectedSegment.style.backgroundColor
+                }}
+              />
+              <span className="font-mono text-xs">
+                {selectedSegment.style.backgroundColor === 'transparent'
+                  ? '透明'
+                  : selectedSegment.style.backgroundColor}
+              </span>
+            </button>
+            {showBgColorPicker && selectedSegment.style.backgroundColor !== 'transparent' && (
+              <div className="absolute top-full mt-2 z-50 p-3 bg-gray-900 border border-gray-700 rounded-lg shadow-xl">
+                <HexColorPicker
+                  color={selectedSegment.style.backgroundColor}
+                  onChange={(color) => updateStyle({ backgroundColor: color })}
+                />
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => updateStyle({
+              backgroundColor: selectedSegment.style.backgroundColor === 'transparent' ? '#000000' : 'transparent'
+            })}
+            className={`w-full px-2 py-1.5 text-xs rounded-lg border transition ${
+              selectedSegment.style.backgroundColor === 'transparent'
+                ? 'bg-blue-600 border-blue-500'
+                : 'bg-gray-800 border-gray-700 hover:bg-gray-750'
+            }`}
+          >
+            {selectedSegment.style.backgroundColor === 'transparent' ? '✓ 透明背景' : '使用透明背景'}
+          </button>
+        </div>
+      </div>
+
+      {/* 垂直位置 */}
+      <div>
+        <label className="block text-xs font-medium mb-1.5">
+          垂直位置: {selectedSegment.style.positionY}%
+        </label>
+        <p className="text-[0.65rem] text-gray-400 mb-1.5">提示: 也可以直接拖曳影片上的字幕</p>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={selectedSegment.style.positionY}
+          onChange={(e) => updateStyle({ positionY: parseInt(e.target.value) })}
+          className="w-full"
+        />
+      </div>
+    </div>
+  );
+}
+
+// 樣式模板區域組件
+interface StyleTemplateSectionProps {
+  selectedSegment: SubtitleSegment;
+  applyToAll: boolean;
+}
+
+function StyleTemplateSection({ selectedSegment, applyToAll }: StyleTemplateSectionProps) {
+  const { 
+    styleTemplates, 
+    saveStyleTemplate, 
+    applyStyleTemplate, 
+    deleteStyleTemplate,
+    setDefaultTemplate
+  } = useSubtitleStore();
+  
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+
+  const handleSaveTemplate = () => {
+    if (!templateName.trim()) return;
+    
+    saveStyleTemplate(templateName.trim(), selectedSegment.style, false);
+    setTemplateName('');
+    setShowSaveDialog(false);
+  };
+
+  const handleApplyTemplate = (templateId: string) => {
+    applyStyleTemplate(templateId, selectedSegment.id, applyToAll);
+  };
+
+  const handleSetDefault = (templateId: string) => {
+    setDefaultTemplate(templateId);
+  };
+
+  return (
+    <div className="p-3 bg-gray-900 border border-gray-700 rounded-lg">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-medium flex items-center gap-2">
+          <Type size={16} />
+          樣式模板
+        </h3>
+        <button
+          onClick={() => setShowSaveDialog(true)}
+          className="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 rounded flex items-center gap-1"
+        >
+          <Save size={12} />
+          儲存當前樣式
+        </button>
+      </div>
+
+      {/* 模板格子網格 */}
+      <div className="grid grid-cols-6 gap-2 mb-3">
+        {styleTemplates.map((template) => (
+          <div key={template.id} className="relative group">
+            <button
+              onClick={() => handleApplyTemplate(template.id)}
+              className={`
+                w-full aspect-square rounded-lg border-2 transition-all duration-200
+                flex items-center justify-center text-lg font-bold
+                ${template.isDefault 
+                  ? 'border-yellow-500 bg-yellow-600 hover:bg-yellow-700' 
+                  : 'border-gray-600 bg-gray-700 hover:bg-gray-600'
+                }
+              `}
+              title={template.name}
+            >
+              T
+            </button>
+            
+            {/* 刪除按鈕 - 只有非預設模板才能刪除 */}
+            {!template.isDefault && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteStyleTemplate(template.id);
+                }}
+                className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <X size={10} />
+              </button>
+            )}
+            
+            {/* 設為預設按鈕 */}
+            {!template.isDefault && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSetDefault(template.id);
+                }}
+                className="absolute -bottom-1 -right-1 w-4 h-4 bg-yellow-600 hover:bg-yellow-700 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                title="設為預設"
+              >
+                ⭐
+              </button>
+            )}
+            
+            {/* 模板名稱 */}
+            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 px-1 py-0.5 bg-black rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+              {template.name}
+            </div>
+          </div>
+        ))}
+        
+        {/* 新增模板按鈕 - 如果模板數量少於12個 */}
+        {styleTemplates.length < 12 && (
+          <button
+            onClick={() => setShowSaveDialog(true)}
+            className="w-full aspect-square rounded-lg border-2 border-dashed border-gray-600 hover:border-gray-500 flex items-center justify-center text-gray-500 hover:text-gray-400 transition-all"
+          >
+            <Plus size={16} />
+          </button>
+        )}
+      </div>
+
+      {/* 儲存對話框 */}
+      {showSaveDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 w-80">
+            <h4 className="text-sm font-medium mb-3">儲存樣式模板</h4>
+            <input
+              type="text"
+              value={templateName}
+              onChange={(e) => setTemplateName(e.target.value)}
+              placeholder="請輸入模板名稱..."
+              className="w-full px-3 py-2 text-sm bg-gray-900 border border-gray-600 rounded mb-3 focus:outline-none focus:border-blue-500"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveTemplate();
+                if (e.key === 'Escape') setShowSaveDialog(false);
+              }}
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowSaveDialog(false)}
+                className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 rounded"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSaveTemplate}
+                disabled={!templateName.trim()}
+                className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded"
+              >
+                儲存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

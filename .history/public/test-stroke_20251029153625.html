@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>字幕渲染測試</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .result { margin-top: 10px; padding: 10px; background: #f5f5f5; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>字幕描邊渲染測試</h1>
+    
+    <div class="test-section">
+        <h3>測試 Drawtext API</h3>
+        <button onclick="testDrawtextAPI()">測試描邊渲染</button>
+        <div id="drawtext-result" class="result"></div>
+    </div>
+
+    <script>
+        async function testDrawtextAPI() {
+            const resultDiv = document.getElementById('drawtext-result');
+            resultDiv.innerHTML = '正在測試...';
+
+            // 準備測試資料 - 包含完整的描邊屬性
+            const testSubtitles = [
+                {
+                    startTime: 0.5,
+                    endTime: 3.0,
+                    text: "測試描邊效果",
+                    style: {
+                        fontSize: 32,
+                        fontFamily: "Noto Sans TC",
+                        fontWeight: "bold",
+                        fontStyle: "normal",
+                        textDecoration: "none",
+                        color: "#FFFFFF",
+                        opacity: 1,
+                        backgroundColor: "transparent",
+                        position: "bottom",
+                        enableShadow: false,
+                        shadowColor: "#000000",
+                        shadowOffsetX: 2,
+                        shadowOffsetY: 2,
+                        shadowBlur: 4,
+                        enableStroke: true,        // 啟用描邊
+                        strokeColor: "#FF0000",    // 紅色描邊
+                        strokeWidth: 3,            // 描邊寬度
+                        positionX: 50,
+                        positionY: 85,
+                        maxWidth: 80,
+                        scale: 1.0
+                    }
+                },
+                {
+                    startTime: 3.5,
+                    endTime: 6.0,
+                    text: "第二個字幕 - 無描邊",
+                    style: {
+                        fontSize: 28,
+                        fontFamily: "Noto Sans TC",
+                        fontWeight: "normal",
+                        fontStyle: "normal",
+                        textDecoration: "none",
+                        color: "#FFFF00",
+                        opacity: 1,
+                        backgroundColor: "transparent",
+                        position: "center",
+                        enableShadow: true,
+                        shadowColor: "#000000",
+                        shadowOffsetX: 2,
+                        shadowOffsetY: 2,
+                        shadowBlur: 4,
+                        enableStroke: false,       // 不啟用描邊
+                        strokeColor: "#000000",
+                        strokeWidth: 0,
+                        positionX: 50,
+                        positionY: 50,
+                        maxWidth: 80,
+                        scale: 1.0
+                    }
+                }
+            ];
+
+            try {
+                const formData = new FormData();
+                formData.append('subtitles', JSON.stringify(testSubtitles));
+                formData.append('videoPath', 'temp/video_1761584936803.srt'); // 使用現有的測試影片
+
+                const response = await fetch('/api/render-video/drawtext', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    // 下載渲染的影片
+                    const blob = await response.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'stroke_test_video.mp4';
+                    a.click();
+                    
+                    resultDiv.innerHTML = `
+                        <div style="color: green;">✅ 成功！影片已下載</div>
+                        <div>檔案大小: ${(blob.size / 1024 / 1024).toFixed(2)} MB</div>
+                        <div>測試內容:</div>
+                        <ul>
+                            <li>第一個字幕: 白色文字 + 紅色描邊 (寬度 3px)</li>
+                            <li>第二個字幕: 黃色文字 + 黑色陰影 (無描邊)</li>
+                        </ul>
+                    `;
+                } else {
+                    const error = await response.text();
+                    resultDiv.innerHTML = `<div style="color: red;">❌ 錯誤: ${error}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div style="color: red;">❌ 網路錯誤: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

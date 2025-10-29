@@ -20,6 +20,7 @@ export default function SubtitlePropertiesPanel({
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showBgColorPicker, setShowBgColorPicker] = useState(false);
   const [showShadowColorPicker, setShowShadowColorPicker] = useState(false);
+  const [showStrokeColorPicker, setShowStrokeColorPicker] = useState(false);
 
   // 從 tracks 計算 segments (reactive)
   const segments = tracks.length > 0 ? tracks[0].segments : [];
@@ -218,6 +219,50 @@ export default function SubtitlePropertiesPanel({
         />
       </div>
 
+      {/* 字體選擇 */}
+      <div>
+        <label className="block text-xs font-medium mb-1.5">字體系列</label>
+        <select
+          value={selectedSegment.style.fontFamily}
+          onChange={(e) => updateStyle({ fontFamily: e.target.value })}
+          className="w-full px-2 py-1.5 text-xs bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
+        >
+          <optgroup label="系統字體">
+            <option value="Arial">Arial</option>
+            <option value="Helvetica">Helvetica</option>
+            <option value="Microsoft JhengHei">微軟正黑體</option>
+            <option value="SimSun">宋體</option>
+          </optgroup>
+          <optgroup label="Google Fonts - 英文">
+            <option value="Roboto">Roboto</option>
+            <option value="Open Sans">Open Sans</option>
+            <option value="Montserrat">Montserrat</option>
+            <option value="Poppins">Poppins</option>
+            <option value="Inter">Inter</option>
+            <option value="Oswald">Oswald</option>
+            <option value="Raleway">Raleway</option>
+            <option value="Ubuntu">Ubuntu</option>
+          </optgroup>
+          <optgroup label="Google Fonts - 中文">
+            <option value="Noto Sans TC">Noto Sans TC</option>
+            <option value="Noto Serif TC">Noto Serif TC</option>
+            <option value="Ma Shan Zheng">Ma Shan Zheng</option>
+            <option value="Zhi Mang Xing">Zhi Mang Xing</option>
+            <option value="ZCOOL XiaoWei">ZCOOL XiaoWei</option>
+            <option value="ZCOOL KuaiLe">ZCOOL KuaiLe</option>
+            <option value="Liu Jian Mao Cao">Liu Jian Mao Cao</option>
+          </optgroup>
+          <optgroup label="特效字體">
+            <option value="Orbitron">Orbitron (科技風)</option>
+            <option value="Bangers">Bangers (漫畫風)</option>
+            <option value="Creepster">Creepster (恐怖風)</option>
+            <option value="Bungee">Bungee (立體感)</option>
+            <option value="Fredoka One">Fredoka One (圓潤)</option>
+            <option value="Righteous">Righteous (復古)</option>
+          </optgroup>
+        </select>
+      </div>
+
       {/* 陰影效果 */}
       <div>
         <div className="flex items-center gap-2 mb-2">
@@ -330,6 +375,82 @@ export default function SubtitlePropertiesPanel({
                   max="50"
                   value={selectedSegment.style.shadowBlur}
                   onChange={(e) => updateStyle({ shadowBlur: parseInt(e.target.value) })}
+                  className="w-12 px-1.5 py-0.5 text-xs bg-gray-800 border border-gray-700 rounded text-center"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 描邊效果 */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <input
+            type="checkbox"
+            id="enable-stroke"
+            checked={selectedSegment.style.enableStroke}
+            onChange={(e) => updateStyle({ enableStroke: e.target.checked })}
+            className="w-3.5 h-3.5"
+          />
+          <label htmlFor="enable-stroke" className="text-xs font-medium cursor-pointer">
+            啟用描邊效果
+          </label>
+        </div>
+
+        {selectedSegment.style.enableStroke && (
+          <div className="space-y-3 pl-4 border-l-2 border-gray-700">
+            {/* 描邊顏色 */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5">描邊顏色</label>
+              <div className="relative">
+                <button
+                  onClick={() => setShowStrokeColorPicker(!showStrokeColorPicker)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-750 transition"
+                >
+                  <div
+                    className="w-6 h-6 rounded border-2 border-gray-600"
+                    style={{ backgroundColor: selectedSegment.style.strokeColor }}
+                  />
+                  <span className="font-mono text-xs">{selectedSegment.style.strokeColor}</span>
+                </button>
+                {showStrokeColorPicker && (
+                  <div className="absolute top-full mt-2 z-50 p-3 bg-gray-900 border border-gray-700 rounded-lg shadow-xl">
+                    <HexColorPicker
+                      color={selectedSegment.style.strokeColor}
+                      onChange={(color) => updateStyle({ strokeColor: color })}
+                    />
+                    <button
+                      onClick={() => setShowStrokeColorPicker(false)}
+                      className="mt-2 w-full px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded"
+                    >
+                      確定
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 描邊寬度 */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5">
+                描邊寬度: {selectedSegment.style.strokeWidth}px
+              </label>
+              <div className="flex gap-1.5 items-center">
+                <input
+                  type="range"
+                  min="0"
+                  max="10"
+                  value={selectedSegment.style.strokeWidth}
+                  onChange={(e) => updateStyle({ strokeWidth: parseInt(e.target.value) })}
+                  className="flex-1"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  max="10"
+                  value={selectedSegment.style.strokeWidth}
+                  onChange={(e) => updateStyle({ strokeWidth: parseInt(e.target.value) })}
                   className="w-12 px-1.5 py-0.5 text-xs bg-gray-800 border border-gray-700 rounded text-center"
                 />
               </div>

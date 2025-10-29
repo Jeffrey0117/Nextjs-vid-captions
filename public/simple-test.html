@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>簡單測試</title>
+</head>
+<body>
+    <h1>描邊字幕調試</h1>
+    
+    <button onclick="testDebug()">調試測試</button>
+    <button onclick="testStroke()">描邊測試</button>
+    
+    <div id="result" style="margin-top: 20px; padding: 10px; border: 1px solid #ccc;"></div>
+    
+    <script>
+        async function testDebug() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '正在調試測試...';
+            
+            const subtitles = [
+                {
+                    startTime: 0,
+                    endTime: 3,
+                    text: '測試字幕',
+                    style: {
+                        fontSize: 32,
+                        fontFamily: 'Arial',
+                        color: '#FFFFFF',
+                        enableStroke: true,
+                        strokeColor: '#000000',
+                        strokeWidth: 3,
+                        positionX: 50,
+                        positionY: 80
+                    }
+                }
+            ];
+            
+            const formData = new FormData();
+            formData.append('videoPath', 'test-video.mp4');
+            formData.append('subtitles', JSON.stringify(subtitles));
+            
+            try {
+                const response = await fetch('/api/render-video/debug-stroke', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                resultDiv.innerHTML = `
+                    <h3>調試結果:</h3>
+                    <pre>${JSON.stringify(result, null, 2)}</pre>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `❌ 調試失敗: ${error.message}`;
+            }
+        }
+        
+        async function testStroke() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '正在測試描邊渲染...';
+            
+            const subtitles = [
+                {
+                    startTime: 0,
+                    endTime: 3,
+                    text: '描邊測試字幕',
+                    style: {
+                        fontSize: 32,
+                        fontFamily: 'Arial',
+                        color: '#FFFFFF',
+                        enableStroke: true,
+                        strokeColor: '#000000',
+                        strokeWidth: 3,
+                        positionX: 50,
+                        positionY: 80
+                    }
+                }
+            ];
+            
+            const formData = new FormData();
+            formData.append('videoPath', 'test-video.mp4');
+            formData.append('subtitles', JSON.stringify(subtitles));
+            
+            try {
+                const response = await fetch('/api/render-video/drawtext', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = URL.createObjectURL(blob);
+                    
+                    resultDiv.innerHTML = `
+                        <h3>✅ 渲染成功！</h3>
+                        <p>檔案大小: ${(blob.size / 1024 / 1024).toFixed(2)} MB</p>
+                        <video controls width="600">
+                            <source src="${url}" type="video/mp4">
+                        </video>
+                        <br><br>
+                        <a href="${url}" download="stroke_test.mp4">下載影片</a>
+                    `;
+                } else {
+                    const errorText = await response.text();
+                    resultDiv.innerHTML = `❌ 渲染失敗: ${errorText}`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `❌ 請求失敗: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

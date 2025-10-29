@@ -1,0 +1,42 @@
+[Script Info]
+Title: Generated Subtitles
+ScriptType: v4.00+
+WrapStyle: 0
+PlayResX: 1920
+PlayResY: 1080
+ScaledBorderAndShadow: yes
+YCbCr Matrix: TV.709
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Style0,Arial,47,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,8,6,2,10,10,10,1
+Style: Style1,Arial,47,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,8,6,2,10,10,10,1
+Style: Style2,Arial,47,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,8,6,2,10,10,10,1
+Style: Style3,Arial,47,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,8,6,2,10,10,10,1
+Style: Style4,Arial,47,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,8,6,2,10,10,10,1
+Style: Style5,Arial,47,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,8,6,2,10,10,10,1
+Style: Style6,Arial,47,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,8,6,2,10,10,10,1
+Style: Style7,Arial,47,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,8,6,2,10,10,10,1
+Style: Style8,Arial,47,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,8,6,2,10,10,10,1
+Style: Style9,Arial,47,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,8,6,2,10,10,10,1
+Style: Style10,Arial,47,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,8,6,2,10,10,10,1
+Style: Style11,Arial,47,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,8,6,2,10,10,10,1
+Style: Style12,Arial,47,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,8,6,2,10,10,10,1
+Style: Style13,Arial,47,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,8,6,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:02.00,Style0,,0,0,0,,{\pos(952,871)}早上好
+Dialogue: 0,0:00:02.00,0:00:06.00,Style1,,0,0,0,,{\pos(952,871)}去死吧對不起，早上好
+Dialogue: 0,0:00:06.00,0:00:09.00,Style2,,0,0,0,,{\pos(952,871)}如果您想加入，下班後要找誰小酌一杯？
+Dialogue: 0,0:00:09.00,0:00:14.00,Style3,,0,0,0,,{\pos(952,871)}哦，好吧，我已經和你在一起一整天了，所以我寧願把鉛筆插在鼻子上，然後把臉摔在桌子上。
+Dialogue: 0,0:00:14.00,0:00:16.00,Style4,,0,0,0,,{\pos(952,871)}抱歉，不，我會去的，是的，到時見。
+Dialogue: 0,0:00:16.00,0:00:18.00,Style5,,0,0,0,,{\pos(952,871)}嘿，李維，介意我說句話嗎？
+Dialogue: 0,0:00:18.00,0:00:20.00,Style6,,0,0,0,,{\pos(952,871)}嗯，滾開，我只想一個人靜一靜。
+Dialogue: 0,0:00:20.00,0:00:21.00,Style7,,0,0,0,,{\pos(952,871)}我是說，抱歉，我能幫什麼忙？
+Dialogue: 0,0:00:21.00,0:00:23.00,Style8,,0,0,0,,{\pos(952,871)}哦，天啊，我今天在這裡分身乏术。
+Dialogue: 0,0:00:23.00,0:00:25.00,Style9,,0,0,0,,{\pos(952,871)}哦，我不在乎
+Dialogue: 0,0:00:25.00,0:00:27.00,Style10,,0,0,0,,{\pos(952,871)}不，對不起，我吃了撲熱息痛。
+Dialogue: 0,0:00:28.00,0:00:29.00,Style11,,0,0,0,,{\pos(952,871)}明天見
+Dialogue: 0,0:00:29.00,0:00:31.00,Style12,,0,0,0,,{\pos(952,871)}沒有
+Dialogue: 0,0:00:35.00,0:00:36.00,Style13,,0,0,0,,{\pos(952,871)}明天見
