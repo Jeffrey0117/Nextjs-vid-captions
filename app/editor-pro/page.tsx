@@ -8,8 +8,10 @@ import SubtitlePropertiesPanel from '../components/SubtitlePropertiesPanel';
 import BulkSubtitleEditor from '../components/BulkSubtitleEditor';
 import SubtitlePlayhead from '../components/SubtitlePlayhead';
 import { parseSrt } from '@/lib/parseSrt';
+import { useToast } from '../hooks/useToast';
 
 export default function EditorProPage() {
+  const toast = useToast();
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -194,7 +196,7 @@ export default function EditorProPage() {
       if (!project) {
         console.error('❌ 專案不存在:', projectId);
         console.log('💡 可用的專案列表:', projects.map(p => ({ id: p.id, name: p.name })));
-        alert(`找不到專案 ${projectId},請返回 /editor 重新選擇專案`);
+        toast.error(`找不到專案 ${projectId},請返回 /editor 重新選擇專案`);
         // 自動跳轉回編輯器頁面
         window.location.href = '/editor';
         return;
@@ -218,7 +220,7 @@ export default function EditorProPage() {
           console.log('✅ 載入影片 (Data URL), 長度:', project.videoUrl.length);
         } else if (project.videoUrl.startsWith('blob:')) {
           console.warn('⚠️ Blob URL 已失效,請返回 /editor 重新上傳影片');
-          alert('影片連結已失效,請返回 /editor 重新上傳影片');
+          toast.error('影片連結已失效,請返回 /editor 重新上傳影片');
         } else {
           // 普通 URL
           setVideoUrl(project.videoUrl);
@@ -226,7 +228,7 @@ export default function EditorProPage() {
         }
       } else {
         console.error('❌ 專案沒有影片資料');
-        alert('專案沒有影片資料,請返回 /editor 重新上傳影片');
+        toast.error('專案沒有影片資料,請返回 /editor 重新上傳影片');
       }
       
       // 載入字幕
@@ -457,7 +459,7 @@ export default function EditorProPage() {
 
   const handleWhisperTranscribe = async () => {
     if (!videoFile) {
-      alert('請先上傳影片');
+      toast.warning('請先上傳影片');
       return;
     }
 
@@ -485,13 +487,13 @@ export default function EditorProPage() {
           console.log('🔍 Store 狀態 - segments:', state.tracks[0]?.segments);
         }, 100);
         
-        alert('字幕識別完成!');
+        toast.success('字幕識別完成!');
       } else {
-        alert('字幕識別失敗,請檢查 Whisper 是否已安裝');
+        toast.error('字幕識別失敗,請檢查 Whisper 是否已安裝');
       }
     } catch (error) {
       console.error('轉錄失敗:', error);
-      alert('轉錄失敗,請確認 Whisper 已正確安裝');
+      toast.error('轉錄失敗,請確認 Whisper 已正確安裝');
     } finally {
       setIsTranscribing(false);
     }
@@ -533,13 +535,13 @@ export default function EditorProPage() {
           console.log('🔍 翻譯後 Store 狀態:', state.tracks[0]?.segments);
         }, 100);
         
-        alert('翻譯完成!');
+        toast.success('翻譯完成!');
       } else {
         throw new Error(data.error || '翻譯失敗');
       }
     } catch (error) {
       console.error('翻譯失敗:', error);
-      alert(`翻譯失敗: ${error instanceof Error ? error.message : '未知錯誤'}`);
+      toast.error(`翻譯失敗: ${error instanceof Error ? error.message : '未知錯誤'}`);
     } finally {
       setIsTranslating(false);
     }
@@ -562,7 +564,7 @@ export default function EditorProPage() {
     // 從 tracks 獲取實際的 segments (reactive state)
     const actualSegments = tracks[0]?.segments || [];
     if ((!videoFile && !videoUrl) || actualSegments.length === 0) {
-      alert('請先上傳影片並添加字幕');
+      toast.warning('請先上傳影片並添加字幕');
       return;
     }
 
@@ -640,10 +642,10 @@ export default function EditorProPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      alert('影片輸出完成!');
+      toast.success('影片輸出完成!', 5000);
     } catch (error: any) {
       console.error('輸出失敗:', error);
-      alert(`輸出失敗: ${error.message}`);
+      toast.error(`輸出失敗: ${error.message}`);
     } finally {
       setIsExporting(false);
       setExportProgress(0);
@@ -1039,7 +1041,9 @@ export default function EditorProPage() {
   }, [timelineDragState, segments, duration, zoomLevel, updateSegment]);
 
   return (
-    <div className="h-screen flex flex-col bg-gray-950 text-white">
+    <>
+      <toast.ToastContainer />
+      <div className="h-screen flex flex-col bg-gray-950 text-white">
       {/* 頂部工具列 */}
       <header className="h-10 border-b border-gray-800 flex items-center px-3 gap-1.5 bg-gray-900">
         <h1 className="text-sm font-bold mr-2">OpenCut 字幕編輯器</h1>
@@ -1924,6 +1928,7 @@ export default function EditorProPage() {
         videoUrl={videoUrl || undefined}
       />
     </div>
+    </>
   );
 }
 
