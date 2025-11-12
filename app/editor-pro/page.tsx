@@ -56,6 +56,14 @@ export default function EditorProPage() {
   const [activeMediaTab, setActiveMediaTab] = useState<'media' | 'sounds' | 'text' | 'captions' | 'filters' | 'settings'>('text');
   const [editMode, setEditMode] = useState<'normal' | 'pinned'>('normal');
 
+  // 時間軸點擊/拖動檢測狀態
+  const [isClickAction, setIsClickAction] = useState(true);
+  const [mouseDownPosition, setMouseDownPosition] = useState<{x: number, y: number} | null>(null);
+  const [playheadHighlight, setPlayheadHighlight] = useState(false);
+
+  // 拖動閾值：移動超過5px視為拖動
+  const DRAG_THRESHOLD = 5;
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const timelineContainerRef = useRef<HTMLDivElement>(null); // 整個時間軸容器 (用於計算播放頭高度)
@@ -732,10 +740,21 @@ export default function EditorProPage() {
   };
 
   const seekTo = (time: number) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = time;
-      setCurrentTime(time);
+    if (!videoRef.current) {
+      console.warn('⚠️ Video ref 不存在');
+      return;
     }
+
+    // 確保時間在有效範圍內
+    const clampedTime = Math.max(0, Math.min(time, duration));
+
+    console.log('🎬 跳轉到:', clampedTime.toFixed(3), 's');
+
+    // 更新視頻時間
+    videoRef.current.currentTime = clampedTime;
+
+    // 立即更新狀態（不等待 timeupdate 事件）
+    setCurrentTime(clampedTime);
   };
 
   const handleSkipToStart = () => {
@@ -752,21 +771,53 @@ export default function EditorProPage() {
   };
 
   const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // 基本驗證
     if (!timelineRef.current || duration === 0) return;
-    
+
+    // 如果是拖動操作，忽略點擊事件
+    if (timelineDragState.isDragging) {
+      console.log('🚫 拖動中，忽略點擊事件');
+      return;
+    }
+
+    // 阻止事件冒泡（避免重複觸發）
+    e.stopPropagation();
+
     // 獲取點擊位置相對於時間軸容器的座標
     const rect = timelineRef.current.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
-    
+
     // 獲取滾動容器的 scrollLeft
     const tracksScroll = tracksScrollRef.current;
     const scrollLeft = tracksScroll ? tracksScroll.scrollLeft : 0;
-    
-    // 計算實際的時間位置 (考慮滾動偏移)
+
+    // 計算實際的時間位置（考慮滾動偏移和縮放）
     const pixelsPerSecond = 50 * zoomLevel;
-    const newTime = Math.max(0, Math.min(duration, (clickX + scrollLeft) / pixelsPerSecond));
-    
+    const absoluteClickX = clickX + scrollLeft;
+    let newTime = absoluteClickX / pixelsPerSecond;
+
+    // 對齊到幀（30fps）
+    const fps = 30;
+    newTime = Math.round(newTime * fps) / fps;
+
+    // 邊界限制
+    newTime = Math.max(0, Math.min(duration, newTime));
+
+    console.log('🎯 時間軸點擊跳轉:', {
+      clickX,
+      scrollLeft,
+      absoluteClickX,
+      pixelsPerSecond,
+      newTime,
+      zoomLevel
+    });
+
+    // 執行跳轉
     seekTo(newTime);
+
+    // 視覺反饋：短暫高亮播放頭
+    setPlayheadHighlight(true);
+    setTimeout(() => setPlayheadHighlight(false), 300);
   };
 
   const handleSegmentClick = (segmentId: string, startTime: number) => {
@@ -1836,11 +1887,34 @@ export default function EditorProPage() {
                       >
                         <div className="overflow-auto scrollbar-thin w-full" id="ruler-scroll">
                           <div
-                            className="relative h-8 select-none cursor-default"
+                            className="relative h-8 select-none cursor-pointer"
                             style={{
                               width: `${Math.max(duration * 50 * zoomLevel, 1500)}px`,
                             }}
-                            onClick={handleTimelineClick}
+                            onMouseDown={(e) => {
+                              setMouseDownPosition({ x: e.clientX, y: e.clientY });
+                              setIsClickAction(true);
+                            }}
+                            onMouseMove={(e) => {
+                              if (mouseDownPosition) {
+                                const deltaX = Math.abs(e.clientX - mouseDownPosition.x);
+                                const deltaY = Math.abs(e.clientY - mouseDownPosition.y);
+                                if (deltaX > DRAG_THRESHOLD || deltaY > DRAG_THRESHOLD) {
+                                  setIsClickAction(false);
+                                }
+                              }
+                            }}
+                            onMouseUp={(e) => {
+                              if (isClickAction && mouseDownPosition) {
+                                handleTimelineClick(e);
+                              }
+                              setMouseDownPosition(null);
+                              setIsClickAction(true);
+                            }}
+                            onClick={(e) => {
+                              // 使用 onMouseUp 處理，這裡阻止默認行為
+                              e.preventDefault();
+                            }}
                           >
                             {/* 時間標記 */}
                             {duration > 0 && (() => {
@@ -1920,15 +1994,113 @@ export default function EditorProPage() {
                       
                       {/* 軌道內容 */}
                       <div className="flex-1 relative overflow-hidden">
-                        <div className="overflow-auto scrollbar-thin w-full h-full" id="tracks-scroll">
+                        <div
+                          className="overflow-auto scrollbar-thin w-full h-full cursor-pointer"
+                          id="tracks-scroll"
+                          onMouseDown={(e) => {
+                            // 檢查是否點擊在字幕段落上
+                            const target = e.target as HTMLElement;
+                            if (target.closest('[data-segment-id]')) {
+                              return;
+                            }
+                            setMouseDownPosition({ x: e.clientX, y: e.clientY });
+                            setIsClickAction(true);
+                          }}
+                          onMouseMove={(e) => {
+                            if (mouseDownPosition) {
+                              const deltaX = Math.abs(e.clientX - mouseDownPosition.x);
+                              const deltaY = Math.abs(e.clientY - mouseDownPosition.y);
+                              if (deltaX > DRAG_THRESHOLD || deltaY > DRAG_THRESHOLD) {
+                                setIsClickAction(false);
+                              }
+                            }
+                          }}
+                          onMouseUp={(e) => {
+                            const target = e.target as HTMLElement;
+                            if (target.closest('[data-segment-id]')) {
+                              setMouseDownPosition(null);
+                              setIsClickAction(true);
+                              return;
+                            }
+
+                            if (isClickAction && mouseDownPosition) {
+                              // 使用 tracks-scroll 作為參考容器
+                              const container = tracksScrollRef.current;
+                              if (container) {
+                                const rect = container.getBoundingClientRect();
+                                const clickX = e.clientX - rect.left;
+                                const scrollLeft = container.scrollLeft;
+
+                                const pixelsPerSecond = 50 * zoomLevel;
+                                const absoluteClickX = clickX + scrollLeft;
+                                let newTime = absoluteClickX / pixelsPerSecond;
+
+                                // 對齊到幀（30fps）
+                                const fps = 30;
+                                newTime = Math.round(newTime * fps) / fps;
+
+                                // 邊界限制
+                                newTime = Math.max(0, Math.min(duration, newTime));
+
+                                console.log('🎯 軌道容器點擊跳轉:', {
+                                  clickX,
+                                  scrollLeft,
+                                  absoluteClickX,
+                                  pixelsPerSecond,
+                                  newTime,
+                                  zoomLevel
+                                });
+
+                                seekTo(newTime);
+                                setPlayheadHighlight(true);
+                                setTimeout(() => setPlayheadHighlight(false), 300);
+                              }
+                            }
+                            setMouseDownPosition(null);
+                            setIsClickAction(true);
+                          }}
+                        >
                           <div
                             ref={timelineRef}
-                            className="relative flex-1"
+                            className="relative flex-1 cursor-pointer"
                             style={{
                               height: '60px',
                               width: `${Math.max(duration * 50 * zoomLevel, 1500)}px`,
                             }}
-                            onClick={handleTimelineClick}
+                            onMouseDown={(e) => {
+                              // 檢查是否點擊在字幕段落上
+                              const target = e.target as HTMLElement;
+                              if (target.closest('[data-segment-id]')) {
+                                // 點擊在字幕上，由字幕處理
+                                return;
+                              }
+                              setMouseDownPosition({ x: e.clientX, y: e.clientY });
+                              setIsClickAction(true);
+                            }}
+                            onMouseMove={(e) => {
+                              if (mouseDownPosition) {
+                                const deltaX = Math.abs(e.clientX - mouseDownPosition.x);
+                                const deltaY = Math.abs(e.clientY - mouseDownPosition.y);
+                                if (deltaX > DRAG_THRESHOLD || deltaY > DRAG_THRESHOLD) {
+                                  setIsClickAction(false);
+                                }
+                              }
+                            }}
+                            onMouseUp={(e) => {
+                              const target = e.target as HTMLElement;
+                              if (target.closest('[data-segment-id]')) {
+                                // 點擊在字幕上，由字幕處理
+                                setMouseDownPosition(null);
+                                setIsClickAction(true);
+                                return;
+                              }
+
+                              if (isClickAction && mouseDownPosition) {
+                                handleTimelineClick(e);
+                              }
+                              setMouseDownPosition(null);
+                              setIsClickAction(true);
+                            }}
                           >
                             {/* SubtitlePlayhead 元件 - OpenCut 風格播放頭 (延伸到底部) */}
                             {duration > 0 && (
@@ -1939,17 +2111,16 @@ export default function EditorProPage() {
                                 onSeek={seekTo}
                                 duration={duration}
                                 timelineRef={timelineContentRef}
+                                isHighlighted={playheadHighlight}
                               />
                             )}
                             
                             {/* 字幕軌道 - 整個區域填滿並可點擊 */}
                             <div
                               className="absolute left-0 right-0 top-0 bottom-0"
-                              onClick={handleTimelineClick}
                             >
                               <div
                                 className="w-full h-full hover:bg-gray-800/20 relative"
-                                onClick={handleTimelineClick}
                               >
                                 {/* 字幕片段 */}
                                 {tracks.length > 0 && tracks[0].segments.map((segment) => {
@@ -1960,6 +2131,7 @@ export default function EditorProPage() {
                                     return (
                                       <div
                                         key={segment.id}
+                                        data-segment-id={segment.id}
                                         className={`absolute top-1 h-14 rounded-[0.5rem] border transition group ${
                                           isSelected
                                             ? 'bg-yellow-600 border-yellow-400'
