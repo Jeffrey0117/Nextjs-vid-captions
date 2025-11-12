@@ -553,8 +553,8 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       }
       // 否则按标点符号自动分句
       else {
-        // 中文和英文标点符号
-        const sentenceEnders = /([。！？.!?]+)/g;
+        // 智能分句：包含逗号、句号、问号、感叹号等
+        const sentenceEnders = /([，,。！？.!?；;]+)/g;
 
         // 分割文本
         const textParts = segment.text.split(sentenceEnders).filter(s => s.trim());
@@ -562,38 +562,96 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
           ? segment.translatedText.split(sentenceEnders).filter(s => s.trim())
           : [];
 
-        // 如果只有一句或者没有标点，不切割
+        // 如果只有一部分或者没有标点，不切割
         if (textParts.length <= 1) {
           return state;
         }
 
-        // 合并文本和标点
+        // 合并文本和标点，并智能分组
         const sentences: string[] = [];
         const translatedSentences: string[] = [];
 
-        for (let i = 0; i < textParts.length; i += 2) {
-          const text = textParts[i] + (textParts[i + 1] || '');
-          sentences.push(text.trim());
+        let currentSentence = '';
+        let currentTranslated = '';
+        const MAX_LENGTH = 30; // 最大字数限制
 
-          if (translatedParts.length > i) {
-            const translated = translatedParts[i] + (translatedParts[i + 1] || '');
-            translatedSentences.push(translated.trim());
+        for (let i = 0; i < textParts.length; i++) {
+          const part = textParts[i];
+          const punctuation = textParts[i + 1] || '';
+
+          // 判断是否是标点符号
+          if (sentenceEnders.test(part)) {
+            continue; // 跳过已处理的标点
+          }
+
+          const combined = part + punctuation;
+
+          // 如果是句号、问号、感叹号，或者超过最大长度，则分句
+          const isStrongEnder = /[。！？.!?]/.test(punctuation);
+          const wouldExceedMax = (currentSentence + combined).length > MAX_LENGTH;
+
+          if (currentSentence && (isStrongEnder || wouldExceedMax)) {
+            // 保存当前句子
+            sentences.push(currentSentence.trim());
+            currentSentence = combined;
+
+            // 处理翻译
+            if (translatedParts.length > i) {
+              if (currentTranslated) {
+                translatedSentences.push(currentTranslated.trim());
+              }
+              const transpart = translatedParts[i] || '';
+              const transpunc = translatedParts[i + 1] || '';
+              currentTranslated = transpart + transpunc;
+            }
+          } else {
+            // 继续累积
+            currentSentence += combined;
+            if (translatedParts.length > i) {
+              const transpart = translatedParts[i] || '';
+              const transpunc = translatedParts[i + 1] || '';
+              currentTranslated += transpart + transpunc;
+            }
+          }
+
+          i++; // 跳过标点
+        }
+
+        // 添加最后一句
+        if (currentSentence.trim()) {
+          sentences.push(currentSentence.trim());
+          if (currentTranslated.trim()) {
+            translatedSentences.push(currentTranslated.trim());
           }
         }
 
-        // 计算每句的时间
+        // 如果只有一句，不切割
+        if (sentences.length <= 1) {
+          return state;
+        }
+
+        // 计算每句的时间（根据字数加权分配）
         const totalDuration = segment.endTime - segment.startTime;
-        const avgDuration = totalDuration / sentences.length;
+        const totalChars = sentences.reduce((sum, s) => sum + s.length, 0);
 
         // 创建新字幕
-        const newSegments: SubtitleSegment[] = sentences.map((text, index) => ({
-          ...segment,
-          id: generateId(),
-          startTime: segment.startTime + (avgDuration * index),
-          endTime: segment.startTime + (avgDuration * (index + 1)),
-          text,
-          translatedText: translatedSentences[index] || text,
-        }));
+        let currentStartTime = segment.startTime;
+        const newSegments: SubtitleSegment[] = sentences.map((text, index) => {
+          const charRatio = text.length / totalChars;
+          const segDuration = totalDuration * charRatio;
+          const startTime = currentStartTime;
+          const endTime = currentStartTime + segDuration;
+          currentStartTime = endTime;
+
+          return {
+            ...segment,
+            id: generateId(),
+            startTime,
+            endTime,
+            text,
+            translatedText: translatedSentences[index] || text,
+          };
+        });
 
         // 替换原字幕
         return {
