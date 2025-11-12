@@ -75,6 +75,7 @@ interface SubtitleStore {
   deleteSegment: (id: string) => void;
   selectSegment: (id: string | null) => void;
   moveSegmentToTrack: (fromTrackId: string, toTrackId: string, segmentId: string) => void;
+  splitSegment: (id: string, splitTime?: number) => void; // 切割字幕
   
   // 樣式模板管理
   saveStyleTemplate: (name: string, style: SubtitleSegment['style'], isDefault?: boolean) => void;
@@ -465,9 +466,9 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     set((state) => {
       const fromTrack = state.tracks.find(t => t.id === fromTrackId);
       const segment = fromTrack?.segments.find(s => s.id === segmentId);
-      
+
       if (!segment) return state;
-      
+
       return {
         tracks: state.tracks.map(track => {
           if (track.id === fromTrackId) {
@@ -478,6 +479,138 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
           return track;
         }),
       };
+    });
+  },
+
+  // 切割字幕
+  splitSegment: (id, splitTime) => {
+    set((state) => {
+      const track = state.tracks.find(t => t.segments.some(s => s.id === id));
+      if (!track) return state;
+
+      const segment = track.segments.find(s => s.id === id);
+      if (!segment) return state;
+
+      // 如果提供了切割时间点，按时间切割
+      if (splitTime !== undefined) {
+        // 确保切割点在字幕时间范围内
+        if (splitTime <= segment.startTime || splitTime >= segment.endTime) {
+          return state;
+        }
+
+        // 计算切割比例
+        const totalDuration = segment.endTime - segment.startTime;
+        const firstDuration = splitTime - segment.startTime;
+        const ratio = firstDuration / totalDuration;
+
+        // 按比例分割文字
+        const textLength = segment.text.length;
+        const splitIndex = Math.round(textLength * ratio);
+
+        const firstText = segment.text.substring(0, splitIndex).trim();
+        const secondText = segment.text.substring(splitIndex).trim();
+
+        // 翻译文本也要分割
+        const firstTranslatedText = segment.translatedText
+          ? segment.translatedText.substring(0, Math.round(segment.translatedText.length * ratio)).trim()
+          : '';
+        const secondTranslatedText = segment.translatedText
+          ? segment.translatedText.substring(Math.round(segment.translatedText.length * ratio)).trim()
+          : '';
+
+        // 创建两个新字幕
+        const firstSegment: SubtitleSegment = {
+          ...segment,
+          id: generateId(),
+          endTime: splitTime,
+          text: firstText,
+          translatedText: firstTranslatedText || firstText,
+        };
+
+        const secondSegment: SubtitleSegment = {
+          ...segment,
+          id: generateId(),
+          startTime: splitTime,
+          text: secondText,
+          translatedText: secondTranslatedText || secondText,
+        };
+
+        // 替换原字幕
+        return {
+          tracks: state.tracks.map(t =>
+            t.id === track.id
+              ? {
+                  ...t,
+                  segments: t.segments
+                    .filter(s => s.id !== id)
+                    .concat([firstSegment, secondSegment])
+                    .sort((a, b) => a.startTime - b.startTime),
+                }
+              : t
+          ),
+          selectedSegmentId: firstSegment.id,
+        };
+      }
+      // 否则按标点符号自动分句
+      else {
+        // 中文和英文标点符号
+        const sentenceEnders = /([。！？.!?]+)/g;
+
+        // 分割文本
+        const textParts = segment.text.split(sentenceEnders).filter(s => s.trim());
+        const translatedParts = segment.translatedText
+          ? segment.translatedText.split(sentenceEnders).filter(s => s.trim())
+          : [];
+
+        // 如果只有一句或者没有标点，不切割
+        if (textParts.length <= 1) {
+          return state;
+        }
+
+        // 合并文本和标点
+        const sentences: string[] = [];
+        const translatedSentences: string[] = [];
+
+        for (let i = 0; i < textParts.length; i += 2) {
+          const text = textParts[i] + (textParts[i + 1] || '');
+          sentences.push(text.trim());
+
+          if (translatedParts.length > i) {
+            const translated = translatedParts[i] + (translatedParts[i + 1] || '');
+            translatedSentences.push(translated.trim());
+          }
+        }
+
+        // 计算每句的时间
+        const totalDuration = segment.endTime - segment.startTime;
+        const avgDuration = totalDuration / sentences.length;
+
+        // 创建新字幕
+        const newSegments: SubtitleSegment[] = sentences.map((text, index) => ({
+          ...segment,
+          id: generateId(),
+          startTime: segment.startTime + (avgDuration * index),
+          endTime: segment.startTime + (avgDuration * (index + 1)),
+          text,
+          translatedText: translatedSentences[index] || text,
+        }));
+
+        // 替换原字幕
+        return {
+          tracks: state.tracks.map(t =>
+            t.id === track.id
+              ? {
+                  ...t,
+                  segments: t.segments
+                    .filter(s => s.id !== id)
+                    .concat(newSegments)
+                    .sort((a, b) => a.startTime - b.startTime),
+                }
+              : t
+          ),
+          selectedSegmentId: newSegments[0].id,
+        };
+      }
     });
   },
 

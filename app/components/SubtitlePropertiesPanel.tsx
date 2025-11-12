@@ -3,7 +3,7 @@
 import { useSubtitleStore, SubtitleSegment } from '../stores/subtitle-store';
 import { HexColorPicker } from 'react-colorful';
 import { useState, useRef, useEffect } from 'react';
-import { Type, Bold, Italic, Underline, Strikethrough, Palette, Eye, Square, Save, X, Plus, ArrowUp, ArrowRight, ArrowDown, ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react';
+import { Type, Bold, Italic, Underline, Strikethrough, Palette, Eye, Square, Save, X, Plus, ArrowUp, ArrowRight, ArrowDown, ArrowLeft, ChevronDown, ChevronRight, Scissors } from 'lucide-react';
 import { useClickOutside } from '../hooks/useClickOutside';
 
 interface SubtitlePropertiesPanelProps {
@@ -17,7 +17,7 @@ export default function SubtitlePropertiesPanel({
   applyToAll,
   setApplyToAll
 }: SubtitlePropertiesPanelProps) {
-  const { tracks, updateSegment } = useSubtitleStore();
+  const { tracks, updateSegment, splitSegment } = useSubtitleStore();
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showBgColorPicker, setShowBgColorPicker] = useState(false);
   const [showShadowColorPicker, setShowShadowColorPicker] = useState(false);
@@ -144,6 +144,15 @@ export default function SubtitlePropertiesPanel({
             />
           </div>
         )}
+
+        {/* 自动分句按钮 */}
+        <button
+          onClick={() => splitSegment(selectedSegment.id)}
+          className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition flex items-center justify-center gap-2 text-sm font-medium"
+        >
+          <Scissors size={16} />
+          自动分句
+        </button>
       </div>
 
       <div className="border-t border-gray-700/50"></div>
