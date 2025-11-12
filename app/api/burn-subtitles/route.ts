@@ -13,6 +13,7 @@ export async function POST(request: Request) {
     const videoFile = formData.get("video") as File;
     const videoPath = formData.get("videoPath") as string;
     const subtitlesJson = formData.get("subtitles") as string;
+    const renderMethod = formData.get("renderMethod") as string || "ass"; // 新增：渲染方法選擇
 
     if ((!videoFile && !videoPath) || !subtitlesJson) {
       return NextResponse.json(
@@ -20,6 +21,8 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    console.log("🎬 Using render method:", renderMethod);
 
     const subtitles = JSON.parse(subtitlesJson);
 
@@ -59,8 +62,8 @@ export async function POST(request: Request) {
     const outputPath = path.join(tempDir, outputFileName);
 
     try {
-      // 執行 FFmpeg 命令燒錄字幕
-      console.log("Starting FFmpeg subtitle burn...");
+      // 使用 ASS 燒錄方法
+      console.log("Starting FFmpeg ASS subtitle burn...");
       console.log("Video path:", finalVideoPath);
       console.log("ASS path:", assPath);
       console.log("Output path:", outputPath);

@@ -18,6 +18,7 @@ interface SubtitleSegment {
   startTime: number;
   endTime: number;
   text: string;
+  translatedText?: string;
   style: {
     fontSize: number;
     fontFamily: string;
@@ -33,6 +34,9 @@ interface SubtitleSegment {
     shadowOffsetX: number;
     shadowOffsetY: number;
     shadowBlur: number;
+    enableStroke?: boolean;
+    strokeColor?: string;
+    strokeWidth?: number;
     positionX: number;
     positionY: number;
     maxWidth: number;
@@ -57,7 +61,9 @@ async function renderSubtitleToCanvas(
   // 設置透明背景
   ctx.clearRect(0, 0, width, height);
 
-  const { text, style } = segment;
+  const { text, translatedText, style } = segment;
+  // 優先使用翻譯文本，如果沒有則使用原文
+  const displayText = translatedText || text;
   
   // 設置字體
   const fontWeight = style.fontWeight === 'bold' ? 'bold' : 'normal';
@@ -86,7 +92,7 @@ async function renderSubtitleToCanvas(
   
   // 處理背景色
   if (style.backgroundColor !== 'transparent') {
-    const textMetrics = ctx.measureText(text);
+    const textMetrics = ctx.measureText(displayText);
     const padding = 16;
     ctx.fillStyle = style.backgroundColor;
     ctx.fillRect(
@@ -99,15 +105,27 @@ async function renderSubtitleToCanvas(
   }
   
   // 繪製文字
-  const lines = text.split('\n');
+  const lines = displayText.split('\n');
   const lineHeight = style.fontSize * 1.2;
   const totalHeight = lines.length * lineHeight;
   const startY = y - totalHeight / 2;
-  
+
+  // Draw stroke first (behind the text)
+  if (style.enableStroke && style.strokeWidth && style.strokeWidth > 0) {
+    ctx.strokeStyle = style.strokeColor || '#000000';
+    ctx.lineWidth = style.strokeWidth;
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+    lines.forEach((line, index) => {
+      ctx.strokeText(line, x, startY + (index + 0.5) * lineHeight);
+    });
+  }
+
+  // Draw fill text (on top of stroke)
   lines.forEach((line, index) => {
     ctx.fillText(line, x, startY + (index + 0.5) * lineHeight);
   });
-  
+
   return canvas.toBuffer('image/png');
 }
 
@@ -122,20 +140,41 @@ async function generateSubtitleFrames(
 ): Promise<number> {
   const totalFrames = Math.ceil(duration * fps);
   let framesGenerated = 0;
-  
+
+  // Frame caching mechanism to avoid re-rendering identical subtitles
+  const frameCache = new Map<string, Buffer>();
+  let cacheHits = 0;
+
   for (let frameNumber = 0; frameNumber < totalFrames; frameNumber++) {
     const currentTime = frameNumber / fps;
-    
+
     // 找到當前時間應該顯示的字幕
-    const activeSubtitle = subtitles.find(sub => 
+    const activeSubtitle = subtitles.find(sub =>
       currentTime >= sub.startTime && currentTime <= sub.endTime
     );
-    
+
     const framePath = path.join(outputDir, `frame_${frameNumber.toString().padStart(8, '0')}.png`);
-    
+
     if (activeSubtitle) {
       try {
-        const frameBuffer = await renderSubtitleToCanvas(activeSubtitle, width, height);
+        // Generate cache key based on subtitle content and style
+        const cacheKey = JSON.stringify({
+          text: activeSubtitle.translatedText || activeSubtitle.text,
+          style: activeSubtitle.style
+        });
+
+        let frameBuffer: Buffer;
+
+        // Check cache first
+        if (frameCache.has(cacheKey)) {
+          frameBuffer = frameCache.get(cacheKey)!;
+          cacheHits++;
+        } else {
+          // Render new frame and cache it
+          frameBuffer = await renderSubtitleToCanvas(activeSubtitle, width, height);
+          frameCache.set(cacheKey, frameBuffer);
+        }
+
         await fs.promises.writeFile(framePath, frameBuffer);
         framesGenerated++;
       } catch (error) {
@@ -161,7 +200,10 @@ async function generateSubtitleFrames(
       console.log(`Canvas rendering progress: ${Math.round((frameNumber / totalFrames) * 100)}%`);
     }
   }
-  
+
+  // Log cache performance statistics
+  console.log(`📊 Frame cache performance: ${cacheHits} cache hits out of ${framesGenerated} frames (${Math.round((cacheHits / Math.max(framesGenerated, 1)) * 100)}% cache efficiency)`);
+
   return framesGenerated;
 }
 
@@ -234,7 +276,9 @@ export async function POST(request: Request) {
     const videoWidth = videoStream.width;
     const videoHeight = videoStream.height;
     const videoDuration = parseFloat(videoInfo.format.duration);
-    const videoFps = eval(videoStream.r_frame_rate); // 例如 "30/1" -> 30
+    // Safe parsing of frame rate fraction (e.g., "30/1" -> 30)
+    const [num, denom] = videoStream.r_frame_rate.split('/').map(Number);
+    const videoFps = denom ? num / denom : 30;
 
     console.log(`📐 Video info: ${videoWidth}x${videoHeight}, duration: ${videoDuration}s, fps: ${videoFps}`);
 
@@ -243,74 +287,98 @@ export async function POST(request: Request) {
     fs.mkdirSync(framesDir, { recursive: true });
     console.log("📁 Created frames directory:", framesDir);
 
-    // 使用 Canvas 生成字幕幀
-    console.log("🎨 Starting Canvas subtitle frame generation...");
-    const framesGenerated = await generateSubtitleFrames(
-      subtitles,
-      videoWidth,
-      videoHeight,
-      videoDuration,
-      videoFps,
-      framesDir
-    );
-    
-    console.log(`✅ Generated ${framesGenerated} subtitle frames`);
-
     // 輸出檔案路徑
     const outputFileName = `canvas_rendered_${Date.now()}.mp4`;
     const outputPath = path.join(tempDir, outputFileName);
 
-    console.log("🔄 Starting FFmpeg video composition...");
+    let outputBuffer: Buffer | null = null;
 
-    // 使用 FFmpeg 將 Canvas 渲染的字幕幀疊加到影片上
-    let ffmpegCommand: string;
-    
-    if (process.platform === 'win32') {
-      const videoPathNormalized = finalVideoPath.replace(/\\/g, '/');
-      const outputPathNormalized = outputPath.replace(/\\/g, '/');
-      const framesDirNormalized = framesDir.replace(/\\/g, '/');
-      
-      ffmpegCommand = `ffmpeg -i "${videoPathNormalized}" -framerate ${videoFps} -i "${framesDirNormalized}/frame_%08d.png" -filter_complex "[1:v][0:v]overlay=0:0:format=auto,format=yuv420p[v]" -map "[v]" -map 0:a? -c:v libx264 -preset medium -crf 18 -c:a copy -r ${videoFps} -shortest "${outputPathNormalized}"`;
-    } else {
-      ffmpegCommand = `ffmpeg -i "${finalVideoPath}" -framerate ${videoFps} -i "${framesDir}/frame_%08d.png" -filter_complex "[1:v][0:v]overlay=0:0:format=auto,format=yuv420p[v]" -map "[v]" -map 0:a? -c:v libx264 -preset medium -crf 18 -c:a copy -r ${videoFps} -shortest "${outputPath}"`;
+    try {
+      // 使用 Canvas 生成字幕幀
+      console.log("🎨 Starting Canvas subtitle frame generation...");
+      const framesGenerated = await generateSubtitleFrames(
+        subtitles,
+        videoWidth,
+        videoHeight,
+        videoDuration,
+        videoFps,
+        framesDir
+      );
+
+      console.log(`✅ Generated ${framesGenerated} subtitle frames`);
+
+      console.log("🔄 Starting FFmpeg video composition...");
+
+      // 使用 FFmpeg 將 Canvas 渲染的字幕幀疊加到影片上
+      let ffmpegCommand: string;
+
+      if (process.platform === 'win32') {
+        const videoPathNormalized = finalVideoPath.replace(/\\/g, '/');
+        const outputPathNormalized = outputPath.replace(/\\/g, '/');
+        const framesDirNormalized = framesDir.replace(/\\/g, '/');
+
+        ffmpegCommand = `ffmpeg -i "${videoPathNormalized}" -framerate ${videoFps} -i "${framesDirNormalized}/frame_%08d.png" -filter_complex "[1:v][0:v]overlay=0:0:format=auto,format=yuv420p[v]" -map "[v]" -map 0:a? -c:v libx264 -preset medium -crf 18 -c:a copy -r ${videoFps} -shortest "${outputPathNormalized}"`;
+      } else {
+        ffmpegCommand = `ffmpeg -i "${finalVideoPath}" -framerate ${videoFps} -i "${framesDir}/frame_%08d.png" -filter_complex "[1:v][0:v]overlay=0:0:format=auto,format=yuv420p[v]" -map "[v]" -map 0:a? -c:v libx264 -preset medium -crf 18 -c:a copy -r ${videoFps} -shortest "${outputPath}"`;
+      }
+
+      console.log("🎬 FFmpeg composition command:", ffmpegCommand);
+
+      // 執行 FFmpeg
+      const { stdout, stderr } = await execAsync(ffmpegCommand, {
+        maxBuffer: 1024 * 1024 * 50, // 50MB buffer
+      });
+
+      console.log("✅ FFmpeg composition completed");
+      if (stdout) console.log("FFmpeg stdout:", stdout.substring(0, 500));
+      if (stderr) console.log("FFmpeg stderr:", stderr.substring(0, 500));
+
+      // 檢查輸出文件是否存在
+      if (!fs.existsSync(outputPath)) {
+        console.log("❌ Output file not created");
+        return NextResponse.json(
+          { error: "Output file was not created by FFmpeg" },
+          { status: 500 }
+        );
+      }
+
+      outputBuffer = await fs.promises.readFile(outputPath);
+      console.log("📤 Canvas rendered output file size:", outputBuffer.length, "bytes");
+
+    } finally {
+      // Cleanup happens regardless of success or failure
+      console.log("🧹 Starting cleanup...");
+      try {
+        // Clean up uploaded video file if it was temporary
+        if (!videoPath && fs.existsSync(finalVideoPath)) {
+          await fs.promises.unlink(finalVideoPath);
+          console.log("  ✓ Removed temporary video file");
+        }
+
+        // Clean up frames directory
+        if (fs.existsSync(framesDir)) {
+          await fs.promises.rm(framesDir, { recursive: true, force: true });
+          console.log("  ✓ Removed frames directory");
+        }
+
+        // Clean up output file
+        if (fs.existsSync(outputPath)) {
+          await fs.promises.unlink(outputPath);
+          console.log("  ✓ Removed output file");
+        }
+
+        console.log("🧹 Cleanup completed successfully");
+      } catch (cleanupError) {
+        console.error("⚠️ Cleanup error (non-critical):", cleanupError);
+      }
     }
-    
-    console.log("🎬 FFmpeg composition command:", ffmpegCommand);
-    
-    // 執行 FFmpeg
-    const { stdout, stderr } = await execAsync(ffmpegCommand, {
-      maxBuffer: 1024 * 1024 * 50, // 50MB buffer
-    });
 
-    console.log("✅ FFmpeg composition completed");
-    if (stdout) console.log("FFmpeg stdout:", stdout.substring(0, 500));
-    if (stderr) console.log("FFmpeg stderr:", stderr.substring(0, 500));
-
-    // 檢查輸出文件是否存在
-    if (!fs.existsSync(outputPath)) {
-      console.log("❌ Output file not created");
+    // If we got here, everything succeeded and outputBuffer should be set
+    if (!outputBuffer) {
       return NextResponse.json(
-        { error: "Output file was not created by FFmpeg" },
+        { error: "Output buffer not available" },
         { status: 500 }
       );
-    }
-
-    const outputBuffer = await fs.promises.readFile(outputPath);
-    console.log("📤 Canvas rendered output file size:", outputBuffer.length, "bytes");
-
-    // 清理臨時檔案
-    try {
-      if (!videoPath) await fs.promises.unlink(finalVideoPath);
-      // 清理 frames 目錄
-      const frameFiles = await fs.promises.readdir(framesDir);
-      for (const file of frameFiles) {
-        await fs.promises.unlink(path.join(framesDir, file));
-      }
-      await fs.promises.rmdir(framesDir);
-      await fs.promises.unlink(outputPath);
-      console.log("🧹 Cleanup completed");
-    } catch (cleanupError) {
-      console.error("⚠️ Cleanup error:", cleanupError);
     }
 
     return new Response(new Uint8Array(outputBuffer), {

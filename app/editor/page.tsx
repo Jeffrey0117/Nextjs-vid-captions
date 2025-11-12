@@ -60,6 +60,7 @@ export default function ProjectsPage() {
   // 批量編輯器狀態
   const [showBulkEditor, setShowBulkEditor] = useState(false);
   const [currentEditingProjectId, setCurrentEditingProjectId] = useState<string | null>(null);
+  const [renderMethod, setRenderMethod] = useState<'ass'>('ass'); // 渲染方法選擇
   
   // Zustand store
   const { tracks, loadProjectSegments, clearAll } = useSubtitleStore();
@@ -338,6 +339,7 @@ export default function ProjectsPage() {
       const formData = new FormData();
       formData.append('video', project.videoFile);
       formData.append('segments', JSON.stringify(project.segments));
+      formData.append('renderMethod', renderMethod); // 添加渲染方法
       
       const res = await fetch('/api/burn-subtitles', {
         method: 'POST',

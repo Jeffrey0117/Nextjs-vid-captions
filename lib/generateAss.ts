@@ -1,6 +1,28 @@
 import { SubtitleSegment } from '../app/stores/subtitle-store';
 
 /**
+ * CSS to ASS Style Mapping
+ *
+ * Fully Supported:
+ * - fontSize, fontFamily, fontWeight, fontStyle
+ * - color, opacity
+ * - position (Alignment + MarginV)
+ * - textDecoration (underline, line-through)
+ *
+ * Partially Supported (with limitations):
+ * - stroke (mapped to Outline, but rendering may differ)
+ * - shadow (single distance instead of X/Y offsets)
+ * - backgroundColor (opaque box only, no rounded corners)
+ *
+ * Not Supported (fallback to default):
+ * - gradients (use first color)
+ * - backdrop blur (ignored)
+ * - animations (static only)
+ * - multiple strokes (single outline only)
+ * - shadowBlur (ASS doesn't support blur radius)
+ */
+
+/**
  * 生成 ASS (Advanced SubStation Alpha) 字幕檔
  * ASS 格式支援豐富的字幕樣式,適合用於 FFmpeg 燒錄
  */
@@ -42,7 +64,18 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
     
     // ASS 顏色格式: &HAABBGGRR (alpha, blue, green, red)
     const primaryColor = hexToAssColor(style.color, style.opacity);
-    const shadowColor = style.enableShadow ? hexToAssColor(style.shadowColor, 1) : '&H00000000';
+
+    // 陰影顏色 (BackColour in ASS)
+    const shadowColor = style.enableShadow
+      ? hexToAssColor(style.shadowColor, 1)
+      : '&H00000000';
+
+    // 描邊顏色 (OutlineColour in ASS)
+    const outlineColor = style.enableStroke
+      ? hexToAssColor(style.strokeColor, 1)
+      : '&H00000000';
+
+    // 背景顏色 (用於 BorderStyle=3 的不透明背景框)
     const backgroundColor = style.backgroundColor === 'transparent'
       ? '&H00000000'
       : hexToAssColor(style.backgroundColor, 1);
@@ -60,14 +93,14 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
     // Underline/Strikeout: 0=off, -1=on
     const underline = style.textDecoration === 'underline' ? -1 : 0;
     const strikeout = style.textDecoration === 'line-through' ? -1 : 0;
-    
+
     // Shadow 距離 (ASS 只支援一個 shadow 參數,計算對角線距離)
-    // 使用勾股定理計算 X 和 Y 偏移的合成距離
-    const shadow = style.enableShadow
-      ? Math.round(Math.sqrt(
-          Math.pow(style.shadowOffsetX, 2) +
-          Math.pow(style.shadowOffsetY, 2)
-        ))
+    // 使用勾股定理計算 X 和 Y 偏移的合成距離,這樣可以更準確地模擬 CSS 陰影效果
+    const shadowDistance = style.enableShadow
+      ? Math.sqrt(
+          style.shadowOffsetX ** 2 +
+          style.shadowOffsetY ** 2
+        )
       : 0;
     
     // ASS 字體大小應該包含 scale 的效果,才能與網頁預覽一致
@@ -76,16 +109,36 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
     
     // ScaleX/ScaleY 設為 100 (不再額外縮放,因為已經算在字體大小裡)
     const scale = 100;
-    
-    // BorderStyle: 1=普通邊框, 3=不透明方框背景
-    // 如果有背景色,使用 BorderStyle=3 來顯示背景框
-    const borderStyle = style.backgroundColor !== 'transparent' ? 3 : 1;
-    
-    // Outline: 邊框寬度 (當 BorderStyle=3 時,這個值控制背景框的 padding)
-    // 使用 8px 的 padding (對應網頁預覽的 padding)
-    const outline = style.backgroundColor !== 'transparent' ? 8 : 0;
-    
-    return `Style: Style${index},${fontName},${actualFontSize},${primaryColor},&H000000FF,${shadowColor},${backgroundColor},${bold},${italic},${underline},${strikeout},${scale},${scale},0,0,${borderStyle},${outline},${shadow},${alignment},10,10,10,1`;
+
+    // BorderStyle 和 Outline 的邏輯:
+    // - BorderStyle=1: 普通描邊模式 (支援 Outline 寬度和顏色)
+    // - BorderStyle=3: 不透明背景框模式 (Outline 控制 padding)
+    //
+    // 優先級:
+    // 1. 如果有背景色 → BorderStyle=3 (背景框模式)
+    // 2. 如果有描邊 → BorderStyle=1 (描邊模式)
+    // 3. 否則 → BorderStyle=1, Outline=0 (無邊框)
+    const hasBackground = style.backgroundColor !== 'transparent';
+    const hasStroke = style.enableStroke && style.strokeWidth > 0;
+
+    let borderStyle: number;
+    let outline: number;
+
+    if (hasBackground) {
+      // 背景框模式: Outline 控制背景框的 padding
+      borderStyle = 3;
+      outline = 8; // 8px padding
+    } else if (hasStroke) {
+      // 描邊模式: Outline 控制描邊寬度
+      borderStyle = 1;
+      outline = style.strokeWidth;
+    } else {
+      // 無邊框模式
+      borderStyle = 1;
+      outline = 0;
+    }
+
+    return `Style: Style${index},${fontName},${actualFontSize},${primaryColor},&H000000FF,${outlineColor},${backgroundColor},${bold},${italic},${underline},${strikeout},${scale},${scale},0,0,${borderStyle},${outline},${shadowDistance},${alignment},10,10,10,1`;
   }).join('\n');
 
   // 事件 (字幕內容)
@@ -115,24 +168,37 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 /**
  * 將 HEX 顏色轉換為 ASS 格式
- * @param hex - #RRGGBB 格式
- * @param opacity - 0-1
- * @returns &HAABBGGRR 格式
+ * @param hex - #RRGGBB 格式的顏色值
+ * @param alpha - 0-1 之間的透明度值 (0=完全透明, 1=完全不透明)
+ * @returns &HAABBGGRR 格式的 ASS 顏色字串
+ *
+ * ASS 顏色格式說明:
+ * - &H 是前綴
+ * - AA 是 alpha (00=不透明, FF=全透明, 與 CSS 相反)
+ * - BB 是 blue
+ * - GG 是 green
+ * - RR 是 red (順序與 CSS 的 RGB 相反)
  */
-function hexToAssColor(hex: string, opacity: number): string {
+function hexToAssColor(hex: string, alpha: number = 1): string {
   // 移除 # 號
   hex = hex.replace('#', '');
-  
-  // 提取 RGB
-  const r = hex.substring(0, 2);
-  const g = hex.substring(2, 4);
-  const b = hex.substring(4, 6);
-  
-  // 計算 alpha (0=不透明, FF=全透明)
-  const alpha = Math.round((1 - opacity) * 255).toString(16).padStart(2, '0').toUpperCase();
-  
+
+  // 解析 RGB 值
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+
+  // 計算 ASS alpha (0=不透明, FF=全透明, 與 CSS 相反)
+  const a = Math.round((1 - alpha) * 255);
+
+  // 轉換為十六進位並填充到兩位
+  const aHex = a.toString(16).padStart(2, '0');
+  const bHex = b.toString(16).padStart(2, '0');
+  const gHex = g.toString(16).padStart(2, '0');
+  const rHex = r.toString(16).padStart(2, '0');
+
   // ASS 格式: &HAABBGGRR
-  return `&H${alpha}${b}${g}${r}`;
+  return `&H${aHex}${bHex}${gHex}${rHex}`.toUpperCase();
 }
 
 /**

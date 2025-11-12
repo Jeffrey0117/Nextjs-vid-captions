@@ -603,7 +603,7 @@ export default function EditorProPage() {
       if (renderMethod === 'canvas') {
         apiEndpoint = '/api/render-video/drawtext'; // 使用 FFmpeg drawtext 高品質渲染
       } else {
-        apiEndpoint = '/api/burn-subtitles';
+        apiEndpoint = '/api/burn-subtitles'; // 傳統 FFmpeg ASS 燒錄
       }
       
       console.log('🎬 Using API endpoint:', apiEndpoint);
@@ -1130,13 +1130,14 @@ export default function EditorProPage() {
             onChange={(e) => setRenderMethod(e.target.value as 'ffmpeg' | 'canvas')}
             className="px-2 py-1 text-xs bg-gray-800 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
             disabled={isExporting}
-            title={renderMethod === 'canvas' ? 
-              '使用高級 ASS 渲染，支援更好的字體效果、陰影和位置控制' : 
-              '基本 FFmpeg 渲染，速度較快但效果有限'
+            title={
+              renderMethod === 'canvas' ?
+                '使用高級 drawtext 渲染，支援描邊、陰影和字體效果' :
+                '基本 FFmpeg ASS 渲染，速度較快但效果有限'
             }
           >
-            <option value="canvas">Canvas 渲染 (高質量)</option>
-            <option value="ffmpeg">FFmpeg 渲染 (兼容)</option>
+            <option value="canvas">🎨 Canvas 渲染 (高質量)</option>
+            <option value="ffmpeg">⚡ FFmpeg 渲染 (快速)</option>
           </select>
         </div>
 
@@ -1360,9 +1361,32 @@ export default function EditorProPage() {
                                   fontStyle: currentSubtitle.style.fontStyle,
                                   textDecoration: currentSubtitle.style.textDecoration,
                                   color: currentSubtitle.style.color,
-                                  textShadow: currentSubtitle.style.enableShadow
-                                    ? `${(currentSubtitle.style.shadowOffsetX / 1080) * videoDisplaySize.height}px ${(currentSubtitle.style.shadowOffsetY / 1080) * videoDisplaySize.height}px ${(currentSubtitle.style.shadowBlur / 1080) * videoDisplaySize.height}px ${currentSubtitle.style.shadowColor}`
-                                    : 'none',
+                                  textShadow: (() => {
+                                    const shadows: string[] = [];
+
+                                    // Add stroke effect using multiple shadows
+                                    if (currentSubtitle.style.enableStroke) {
+                                      const strokeWidth = (currentSubtitle.style.strokeWidth / 1080) * videoDisplaySize.height;
+                                      const steps = 16;
+
+                                      for (let i = 0; i < steps; i++) {
+                                        const angle = (i * 2 * Math.PI) / steps;
+                                        const x = Math.cos(angle) * strokeWidth;
+                                        const y = Math.sin(angle) * strokeWidth;
+                                        shadows.push(`${x}px ${y}px 0 ${currentSubtitle.style.strokeColor}`);
+                                      }
+                                    }
+
+                                    // Add drop shadow
+                                    if (currentSubtitle.style.enableShadow) {
+                                      const shadowX = (currentSubtitle.style.shadowOffsetX / 1080) * videoDisplaySize.height;
+                                      const shadowY = (currentSubtitle.style.shadowOffsetY / 1080) * videoDisplaySize.height;
+                                      const shadowBlur = (currentSubtitle.style.shadowBlur / 1080) * videoDisplaySize.height;
+                                      shadows.push(`${shadowX}px ${shadowY}px ${shadowBlur}px ${currentSubtitle.style.shadowColor}`);
+                                    }
+
+                                    return shadows.length > 0 ? shadows.join(', ') : 'none';
+                                  })(),
                                 }}
                               >
                                 {currentSubtitle.translatedText || currentSubtitle.text}
