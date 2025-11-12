@@ -83,12 +83,6 @@ export default function SubtitlePropertiesPanel({
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-3">
-      {/* 樣式模板區域 */}
-      <StyleTemplateSection
-        selectedSegment={selectedSegment}
-        applyToAll={applyToAll}
-      />
-
       {/* 套用到所有字幕 */}
       <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/30 rounded-lg">
         <input
@@ -890,6 +884,14 @@ function ShadowControlsImproved({
           />
         </div>
       </div>
+
+      <div className="border-t border-gray-700/50"></div>
+
+      {/* 樣式模板區域 */}
+      <StyleTemplateSection
+        selectedSegment={selectedSegment}
+        applyToAll={applyToAll}
+      />
     </div>
   );
 }
