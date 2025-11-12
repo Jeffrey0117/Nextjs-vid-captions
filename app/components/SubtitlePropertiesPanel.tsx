@@ -6,15 +6,6 @@ import { useState, useRef, useEffect } from 'react';
 import { Type, Bold, Italic, Underline, Strikethrough, Palette, Eye, Square, Save, X, Plus, ArrowUp, ArrowRight, ArrowDown, ArrowLeft, ChevronDown, ChevronRight, Scissors } from 'lucide-react';
 import { useClickOutside } from '../hooks/useClickOutside';
 
-// 時間碼格式化函數
-function formatTimeCode(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  const ms = Math.floor((seconds % 1) * 1000);
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
-}
-
 interface SubtitlePropertiesPanelProps {
   selectedSegmentId: string | null;
   applyToAll: boolean;
@@ -125,64 +116,6 @@ export default function SubtitlePropertiesPanel({
           套用到所有字幕
         </label>
       </div>
-
-      {/* ========== 時間碼 ========== */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-gray-300">時間碼</h3>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="block text-xs font-medium mb-1 text-gray-400">開始時間</label>
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              value={selectedSegment.startTime.toFixed(2)}
-              onChange={(e) => {
-                const newStart = parseFloat(e.target.value);
-                if (!isNaN(newStart) && newStart >= 0 && newStart < selectedSegment.endTime) {
-                  updateSegment(selectedSegment.id, { startTime: newStart });
-                }
-              }}
-              className="w-full px-2 py-1 text-sm bg-gray-800/50 border border-gray-700 rounded focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-            <div className="text-xs text-gray-500 mt-1">
-              {formatTimeCode(selectedSegment.startTime)}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium mb-1 text-gray-400">結束時間</label>
-            <input
-              type="number"
-              step="0.1"
-              min={selectedSegment.startTime + 0.1}
-              value={selectedSegment.endTime.toFixed(2)}
-              onChange={(e) => {
-                const newEnd = parseFloat(e.target.value);
-                if (!isNaN(newEnd) && newEnd > selectedSegment.startTime) {
-                  updateSegment(selectedSegment.id, { endTime: newEnd });
-                }
-              }}
-              className="w-full px-2 py-1 text-sm bg-gray-800/50 border border-gray-700 rounded focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-            <div className="text-xs text-gray-500 mt-1">
-              {formatTimeCode(selectedSegment.endTime)}
-            </div>
-          </div>
-        </div>
-
-        <div className="text-xs text-gray-400 bg-gray-800/30 px-3 py-2 rounded">
-          <div className="flex justify-between">
-            <span>持續時間:</span>
-            <span className="font-medium text-white">
-              {(selectedSegment.endTime - selectedSegment.startTime).toFixed(2)} 秒
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="border-t border-gray-700/50"></div>
 
       {/* ========== 文字內容 ========== */}
       <div className="space-y-3">
