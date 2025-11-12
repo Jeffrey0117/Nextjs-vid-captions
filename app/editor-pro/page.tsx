@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useSubtitleStore } from '../stores/subtitle-store';
-import { Upload, FileText, Download, Languages, Trash2, Scissors, Film, Edit3, ArrowLeftToLine, ArrowRightToLine, SplitSquareHorizontal, Copy, Snowflake, Video, Music, Type, CaptionsIcon, Blend, Settings } from 'lucide-react';
+import { Upload, FileText, Download, Languages, Trash2, Scissors, Film, Edit3, ArrowLeftToLine, ArrowRightToLine, SplitSquareHorizontal, Copy, Snowflake, Video, Music, Type, CaptionsIcon, Blend, Settings, Plus } from 'lucide-react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import SubtitlePropertiesPanel from '../components/SubtitlePropertiesPanel';
 import PinnedSubtitlePanel from '../components/PinnedSubtitlePanel';
@@ -84,6 +84,8 @@ export default function EditorProPage() {
     clearAll,
     updateSegment,
     selectSegment,
+    addSegment,
+    deleteSegment,
     addTrack,
     deleteTrack,
     selectTrack,
@@ -513,6 +515,57 @@ export default function EditorProPage() {
     };
   }, [duration, tracks]); // 當 duration 或 tracks 變化時重新綁定 (tracks 是真正的 reactive state)
 
+  // 鍵盤快捷鍵支持
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 如果正在輸入框中，忽略快捷鍵
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      // Ctrl/Cmd + N: 新增字幕
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        if (videoFile && duration > 0) {
+          handleAddSubtitle();
+        }
+      }
+
+      // Delete/Backspace: 刪除選中的字幕
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedSegmentId) {
+        e.preventDefault();
+        const segment = segments.find(s => s.id === selectedSegmentId);
+        if (segment && confirm(`確定要刪除字幕「${segment.text}」嗎？`)) {
+          deleteSegment(selectedSegmentId);
+          setSelectedSegmentId(null);
+          toast.success('字幕已刪除');
+        }
+      }
+
+      // Space: 播放/暫停
+      if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        togglePlayPause();
+      }
+
+      // Arrow Left: 後退5秒
+      if (e.key === 'ArrowLeft' && videoRef.current) {
+        e.preventDefault();
+        seekTo(Math.max(0, currentTime - 5));
+      }
+
+      // Arrow Right: 前進5秒
+      if (e.key === 'ArrowRight' && videoRef.current) {
+        e.preventDefault();
+        seekTo(Math.min(duration, currentTime + 5));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedSegmentId, segments, videoFile, duration, currentTime]);
+
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -819,6 +872,55 @@ export default function EditorProPage() {
     setSelectedSegmentId(segmentId);
     selectSegment(segmentId);
     seekTo(startTime);
+  };
+
+  // 新增字幕
+  const handleAddSubtitle = () => {
+    // 確保有軌道
+    if (tracks.length === 0) {
+      addTrack('字幕軌道 1');
+    }
+
+    const trackId = tracks[0]?.id || selectedTrackId;
+    const startTime = currentTime;
+    const endTime = currentTime + 2; // 默認2秒
+
+    // 創建新字幕
+    const newSegment = addSegment({
+      startTime,
+      endTime,
+      text: '新字幕',
+      style: {
+        fontSize: 32,
+        fontFamily: 'Noto Sans SC',
+        fontWeight: 'normal' as const,
+        fontStyle: 'normal' as const,
+        textDecoration: 'none' as const,
+        color: '#FFFFFF',
+        opacity: 1,
+        backgroundColor: 'transparent',
+        position: 'bottom' as const,
+        positionX: 50,
+        positionY: 10,
+        maxWidth: 80,
+        scale: 1,
+        enableStroke: true,
+        strokeColor: '#000000',
+        strokeWidth: 2,
+        enableShadow: false,
+        shadowColor: '#000000',
+        shadowOffsetX: 0,
+        shadowOffsetY: 0,
+        shadowBlur: 0,
+      }
+    }, trackId);
+
+    // 選中新創建的字幕
+    if (newSegment) {
+      setSelectedSegmentId(newSegment.id);
+      selectSegment(newSegment.id);
+      toast.success('已創建新字幕');
+    }
   };
 
   const handleSubtitleDragStart = (e: React.MouseEvent) => {
@@ -1188,6 +1290,16 @@ export default function EditorProPage() {
         >
           <FileText size={12} />
           匯入 SRT
+        </button>
+
+        <button
+          onClick={handleAddSubtitle}
+          disabled={!videoFile || duration === 0}
+          className="flex items-center gap-1 px-2 py-1 bg-cyan-600 hover:bg-cyan-700 rounded transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+          title="在當前時間創建新字幕 (Ctrl+N)"
+        >
+          <Plus size={12} />
+          新增字幕
         </button>
 
         <button
@@ -2124,10 +2236,10 @@ export default function EditorProPage() {
                                       <div
                                         key={segment.id}
                                         data-segment-id={segment.id}
-                                        className={`absolute top-1 h-14 rounded-[0.5rem] border transition group ${
+                                        className={`absolute top-4 h-8 rounded border-2 transition-all duration-200 group ${
                                           isSelected
-                                            ? 'bg-yellow-600 border-yellow-400'
-                                            : 'bg-[#5DBAA0] hover:bg-[#5DBAA0]/80 border-[#5DBAA0]'
+                                            ? 'bg-[#5DBAA0] border-blue-500 shadow-lg shadow-blue-500/30'
+                                            : 'bg-[#5DBAA0] hover:bg-[#4da890] border-[#5DBAA0] hover:border-[#4da890]'
                                         }`}
                                         style={{
                                           left: `${left}px`,
@@ -2147,14 +2259,14 @@ export default function EditorProPage() {
                                         
                                         {/* 中間區域:點擊選中,拖曳移動 */}
                                         <div
-                                          className="h-full flex items-center justify-center p-0.5 cursor-move"
+                                          className="h-full flex items-center px-2 cursor-move"
                                           onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'move')}
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             handleSegmentClick(segment.id, segment.startTime);
                                           }}
                                         >
-                                          <span className="text-[0.65rem] text-white truncate">
+                                          <span className="text-[0.65rem] text-white truncate flex-1" title={segment.text}>
                                             {segment.text}
                                           </span>
                                         </div>
