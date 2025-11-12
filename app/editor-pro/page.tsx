@@ -28,7 +28,7 @@ export default function EditorProPage() {
   const [dragStartPositionX, setDragStartPositionX] = useState(50);
   const [dragStartPositionY, setDragStartPositionY] = useState(0);
   const [draggingSubtitleId, setDraggingSubtitleId] = useState<string | null>(null);
-  const [applyToAll, setApplyToAll] = useState(false);
+  const [applyToAll, setApplyToAll] = useState(true);
   const [timelineDragState, setTimelineDragState] = useState<{
     isDragging: boolean;
     dragType: 'left' | 'right' | 'move' | null;

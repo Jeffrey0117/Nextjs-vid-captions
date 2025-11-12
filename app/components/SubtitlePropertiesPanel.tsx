@@ -95,7 +95,21 @@ export default function SubtitlePropertiesPanel({
           type="checkbox"
           id="apply-to-all"
           checked={applyToAll}
-          onChange={(e) => setApplyToAll(e.target.checked)}
+          onChange={(e) => {
+            const newValue = e.target.checked;
+            setApplyToAll(newValue);
+
+            // 如果打勾，立即同步当前字幕样式到所有其他字幕
+            if (newValue && selectedSegment) {
+              segments.forEach(seg => {
+                if (seg.id !== selectedSegment.id) {
+                  updateSegment(seg.id, {
+                    style: { ...selectedSegment.style },
+                  });
+                }
+              });
+            }
+          }}
           className="w-4 h-4"
         />
         <label htmlFor="apply-to-all" className="text-sm font-medium cursor-pointer">
@@ -234,16 +248,13 @@ export default function SubtitlePropertiesPanel({
             <optgroup label="系统字体">
               <option value="Arial">Arial</option>
               <option value="Helvetica">Helvetica</option>
-              <option value="Microsoft JhengHei">微软正黑体</option>
-              <option value="PingFang TC">苹方-繁体</option>
-              <option value="PingFang SC">苹方-简体</option>
+              <option value="Microsoft YaHei">微软雅黑</option>
+              <option value="PingFang SC">苹方</option>
+              <option value="SimHei">黑体</option>
             </optgroup>
-            <optgroup label="Google Fonts - 中文 (完整支持)">
-              <option value="Noto Sans TC">Noto Sans TC (繁体黑体)</option>
-              <option value="Noto Sans SC">Noto Sans SC (简体黑体)</option>
-              <option value="Noto Serif TC">Noto Serif TC (繁体宋体)</option>
-              <option value="Noto Serif SC">Noto Serif SC (简体宋体)</option>
-              <option value="Noto Sans HK">Noto Sans HK (香港)</option>
+            <optgroup label="Google Fonts - 中文">
+              <option value="Noto Sans SC">Noto Sans SC (黑体)</option>
+              <option value="Noto Serif SC">Noto Serif SC (宋体)</option>
             </optgroup>
             <optgroup label="Google Fonts - 英文">
               <option value="Roboto">Roboto</option>
