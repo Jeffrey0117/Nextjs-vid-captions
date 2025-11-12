@@ -496,6 +496,14 @@ export default function SubtitlePropertiesPanel({
 
       <div className="border-t border-gray-700/50"></div>
 
+      {/* 樣式模板區域 */}
+      <StyleTemplateSection
+        selectedSegment={selectedSegment}
+        applyToAll={applyToAll}
+      />
+
+      <div className="border-t border-gray-700/50"></div>
+
       {/* ========== 預覽區域 ========== */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-gray-300">預覽</h3>
@@ -884,14 +892,6 @@ function ShadowControlsImproved({
           />
         </div>
       </div>
-
-      <div className="border-t border-gray-700/50"></div>
-
-      {/* 樣式模板區域 */}
-      <StyleTemplateSection
-        selectedSegment={selectedSegment}
-        applyToAll={applyToAll}
-      />
     </div>
   );
 }
