@@ -15,8 +15,6 @@ interface SubtitlePlayheadProps {
   duration: number;
   /** 時間軸總容器 ref (用於計算完整高度) */
   timelineRef?: React.RefObject<HTMLDivElement>;
-  /** 是否高亮顯示（點擊反饋） */
-  isHighlighted?: boolean;
 }
 
 export default function SubtitlePlayhead({
@@ -26,7 +24,6 @@ export default function SubtitlePlayhead({
   onSeek,
   duration,
   timelineRef,
-  isHighlighted = false,
 }: SubtitlePlayheadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const playheadRef = useRef<HTMLDivElement>(null);
@@ -153,11 +150,7 @@ export default function SubtitlePlayhead({
       {/* 垂直紅線 - 純視覺效果,不接收點擊 (pointer-events-none) */}
       <div
         className={`absolute pointer-events-none z-40 ${
-          isDragging
-            ? 'bg-red-600 w-1'
-            : isHighlighted
-              ? 'bg-yellow-400 w-1 shadow-lg shadow-yellow-400/50'
-              : 'bg-red-500 w-0.5'
+          isDragging ? 'bg-red-600 w-1' : 'bg-red-500 w-0.5'
         }`}
         style={{
           left: `${playheadX}px`,

@@ -59,7 +59,6 @@ export default function EditorProPage() {
   // 時間軸點擊/拖動檢測狀態
   const [isClickAction, setIsClickAction] = useState(true);
   const [mouseDownPosition, setMouseDownPosition] = useState<{x: number, y: number} | null>(null);
-  const [playheadHighlight, setPlayheadHighlight] = useState(false);
 
   // 拖動閾值：移動超過5px視為拖動
   const DRAG_THRESHOLD = 5;
@@ -814,10 +813,6 @@ export default function EditorProPage() {
 
     // 執行跳轉
     seekTo(newTime);
-
-    // 視覺反饋：短暫高亮播放頭
-    setPlayheadHighlight(true);
-    setTimeout(() => setPlayheadHighlight(false), 300);
   };
 
   const handleSegmentClick = (segmentId: string, startTime: number) => {
@@ -2052,8 +2047,6 @@ export default function EditorProPage() {
                                 });
 
                                 seekTo(newTime);
-                                setPlayheadHighlight(true);
-                                setTimeout(() => setPlayheadHighlight(false), 300);
                               }
                             }
                             setMouseDownPosition(null);
@@ -2111,7 +2104,6 @@ export default function EditorProPage() {
                                 onSeek={seekTo}
                                 duration={duration}
                                 timelineRef={timelineContentRef}
-                                isHighlighted={playheadHighlight}
                               />
                             )}
                             
