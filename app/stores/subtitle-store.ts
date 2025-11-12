@@ -254,7 +254,7 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       name: '優雅襯線',
       style: {
         fontSize: 34,
-        fontFamily: 'Noto Serif TC',
+        fontFamily: 'Noto Serif SC',
         fontWeight: 'normal',
         fontStyle: 'italic',
         textDecoration: 'none',
@@ -640,10 +640,36 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
   // 樣式模板管理方法
   saveStyleTemplate: (name, style, isDefault = false) => {
     set((state) => {
+      // 只保存样式属性，排除大小和位置
+      const styleWithoutSizeAndPosition = {
+        fontFamily: style.fontFamily,
+        fontWeight: style.fontWeight,
+        fontStyle: style.fontStyle,
+        textDecoration: style.textDecoration,
+        color: style.color,
+        opacity: style.opacity,
+        backgroundColor: style.backgroundColor,
+        position: style.position,
+        enableShadow: style.enableShadow,
+        shadowColor: style.shadowColor,
+        shadowOffsetX: style.shadowOffsetX,
+        shadowOffsetY: style.shadowOffsetY,
+        shadowBlur: style.shadowBlur,
+        enableStroke: style.enableStroke,
+        strokeColor: style.strokeColor,
+        strokeWidth: style.strokeWidth,
+        // 使用默认值填充必需的属性（不会被应用）
+        fontSize: 32,
+        scale: 1,
+        positionX: 50,
+        positionY: 90,
+        maxWidth: 80,
+      };
+
       const newTemplate: StyleTemplate = {
         id: generateId(),
         name,
-        style: { ...style },
+        style: styleWithoutSizeAndPosition as SubtitleSegment['style'],
         isDefault,
         createdAt: Date.now(),
       };
@@ -672,24 +698,54 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     if (!template) return;
 
     const segments = state.tracks.length > 0 ? state.tracks[0].segments : [];
-    
+
+    // 只应用样式属性，排除大小和位置相关属性
+    const getStyleWithoutSizeAndPosition = (currentStyle: SubtitleSegment['style']) => ({
+      ...currentStyle,
+      // 只覆盖样式属性，保留原有的大小和位置
+      fontFamily: template.style.fontFamily,
+      fontWeight: template.style.fontWeight,
+      fontStyle: template.style.fontStyle,
+      textDecoration: template.style.textDecoration,
+      color: template.style.color,
+      opacity: template.style.opacity,
+      backgroundColor: template.style.backgroundColor,
+      position: template.style.position,
+      enableShadow: template.style.enableShadow,
+      shadowColor: template.style.shadowColor,
+      shadowOffsetX: template.style.shadowOffsetX,
+      shadowOffsetY: template.style.shadowOffsetY,
+      shadowBlur: template.style.shadowBlur,
+      enableStroke: template.style.enableStroke,
+      strokeColor: template.style.strokeColor,
+      strokeWidth: template.style.strokeWidth,
+      // 保留原有的大小和位置属性
+      // fontSize, scale, positionX, positionY, maxWidth 不变
+    });
+
     if (applyToAll) {
       // 套用到所有字幕
       segments.forEach(seg => {
         state.updateSegment(seg.id, {
-          style: { ...template.style },
+          style: getStyleWithoutSizeAndPosition(seg.style),
         });
       });
     } else if (segmentId) {
       // 套用到指定字幕
-      state.updateSegment(segmentId, {
-        style: { ...template.style },
-      });
+      const seg = segments.find(s => s.id === segmentId);
+      if (seg) {
+        state.updateSegment(segmentId, {
+          style: getStyleWithoutSizeAndPosition(seg.style),
+        });
+      }
     } else if (state.selectedSegmentId) {
       // 套用到當前選中的字幕
-      state.updateSegment(state.selectedSegmentId, {
-        style: { ...template.style },
-      });
+      const seg = segments.find(s => s.id === state.selectedSegmentId);
+      if (seg) {
+        state.updateSegment(state.selectedSegmentId, {
+          style: getStyleWithoutSizeAndPosition(seg.style),
+        });
+      }
     }
   },
 
