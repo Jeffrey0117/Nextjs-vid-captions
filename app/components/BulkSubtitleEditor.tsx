@@ -147,18 +147,20 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
   }, [previewTime, showPreview]);
 
   const handleSave = () => {
-    // 批量更新所有字幕
+    // 批量更新所有字幕（允许空字符串）
     Object.keys(editedTexts).forEach(id => {
       const segment = segments.find(s => s.id === id);
       if (segment) {
-        if (segment.translatedText) {
-          updateSegment(id, { translatedText: editedTexts[id] });
+        // 直接保存，不验证是否为空
+        const textValue = editedTexts[id] || ''; // 如果是 undefined，使用空字符串
+        if (segment.translatedText !== undefined) {
+          updateSegment(id, { translatedText: textValue });
         } else {
-          updateSegment(id, { text: editedTexts[id] });
+          updateSegment(id, { text: textValue });
         }
       }
     });
-    
+
     // 顯示儲存成功訊息，但不自動關閉
     alert(`已儲存 ${segments.length} 條字幕的文字變更`);
   };

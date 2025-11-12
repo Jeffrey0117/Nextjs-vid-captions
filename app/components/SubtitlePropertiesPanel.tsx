@@ -185,34 +185,6 @@ export default function SubtitlePropertiesPanel({
             />
           </div>
         </div>
-
-        {/* 缩放比例 */}
-        <div>
-          <label className="block text-xs font-medium mb-2 text-gray-400">
-            缩放比例: <span className="text-white">{selectedSegment.style.scale.toFixed(1)}x</span>
-          </label>
-          <p className="text-xs text-gray-500 mb-2">提示: 也可以直接拖曳字幕边框缩放</p>
-          <div className="flex gap-2 items-center">
-            <input
-              type="range"
-              min="50"
-              max="300"
-              step="10"
-              value={selectedSegment.style.scale * 100}
-              onChange={(e) => updateStyle({ scale: parseInt(e.target.value) / 100 })}
-              className="flex-1"
-            />
-            <input
-              type="number"
-              min="0.5"
-              max="3.0"
-              step="0.1"
-              value={selectedSegment.style.scale}
-              onChange={(e) => updateStyle({ scale: parseFloat(e.target.value) })}
-              className="w-16 px-2 py-1 text-sm bg-gray-800 border border-gray-700 rounded text-center focus:outline-none focus:border-blue-500"
-            />
-          </div>
-        </div>
       </div>
 
       <div className="border-t border-gray-700/50"></div>
