@@ -1408,11 +1408,11 @@ export default function EditorProPage() {
       {/* 主要工作區 */}
       <div className="flex-1 overflow-hidden">
         <PanelGroup direction="horizontal">
-          {/* 全屏區域: 媒體面板 + 預覽 + 字幕屬性 + 時間軸 */}
-          <Panel defaultSize={100} minSize={100}>
+          {/* 左側區域: 媒體面板 + 預覽 (帶時間軸) */}
+          <Panel defaultSize={70} minSize={40}>
             <PanelGroup direction="vertical">
               {/* 上方: 媒體面板 + 預覽 */}
-              <Panel defaultSize={45} minSize={25}>
+              <Panel defaultSize={60} minSize={30}>
                 <PanelGroup direction="horizontal">
                   {/* 最左側: OpenCut 風格媒體面板 */}
                   <Panel defaultSize={20} minSize={15} maxSize={40}>
@@ -1730,54 +1730,8 @@ export default function EditorProPage() {
               {/* 垂直調整手柄 */}
               <PanelResizeHandle className="h-1 bg-gray-800 hover:bg-blue-600 transition cursor-row-resize" />
 
-              {/* 中間: 字幕屬性編輯面板 */}
-              <Panel defaultSize={20} minSize={15} maxSize={40}>
-                <div className="h-full flex flex-col bg-gray-900">
-                  <div className="h-9 border-b border-gray-800 flex items-center px-3 justify-between">
-                    <h2 className="text-sm font-semibold">
-                      {editMode === 'normal' ? '字幕屬性' : '固定字幕'}
-                    </h2>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => setEditMode('normal')}
-                        className={`px-3 py-1 text-xs rounded transition ${
-                          editMode === 'normal'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                        }`}
-                      >
-                        普通字幕
-                      </button>
-                      <button
-                        onClick={() => setEditMode('pinned')}
-                        className={`px-3 py-1 text-xs rounded transition ${
-                          editMode === 'pinned'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                        }`}
-                      >
-                        固定字幕
-                      </button>
-                    </div>
-                  </div>
-
-                  {editMode === 'normal' ? (
-                    <SubtitlePropertiesPanel
-                      selectedSegmentId={selectedSegmentId}
-                      applyToAll={applyToAll}
-                      setApplyToAll={setApplyToAll}
-                    />
-                  ) : (
-                    <PinnedSubtitlePanel />
-                  )}
-                </div>
-              </Panel>
-
-              {/* 垂直調整手柄 */}
-              <PanelResizeHandle className="h-1 bg-gray-800 hover:bg-blue-600 transition cursor-row-resize" />
-
-              {/* 底部: 時間軸面板 */}
-              <Panel defaultSize={35} minSize={15} maxSize={50}>
+              {/* 底部: 時間軸面板 (只延伸到媒體+預覽區域) */}
+              <Panel defaultSize={40} minSize={15} maxSize={50}>
                 <div className="h-full flex flex-col bg-gray-900">
                   {/* OpenCut TimelineToolbar - 播放控制 + 編輯工具 + 縮放控制 */}
                   <div className="flex items-center justify-between px-2 py-1 border-b bg-zinc-900 h-8">
@@ -2346,6 +2300,51 @@ export default function EditorProPage() {
                 </div>
               </Panel>
            </PanelGroup>
+         </Panel>
+
+         <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-blue-600 transition" />
+
+         {/* 右側: 字幕屬性編輯面板 */}
+         <Panel defaultSize={30} minSize={25}>
+           <div className="h-full flex flex-col bg-gray-900">
+             <div className="h-9 border-b border-gray-800 flex items-center px-3 justify-between">
+               <h2 className="text-sm font-semibold">
+                 {editMode === 'normal' ? '字幕屬性' : '固定字幕'}
+               </h2>
+               <div className="flex gap-1">
+                 <button
+                   onClick={() => setEditMode('normal')}
+                   className={`px-3 py-1 text-xs rounded transition ${
+                     editMode === 'normal'
+                       ? 'bg-blue-600 text-white'
+                       : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                   }`}
+                 >
+                   普通字幕
+                 </button>
+                 <button
+                   onClick={() => setEditMode('pinned')}
+                   className={`px-3 py-1 text-xs rounded transition ${
+                     editMode === 'pinned'
+                       ? 'bg-blue-600 text-white'
+                       : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                   }`}
+                 >
+                   固定字幕
+                 </button>
+               </div>
+             </div>
+
+             {editMode === 'normal' ? (
+               <SubtitlePropertiesPanel
+                 selectedSegmentId={selectedSegmentId}
+                 applyToAll={applyToAll}
+                 setApplyToAll={setApplyToAll}
+               />
+             ) : (
+               <PinnedSubtitlePanel />
+             )}
+           </div>
          </Panel>
        </PanelGroup>
      </div>
