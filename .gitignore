@@ -39,3 +39,21 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# temp files
+/public/temp/*
+!public/temp/.gitkeep
+
+# editor history
+.history/
+.claude/
+
+# test files
+test-*.js
+test-*.ass
+*_old_version.txt
+
+# screen recordings and test videos
+screen_recorded_*.mp4
+output_*.mp4
+subtitle_*.ass

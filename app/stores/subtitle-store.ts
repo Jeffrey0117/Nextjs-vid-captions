@@ -643,107 +643,172 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       }
       // 否则按标点符号自动分句
       else {
-        // 智能分句：包含逗号、句号、问号、感叹号等
-        const sentenceEnders = /([，,。！？.!?；;]+)/g;
+        // 優先分割翻譯文字，如果沒有才分割原文
+        const textToSplit = segment.translatedText || segment.text;
+        const isTranslated = !!segment.translatedText;
 
-        // 分割文本
-        const textParts = segment.text.split(sentenceEnders).filter(s => s.trim());
-        const translatedParts = segment.translatedText
-          ? segment.translatedText.split(sentenceEnders).filter(s => s.trim())
-          : [];
+        console.log('🔪 開始自動分句');
+        console.log('📝 要分割的文字:', textToSplit);
+        console.log('🌐 是否為翻譯:', isTranslated ? '是（中文）' : '否（原文）');
 
-        // 如果只有一部分或者没有标点，不切割
-        if (textParts.length <= 1) {
-          return state;
+        const text = textToSplit;
+
+        // 步驟1: 按所有標點符號分割，保留標點
+        const parts: string[] = [];
+        let currentPart = '';
+
+        for (let i = 0; i < text.length; i++) {
+          const char = text[i];
+          currentPart += char;
+
+          // 遇到標點符號就切分
+          if (/[，,。！？.!?；;]/.test(char)) {
+            parts.push(currentPart);
+            currentPart = '';
+          }
         }
 
-        // 合并文本和标点，并智能分组
-        const sentences: string[] = [];
-        const translatedSentences: string[] = [];
+        // 添加剩餘部分
+        if (currentPart.trim()) {
+          parts.push(currentPart);
+        }
 
-        let currentSentence = '';
-        let currentTranslated = '';
-        const MAX_LENGTH = 30; // 最大字数限制
+        console.log('📝 切分後的部分:', parts);
 
-        for (let i = 0; i < textParts.length; i++) {
-          const part = textParts[i];
-          const punctuation = textParts[i + 1] || '';
+        // 如果沒有標點，智能分割（按長度或空格）
+        if (parts.length <= 1) {
+          console.log('⚠️ 沒有標點符號，改用智能分割');
 
-          // 判断是否是标点符号
-          if (sentenceEnders.test(part)) {
-            continue; // 跳过已处理的标点
+          const MIN_WORDS = 5; // 最少單詞數（英文）或字數（中文）
+          const isEnglish = /^[a-zA-Z\s']+/.test(text);
+
+          if (isEnglish) {
+            // 英文：按空格分詞
+            const words = text.split(/\s+/);
+            console.log(`📝 英文句子，共 ${words.length} 個單詞`);
+
+            if (words.length <= MIN_WORDS * 2) {
+              console.log('⚠️ 單詞太少，不切割');
+              return state;
+            }
+
+            // 每 MIN_WORDS 個詞為一組
+            const midPoint = Math.floor(words.length / 2);
+            const firstHalf = words.slice(0, midPoint).join(' ');
+            const secondHalf = words.slice(midPoint).join(' ');
+
+            parts.length = 0;
+            parts.push(firstHalf, secondHalf);
+            console.log('✂️ 英文分割結果:', parts);
+          } else {
+            // 中文：按長度平分
+            const midPoint = Math.floor(text.length / 2);
+
+            if (text.length <= MIN_WORDS * 2) {
+              console.log('⚠️ 字數太少，不切割');
+              return state;
+            }
+
+            const firstHalf = text.substring(0, midPoint);
+            const secondHalf = text.substring(midPoint);
+
+            parts.length = 0;
+            parts.push(firstHalf, secondHalf);
+            console.log('✂️ 中文分割結果:', parts);
           }
+        }
 
-          const combined = part + punctuation;
+        // 步驟2: 智能分組
+        const sentences: string[] = [];
+        let currentSentence = '';
+        const MAX_LENGTH = 25; // 每句最大字數
 
-          // 如果是句号、问号、感叹号，或者超过最大长度，则分句
-          const isStrongEnder = /[。！？.!?]/.test(punctuation);
-          const wouldExceedMax = (currentSentence + combined).length > MAX_LENGTH;
+        for (const part of parts) {
+          const trimmedPart = part.trim();
+          if (!trimmedPart) continue;
 
-          if (currentSentence && (isStrongEnder || wouldExceedMax)) {
-            // 保存当前句子
-            sentences.push(currentSentence.trim());
-            currentSentence = combined;
+          // 檢查是否是強結束符（句號、問號、感嘆號）
+          const hasStrongEnder = /[。！？.!?]$/.test(trimmedPart);
+          const combinedLength = currentSentence.length + trimmedPart.length;
 
-            // 处理翻译
-            if (translatedParts.length > i) {
-              if (currentTranslated) {
-                translatedSentences.push(currentTranslated.trim());
-              }
-              const transpart = translatedParts[i] || '';
-              const transpunc = translatedParts[i + 1] || '';
-              currentTranslated = transpart + transpunc;
+          if (currentSentence === '') {
+            // 第一句，直接添加
+            currentSentence = trimmedPart;
+          } else if (hasStrongEnder || combinedLength > MAX_LENGTH) {
+            // 遇到強標點或超過長度限制，分句
+            if (!hasStrongEnder && combinedLength <= MAX_LENGTH) {
+              // 雖然超過長度但可以合併
+              currentSentence += trimmedPart;
+            } else {
+              // 保存當前句子
+              sentences.push(currentSentence);
+              currentSentence = trimmedPart;
             }
           } else {
-            // 继续累积
-            currentSentence += combined;
-            if (translatedParts.length > i) {
-              const transpart = translatedParts[i] || '';
-              const transpunc = translatedParts[i + 1] || '';
-              currentTranslated += transpart + transpunc;
-            }
+            // 繼續累積（逗號等弱標點）
+            currentSentence += trimmedPart;
           }
 
-          i++; // 跳过标点
+          // 如果遇到強標點，立即結束這句
+          if (hasStrongEnder && currentSentence === trimmedPart) {
+            sentences.push(currentSentence);
+            currentSentence = '';
+          }
         }
 
-        // 添加最后一句
+        // 添加最後一句
         if (currentSentence.trim()) {
           sentences.push(currentSentence.trim());
-          if (currentTranslated.trim()) {
-            translatedSentences.push(currentTranslated.trim());
-          }
         }
+
+        console.log('✂️ 分句結果:', sentences);
 
         // 如果只有一句，不切割
         if (sentences.length <= 1) {
+          console.log('⚠️ 只有一句，不切割');
           return state;
         }
 
-        // 计算每句的时间（根据字数加权分配）
+        // 步驟3: 計算每句的時間（根據字數加權分配）
         const totalDuration = segment.endTime - segment.startTime;
         const totalChars = sentences.reduce((sum, s) => sum + s.length, 0);
 
-        // 创建新字幕
+        // 步驟4: 創建新字幕
         let currentStartTime = segment.startTime;
-        const newSegments: SubtitleSegment[] = sentences.map((text, index) => {
-          const charRatio = text.length / totalChars;
+        const newSegments: SubtitleSegment[] = sentences.map((sentenceText, index) => {
+          const charRatio = sentenceText.length / totalChars;
           const segDuration = totalDuration * charRatio;
           const startTime = currentStartTime;
           const endTime = currentStartTime + segDuration;
           currentStartTime = endTime;
+
+          // 根據是否為翻譯文本，決定如何填充
+          let newText: string;
+          let newTranslatedText: string;
+
+          if (isTranslated) {
+            // 分割的是翻譯文本，保留原文不動
+            newText = segment.text; // 原文保持不變
+            newTranslatedText = sentenceText; // 分割後的翻譯文本
+          } else {
+            // 分割的是原文
+            newText = sentenceText;
+            newTranslatedText = sentenceText;
+          }
 
           return {
             ...segment,
             id: generateId(),
             startTime,
             endTime,
-            text,
-            translatedText: translatedSentences[index] || text,
+            text: newText,
+            translatedText: newTranslatedText,
           };
         });
 
-        // 替换原字幕
+        console.log(`✅ 成功分割成 ${newSegments.length} 句`);
+
+        // 替換原字幕
         return {
           tracks: state.tracks.map(t =>
             t.id === track.id
