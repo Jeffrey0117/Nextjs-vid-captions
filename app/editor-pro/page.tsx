@@ -2304,130 +2304,47 @@ export default function EditorProPage() {
 
          <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-blue-600 transition" />
 
-         {/* 右側: 預覽 + 字幕屬性編輯面板 */}
+         {/* 右側: 字幕屬性編輯面板 */}
          <Panel defaultSize={30} minSize={25}>
-           <PanelGroup direction="vertical">
-             {/* 上方: 預覽視頻 */}
-             <Panel defaultSize={60} minSize={30}>
-               <div className="h-full flex items-center justify-center bg-black overflow-hidden relative">
-                 {!videoUrl ? (
-                   <div className="text-center p-4">
-                     <Upload size={48} className="mx-auto mb-2 text-gray-600" />
-                     <p className="text-sm text-gray-500">尚未上傳影片</p>
-                   </div>
-                 ) : (
-                   <>
-                     <video
-                       src={videoUrl}
-                       currentTime={currentTime}
-                       className="w-full h-full object-contain"
-                     />
-
-                     {/* 字幕疊加層 */}
-                     {currentSubtitle && (
-                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                         <div
-                           className="absolute"
-                           style={{
-                             top: `${currentSubtitle.style.positionY}%`,
-                             left: `${currentSubtitle.style.positionX}%`,
-                             transform: 'translate(-50%, -50%)',
-                             maxWidth: `${currentSubtitle.style.maxWidth}vw`,
-                           }}
-                         >
-                           <div
-                             className="rounded"
-                             style={{
-                               backgroundColor: currentSubtitle.style.backgroundColor,
-                               opacity: currentSubtitle.style.opacity,
-                               transform: `scale(${currentSubtitle.style.scale})`,
-                               padding: '8px 16px',
-                             }}
-                           >
-                             <p
-                               className="text-center"
-                               style={{
-                                 fontSize: `${currentSubtitle.style.fontSize}px`,
-                                 fontFamily: currentSubtitle.style.fontFamily,
-                                 fontWeight: currentSubtitle.style.fontWeight,
-                                 fontStyle: currentSubtitle.style.fontStyle,
-                                 textDecoration: currentSubtitle.style.textDecoration,
-                                 color: currentSubtitle.style.color,
-                                 textShadow: (() => {
-                                   const shadows: string[] = [];
-                                   if (currentSubtitle.style.enableStroke) {
-                                     const strokeWidth = currentSubtitle.style.strokeWidth;
-                                     const steps = 16;
-                                     for (let i = 0; i < steps; i++) {
-                                       const angle = (i * 2 * Math.PI) / steps;
-                                       const x = Math.cos(angle) * strokeWidth;
-                                       const y = Math.sin(angle) * strokeWidth;
-                                       shadows.push(`${x}px ${y}px 0 ${currentSubtitle.style.strokeColor}`);
-                                     }
-                                   }
-                                   if (currentSubtitle.style.enableShadow) {
-                                     shadows.push(`${currentSubtitle.style.shadowOffsetX}px ${currentSubtitle.style.shadowOffsetY}px ${currentSubtitle.style.shadowBlur}px ${currentSubtitle.style.shadowColor}`);
-                                   }
-                                   return shadows.length > 0 ? shadows.join(', ') : 'none';
-                                 })(),
-                               }}
-                             >
-                               {currentSubtitle.text}
-                             </p>
-                           </div>
-                         </div>
-                       </div>
-                     )}
-                   </>
-                 )}
+           <div className="h-full flex flex-col bg-gray-900">
+             <div className="h-9 border-b border-gray-800 flex items-center px-3 justify-between">
+               <h2 className="text-sm font-semibold">
+                 {editMode === 'normal' ? '字幕屬性' : '固定字幕'}
+               </h2>
+               <div className="flex gap-1">
+                 <button
+                   onClick={() => setEditMode('normal')}
+                   className={`px-3 py-1 text-xs rounded transition ${
+                     editMode === 'normal'
+                       ? 'bg-blue-600 text-white'
+                       : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                   }`}
+                 >
+                   普通字幕
+                 </button>
+                 <button
+                   onClick={() => setEditMode('pinned')}
+                   className={`px-3 py-1 text-xs rounded transition ${
+                     editMode === 'pinned'
+                       ? 'bg-blue-600 text-white'
+                       : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                   }`}
+                 >
+                   固定字幕
+                 </button>
                </div>
-             </Panel>
+             </div>
 
-             <PanelResizeHandle className="h-1 bg-gray-800 hover:bg-blue-600 transition" />
-
-             {/* 下方: 字幕屬性面板 */}
-             <Panel defaultSize={40} minSize={25}>
-               <div className="h-full flex flex-col bg-gray-900">
-                 <div className="h-9 border-b border-gray-800 flex items-center px-3 justify-between">
-                   <h2 className="text-sm font-semibold">
-                     {editMode === 'normal' ? '字幕屬性' : '固定字幕'}
-                   </h2>
-                   <div className="flex gap-1">
-                     <button
-                       onClick={() => setEditMode('normal')}
-                       className={`px-3 py-1 text-xs rounded transition ${
-                         editMode === 'normal'
-                           ? 'bg-blue-600 text-white'
-                           : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                       }`}
-                     >
-                       普通字幕
-                     </button>
-                     <button
-                       onClick={() => setEditMode('pinned')}
-                       className={`px-3 py-1 text-xs rounded transition ${
-                         editMode === 'pinned'
-                           ? 'bg-blue-600 text-white'
-                           : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                       }`}
-                     >
-                       固定字幕
-                     </button>
-                   </div>
-                 </div>
-
-                 {editMode === 'normal' ? (
-                   <SubtitlePropertiesPanel
-                     selectedSegmentId={selectedSegmentId}
-                     applyToAll={applyToAll}
-                     setApplyToAll={setApplyToAll}
-                   />
-                 ) : (
-                   <PinnedSubtitlePanel />
-                 )}
-               </div>
-             </Panel>
-           </PanelGroup>
+             {editMode === 'normal' ? (
+               <SubtitlePropertiesPanel
+                 selectedSegmentId={selectedSegmentId}
+                 applyToAll={applyToAll}
+                 setApplyToAll={setApplyToAll}
+               />
+             ) : (
+               <PinnedSubtitlePanel />
+             )}
+           </div>
          </Panel>
        </PanelGroup>
      </div>
