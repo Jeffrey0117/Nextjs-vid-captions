@@ -13,6 +13,7 @@ export async function POST(request: Request) {
     const videoFile = formData.get("video") as File;
     const videoPath = formData.get("videoPath") as string;
     const subtitlesJson = formData.get("subtitles") as string;
+    const pinnedSubtitlesJson = formData.get("pinnedSubtitles") as string; // 新增：固定字幕
     const renderMethod = formData.get("renderMethod") as string || "ass"; // 新增：渲染方法選擇
 
     if ((!videoFile && !videoPath) || !subtitlesJson) {
@@ -25,6 +26,7 @@ export async function POST(request: Request) {
     console.log("🎬 Using render method:", renderMethod);
 
     const subtitles = JSON.parse(subtitlesJson);
+    const pinnedSubtitles = pinnedSubtitlesJson ? JSON.parse(pinnedSubtitlesJson) : [];
 
     // 創建臨時目錄
     const tempDir = path.join(process.cwd(), "public", "temp");
@@ -51,8 +53,8 @@ export async function POST(request: Request) {
       await fs.promises.writeFile(finalVideoPath, videoBuffer);
     }
 
-    // 生成 ASS 字幕檔
-    const assContent = generateAssSubtitle(subtitles);
+    // 生成 ASS 字幕檔（包含固定字幕）
+    const assContent = generateAssSubtitle(subtitles, pinnedSubtitles);
     const assFileName = `subtitle_${Date.now()}.ass`;
     const assPath = path.join(tempDir, assFileName);
     await fs.promises.writeFile(assPath, assContent, "utf-8");

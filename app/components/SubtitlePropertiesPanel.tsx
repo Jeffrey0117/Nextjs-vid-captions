@@ -59,7 +59,7 @@ export default function SubtitlePropertiesPanel({
       <div className="h-full flex items-center justify-center text-gray-500">
         <div className="text-center">
           <Type size={48} className="mx-auto mb-4 opacity-50" />
-          <p>请选择字幕片段进行编辑</p>
+          <p>請選擇字幕片段進行編輯</p>
         </div>
       </div>
     );
@@ -99,7 +99,7 @@ export default function SubtitlePropertiesPanel({
             const newValue = e.target.checked;
             setApplyToAll(newValue);
 
-            // 如果打勾，立即同步当前字幕样式到所有其他字幕
+            // 如果打勾，立即同步當前字幕樣式到所有其他字幕
             if (newValue && selectedSegment) {
               segments.forEach(seg => {
                 if (seg.id !== selectedSegment.id) {
@@ -117,41 +117,41 @@ export default function SubtitlePropertiesPanel({
         </label>
       </div>
 
-      {/* ========== 文字内容 ========== */}
+      {/* ========== 文字內容 ========== */}
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-gray-300">文字内容</h3>
+        <h3 className="text-sm font-semibold text-gray-300">文字內容</h3>
 
         <div>
-          <label className="block text-xs font-medium mb-2 text-gray-400">字幕内容</label>
+          <label className="block text-xs font-medium mb-2 text-gray-400">字幕內容</label>
           <textarea
             value={selectedSegment.text}
             onChange={(e) => updateSegment(selectedSegment.id, { text: e.target.value })}
             className="w-full px-3 py-2 text-sm bg-gray-800/50 border border-gray-700 rounded-lg resize-none focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             rows={2}
-            placeholder="输入字幕文字..."
+            placeholder="輸入字幕文字..."
           />
         </div>
 
         {selectedSegment.translatedText !== undefined && (
           <div>
-            <label className="block text-xs font-medium mb-2 text-gray-400">翻译文字</label>
+            <label className="block text-xs font-medium mb-2 text-gray-400">翻譯文字</label>
             <textarea
               value={selectedSegment.translatedText}
               onChange={(e) => updateSegment(selectedSegment.id, { translatedText: e.target.value })}
               className="w-full px-3 py-2 text-sm bg-gray-800/50 border border-gray-700 rounded-lg resize-none focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               rows={2}
-              placeholder="输入翻译文字..."
+              placeholder="輸入翻譯文字..."
             />
           </div>
         )}
 
-        {/* 自动分句按钮 */}
+        {/* 自動分句按鈕 */}
         <button
           onClick={() => splitSegment(selectedSegment.id)}
           className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition flex items-center justify-center gap-2 text-sm font-medium"
         >
           <Scissors size={16} />
-          自动分句
+          自動分句
         </button>
       </div>
 
@@ -164,7 +164,7 @@ export default function SubtitlePropertiesPanel({
         {/* 字型大小 */}
         <div>
           <label className="block text-xs font-medium mb-2 text-gray-400">
-            字体大小: <span className="text-white">{selectedSegment.style.fontSize}px</span>
+            字體大小: <span className="text-white">{selectedSegment.style.fontSize}px</span>
           </label>
           <div className="flex gap-2 items-center">
             <input
@@ -212,9 +212,9 @@ export default function SubtitlePropertiesPanel({
 
       <div className="border-t border-gray-700/50"></div>
 
-      {/* ========== 字体样式 (可折叠) ========== */}
+      {/* ========== 字體樣式 (可折疊) ========== */}
       <CollapsibleSection
-        title="字体样式"
+        title="字體樣式"
         isExpanded={expandedSections.fontStyle}
         onToggle={() => toggleSection('fontStyle')}
       >
@@ -317,15 +317,15 @@ export default function SubtitlePropertiesPanel({
 
       <div className="border-t border-gray-700/50"></div>
 
-      {/* ========== 颜色 (可折叠) ========== */}
+      {/* ========== 顏色 (可折疊) ========== */}
       <CollapsibleSection
-        title="颜色"
+        title="顏色"
         isExpanded={expandedSections.colors}
         onToggle={() => toggleSection('colors')}
       >
-        {/* 文字颜色 */}
+        {/* 文字顏色 */}
         <div>
-          <label className="block text-xs font-medium mb-2 text-gray-400">文字颜色</label>
+          <label className="block text-xs font-medium mb-2 text-gray-400">文字顏色</label>
           <div className="relative">
             <button
               onClick={() => setShowColorPicker(!showColorPicker)}
@@ -348,9 +348,9 @@ export default function SubtitlePropertiesPanel({
           </div>
         </div>
 
-        {/* 背景颜色 */}
+        {/* 背景顏色 */}
         <div>
-          <label className="block text-xs font-medium mb-2 text-gray-400">背景颜色</label>
+          <label className="block text-xs font-medium mb-2 text-gray-400">背景顏色</label>
           <div className="space-y-2">
             <div className="relative">
               <button
@@ -425,9 +425,9 @@ export default function SubtitlePropertiesPanel({
       >
         {selectedSegment.style.enableStroke && (
           <>
-            {/* 描边颜色 */}
+            {/* 描邊顏色 */}
             <div>
-              <label className="block text-xs font-medium mb-2 text-gray-400">描边颜色</label>
+              <label className="block text-xs font-medium mb-2 text-gray-400">描邊顏色</label>
               <div className="relative">
                 <button
                   onClick={() => setShowStrokeColorPicker(!showStrokeColorPicker)}
@@ -450,10 +450,10 @@ export default function SubtitlePropertiesPanel({
               </div>
             </div>
 
-            {/* 描边宽度 */}
+            {/* 描邊寬度 */}
             <div>
               <label className="block text-xs font-medium mb-2 text-gray-400">
-                描边宽度: <span className="text-white">{selectedSegment.style.strokeWidth}px</span>
+                描邊寬度: <span className="text-white">{selectedSegment.style.strokeWidth}px</span>
               </label>
               <div className="flex gap-2 items-center">
                 <input
@@ -480,9 +480,9 @@ export default function SubtitlePropertiesPanel({
 
       <div className="border-t border-gray-700/50"></div>
 
-      {/* ========== 阴影效果 (可折叠) ========== */}
+      {/* ========== 陰影效果 (可折疊) ========== */}
       <CollapsibleSection
-        title="阴影效果"
+        title="陰影效果"
         isExpanded={expandedSections.shadow}
         onToggle={() => toggleSection('shadow')}
         hasToggle={true}
@@ -502,9 +502,9 @@ export default function SubtitlePropertiesPanel({
 
       <div className="border-t border-gray-700/50"></div>
 
-      {/* ========== 预览区域 ========== */}
+      {/* ========== 預覽區域 ========== */}
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-gray-300">预览</h3>
+        <h3 className="text-sm font-semibold text-gray-300">預覽</h3>
         <LivePreviewCard selectedSegment={selectedSegment} />
       </div>
     </div>
@@ -549,7 +549,7 @@ function CollapsibleSection({
               onChange={(e) => onToggleChange(e.target.checked)}
               className="w-4 h-4"
             />
-            <span className="text-xs text-gray-400">启用</span>
+            <span className="text-xs text-gray-400">啟用</span>
           </label>
         )}
       </div>
@@ -599,7 +599,7 @@ function LivePreviewCard({ selectedSegment }: LivePreviewCardProps) {
     <div className="p-4 bg-gray-800/30 border border-gray-700/50 rounded-lg">
       <div className="flex items-center gap-2 mb-3">
         <Eye size={16} className="text-blue-400" />
-        <span className="text-sm font-medium text-gray-400">实时预览</span>
+        <span className="text-sm font-medium text-gray-400">即時預覽</span>
       </div>
       <div className="w-full min-h-[80px] bg-black rounded-lg flex items-center justify-center overflow-hidden p-4">
         <div style={previewStyle}>
@@ -685,9 +685,9 @@ function ShadowControlsImproved({
 
   return (
     <div className="space-y-4">
-      {/* 阴影颜色 */}
+      {/* 陰影顏色 */}
       <div>
-        <label className="block text-xs font-medium mb-2 text-gray-400">阴影颜色</label>
+        <label className="block text-xs font-medium mb-2 text-gray-400">陰影顏色</label>
         <div className="relative">
           <button
             onClick={() => setShowShadowColorPicker(!showShadowColorPicker)}
@@ -710,9 +710,9 @@ function ShadowControlsImproved({
         </div>
       </div>
 
-      {/* 方向控制区域 */}
+      {/* 方向控制區域 */}
       <div>
-        <label className="block text-xs font-medium mb-2 text-gray-400">阴影方向</label>
+        <label className="block text-xs font-medium mb-2 text-gray-400">陰影方向</label>
         <div className="flex gap-3">
           {/* 可拖曳的方向盘 */}
           <div className="flex-shrink-0">
@@ -765,9 +765,9 @@ function ShadowControlsImproved({
             <button
               onClick={() => setPresetDirection(0, 0)}
               className="px-2 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg border border-gray-600 transition text-xs"
-              title="无阴影"
+              title="無陰影"
             >
-              无
+              無
             </button>
             <button
               onClick={() => setPresetDirection(10, 0)}
@@ -836,7 +836,7 @@ function ShadowControlsImproved({
                 : 'bg-gray-700 border-gray-600 hover:bg-gray-600'
             }`}
           >
-            无
+            無
           </button>
           <button
             onClick={() => setBlurPreset(5)}
@@ -846,7 +846,7 @@ function ShadowControlsImproved({
                 : 'bg-gray-700 border-gray-600 hover:bg-gray-600'
             }`}
           >
-            轻微
+            輕微
           </button>
           <button
             onClick={() => setBlurPreset(15)}
@@ -866,7 +866,7 @@ function ShadowControlsImproved({
                 : 'bg-gray-700 border-gray-600 hover:bg-gray-600'
             }`}
           >
-            强烈
+            強烈
           </button>
         </div>
 
@@ -1012,12 +1012,12 @@ function StyleTemplateSection({ selectedSegment, applyToAll }: StyleTemplateSect
       {showSaveDialog && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowSaveDialog(false)}>
           <div className="bg-gray-800 border border-gray-700 rounded-lg p-5 w-96" onClick={(e) => e.stopPropagation()}>
-            <h4 className="text-sm font-semibold mb-4">保存样式模板</h4>
+            <h4 className="text-sm font-semibold mb-4">保存樣式模板</h4>
             <input
               type="text"
               value={templateName}
               onChange={(e) => setTemplateName(e.target.value)}
-              placeholder="请输入模板名称..."
+              placeholder="請輸入模板名稱..."
               className="w-full px-3 py-2 text-sm bg-gray-900 border border-gray-600 rounded-lg mb-4 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               autoFocus
               onKeyDown={(e) => {

@@ -5,6 +5,7 @@ import { useSubtitleStore } from '../stores/subtitle-store';
 import { Upload, FileText, Download, Languages, Trash2, Scissors, Film, Edit3, ArrowLeftToLine, ArrowRightToLine, SplitSquareHorizontal, Copy, Snowflake, Video, Music, Type, CaptionsIcon, Blend, Settings } from 'lucide-react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import SubtitlePropertiesPanel from '../components/SubtitlePropertiesPanel';
+import PinnedSubtitlePanel from '../components/PinnedSubtitlePanel';
 import BulkSubtitleEditor from '../components/BulkSubtitleEditor';
 import SubtitlePlayhead from '../components/SubtitlePlayhead';
 import { parseSrt } from '@/lib/parseSrt';
@@ -53,6 +54,7 @@ export default function EditorProPage() {
   const [bookmarks, setBookmarks] = useState<number[]>([]);
   const [videoDisplaySize, setVideoDisplaySize] = useState({ width: 1920, height: 1080 });
   const [activeMediaTab, setActiveMediaTab] = useState<'media' | 'sounds' | 'text' | 'captions' | 'filters' | 'settings'>('text');
+  const [editMode, setEditMode] = useState<'normal' | 'pinned'>('normal');
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -69,6 +71,7 @@ export default function EditorProPage() {
     tracks,
     selectedTrackId,
     segments,
+    pinnedSubtitles,
     importFromSrt,
     exportToSrt,
     clearAll,
@@ -78,7 +81,8 @@ export default function EditorProPage() {
     deleteTrack,
     selectTrack,
     getAllSegments,
-    loadProjectSegments
+    loadProjectSegments,
+    loadPinnedSubtitles
   } = useSubtitleStore();
 
   // 取得當前播放的字幕 (使用 useMemo 確保響應 currentTime 和 tracks 變化)
@@ -179,7 +183,7 @@ export default function EditorProPage() {
           }
           
           const processedSegments = latestProject.segments.map((seg: any, index: number) => ({
-            ...seg,
+            ...seg, // 保留所有原始屬性，包括 style
             id: String(seg.id || index + 1),
             startTime: typeof seg.startTime === 'number' ? seg.startTime : 0,
             endTime: typeof seg.endTime === 'number' ? seg.endTime : 1,
@@ -188,6 +192,12 @@ export default function EditorProPage() {
           }));
           
           loadProjectSegments(processedSegments);
+
+          // 載入固定字幕
+          if (latestProject.pinnedSubtitles && latestProject.pinnedSubtitles.length > 0) {
+            loadPinnedSubtitles(latestProject.pinnedSubtitles);
+          }
+
           console.log('✅ 使用最新專案的字幕載入完成');
           return;
         }
@@ -242,11 +252,11 @@ export default function EditorProPage() {
           translatedText: s.translatedText
         })));
         
-        // 確保字幕資料格式正確
+        // 確保字幕資料格式正確（完整保留所有屬性包括 style）
         const processedSegments = project.segments.map((seg: any, index: number) => {
           let startTime = 0;
           let endTime = 1;
-          
+
           // 處理時間格式 - 需要將毫秒轉換為秒數
           if (typeof seg.startTime === 'number') {
             // 如果時間大於 100，假設是毫秒，需要轉換為秒
@@ -273,24 +283,33 @@ export default function EditorProPage() {
             translatedText: seg.translatedText
           });
           
+          // 完整保留所有屬性，包括 style
           return {
-            ...seg,
+            ...seg, // 保留原始 segment 的所有屬性（包括 style）
             id: String(seg.id || index + 1),
             startTime,
             endTime,
             text: seg.text || '',
-            translatedText: seg.translatedText || seg.text || ''
+            translatedText: seg.translatedText || seg.text || '',
+            // 確保 style 存在（如果原始資料沒有 style，loadProjectSegments 會使用預設值）
           };
         });
         
         loadProjectSegments(processedSegments);
-        
+
+        // 載入固定字幕
+        if (project.pinnedSubtitles && project.pinnedSubtitles.length > 0) {
+          console.log('🔍 準備載入固定字幕:', project.pinnedSubtitles.length, '個');
+          loadPinnedSubtitles(project.pinnedSubtitles);
+        }
+
         // 確認載入成功
         setTimeout(() => {
           const state = useSubtitleStore.getState();
           console.log('✅ Zustand store 載入後狀態:', {
             tracksCount: state.tracks.length,
             segmentsCount: state.tracks[0]?.segments.length || 0,
+            pinnedSubtitlesCount: state.pinnedSubtitles.length,
             firstSegmentTime: state.tracks[0]?.segments[0] ? {
               startTime: state.tracks[0].segments[0].startTime,
               endTime: state.tracks[0].segments[0].endTime,
@@ -306,7 +325,56 @@ export default function EditorProPage() {
     
     loadProjectFromUrl();
   }, []); // 只在組件掛載時執行一次
-  
+
+  // 自動保存機制：當字幕或固定字幕變化時，自動保存到 localStorage
+  useEffect(() => {
+    // 避免初次載入時觸發保存
+    const params = new URLSearchParams(window.location.search);
+    const projectId = params.get('projectId');
+
+    if (!projectId || tracks.length === 0 || tracks[0]?.segments.length === 0) {
+      return;
+    }
+
+    // 使用 setTimeout 實現防抖，避免頻繁保存
+    const autoSaveTimeout = setTimeout(() => {
+      const savedProjects = localStorage.getItem('subtitle-projects');
+      if (!savedProjects) return;
+
+      const projects = JSON.parse(savedProjects);
+      const projectIndex = projects.findIndex((p: any) => p.id === projectId);
+
+      if (projectIndex === -1) return;
+
+      // 獲取完整的字幕資料（包含所有樣式屬性）
+      const allSegments = tracks[0].segments;
+
+      // 更新專案的字幕資料和固定字幕
+      projects[projectIndex] = {
+        ...projects[projectIndex],
+        segments: allSegments,
+        pinnedSubtitles: pinnedSubtitles,
+        updatedAt: new Date().toISOString(),
+      };
+
+      // 保存回 localStorage
+      localStorage.setItem('subtitle-projects', JSON.stringify(projects));
+      console.log('💾 自動保存完成:', {
+        projectId,
+        segmentsCount: allSegments.length,
+        pinnedSubtitlesCount: pinnedSubtitles.length,
+        firstSegmentStyle: allSegments[0]?.style ? {
+          fontSize: allSegments[0].style.fontSize,
+          positionY: allSegments[0].style.positionY,
+          color: allSegments[0].style.color
+        } : null,
+        time: new Date().toLocaleTimeString()
+      });
+    }, 1000); // 1秒防抖延遲
+
+    return () => clearTimeout(autoSaveTimeout);
+  }, [tracks, pinnedSubtitles]); // 監聽整個 tracks 和固定字幕的變化
+
   // 清理 URL
   useEffect(() => {
     return () => {
@@ -594,6 +662,7 @@ export default function EditorProPage() {
       }
       
       formData.append('subtitles', JSON.stringify(actualSegments));
+      formData.append('pinnedSubtitles', JSON.stringify(pinnedSubtitles));
 
       // 模擬進度
       const progressInterval = setInterval(() => {
@@ -1436,6 +1505,63 @@ export default function EditorProPage() {
                         </div>
                       </div>
                     )}
+
+                    {/* 固定字幕渲染 */}
+                    {pinnedSubtitles.filter(p => p.enabled).map(pinned => (
+                      <div
+                        key={pinned.id}
+                        className="absolute left-1/2 pointer-events-none"
+                        style={{
+                          top: `${pinned.style.positionY}%`,
+                          transform: 'translate(-50%, -50%)',
+                          width: '90%',
+                        }}
+                      >
+                        <div
+                          className="rounded px-4 py-2"
+                          style={{
+                            backgroundColor: pinned.style.backgroundColor,
+                            opacity: pinned.style.opacity,
+                            textAlign: 'center',
+                          }}
+                        >
+                          <p
+                            style={{
+                              fontSize: `${(pinned.style.fontSize / 1080) * videoDisplaySize.height}px`,
+                              fontFamily: pinned.style.fontFamily,
+                              fontWeight: pinned.style.fontWeight,
+                              fontStyle: pinned.style.fontStyle,
+                              color: pinned.style.color,
+                              textShadow: (() => {
+                                const shadows: string[] = [];
+
+                                if (pinned.style.enableStroke) {
+                                  const strokeWidth = (pinned.style.strokeWidth / 1080) * videoDisplaySize.height;
+                                  const steps = 16;
+                                  for (let i = 0; i < steps; i++) {
+                                    const angle = (i * 2 * Math.PI) / steps;
+                                    const x = Math.cos(angle) * strokeWidth;
+                                    const y = Math.sin(angle) * strokeWidth;
+                                    shadows.push(`${x}px ${y}px 0 ${pinned.style.strokeColor}`);
+                                  }
+                                }
+
+                                if (pinned.style.enableShadow) {
+                                  const shadowX = (pinned.style.shadowOffsetX / 1080) * videoDisplaySize.height;
+                                  const shadowY = (pinned.style.shadowOffsetY / 1080) * videoDisplaySize.height;
+                                  const shadowBlur = (pinned.style.shadowBlur / 1080) * videoDisplaySize.height;
+                                  shadows.push(`${shadowX}px ${shadowY}px ${shadowBlur}px ${pinned.style.shadowColor}`);
+                                }
+
+                                return shadows.length > 0 ? shadows.join(', ') : 'none';
+                              })(),
+                            }}
+                          >
+                            {pinned.text}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                   </>
                 )}
               </div>
@@ -1905,17 +2031,43 @@ export default function EditorProPage() {
          {/* 右側: 字幕屬性編輯面板 (獨立垂直區域) */}
          <Panel defaultSize={30} minSize={25}>
            <div className="h-full flex flex-col bg-gray-900">
-             <div className="h-9 border-b border-gray-800 flex items-center px-3">
+             <div className="h-9 border-b border-gray-800 flex items-center px-3 justify-between">
                <h2 className="text-sm font-semibold">
-                 字幕屬性
+                 {editMode === 'normal' ? '字幕屬性' : '固定字幕'}
                </h2>
+               <div className="flex gap-1">
+                 <button
+                   onClick={() => setEditMode('normal')}
+                   className={`px-3 py-1 text-xs rounded transition ${
+                     editMode === 'normal'
+                       ? 'bg-blue-600 text-white'
+                       : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                   }`}
+                 >
+                   普通字幕
+                 </button>
+                 <button
+                   onClick={() => setEditMode('pinned')}
+                   className={`px-3 py-1 text-xs rounded transition ${
+                     editMode === 'pinned'
+                       ? 'bg-blue-600 text-white'
+                       : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                   }`}
+                 >
+                   固定字幕
+                 </button>
+               </div>
              </div>
 
-             <SubtitlePropertiesPanel
-               selectedSegmentId={selectedSegmentId}
-               applyToAll={applyToAll}
-               setApplyToAll={setApplyToAll}
-             />
+             {editMode === 'normal' ? (
+               <SubtitlePropertiesPanel
+                 selectedSegmentId={selectedSegmentId}
+                 applyToAll={applyToAll}
+                 setApplyToAll={setApplyToAll}
+               />
+             ) : (
+               <PinnedSubtitlePanel />
+             )}
            </div>
          </Panel>
        </PanelGroup>

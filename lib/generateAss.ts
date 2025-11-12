@@ -1,4 +1,4 @@
-import { SubtitleSegment } from '../app/stores/subtitle-store';
+import { SubtitleSegment, PinnedSubtitle } from '../app/stores/subtitle-store';
 
 /**
  * CSS to ASS Style Mapping
@@ -26,7 +26,10 @@ import { SubtitleSegment } from '../app/stores/subtitle-store';
  * 生成 ASS (Advanced SubStation Alpha) 字幕檔
  * ASS 格式支援豐富的字幕樣式,適合用於 FFmpeg 燒錄
  */
-export function generateAssSubtitle(segments: SubtitleSegment[]): string {
+export function generateAssSubtitle(
+  segments: SubtitleSegment[],
+  pinnedSubtitles?: PinnedSubtitle[]
+): string {
   // ASS 檔頭 - 添加 Hinting 和抗鋸齒優化
   const header = `[Script Info]
 Title: Generated Subtitles
@@ -41,8 +44,8 @@ YCbCr Matrix: TV.709
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 `;
 
-  // 為每個字幕片段生成樣式
-  const styles = segments.map((seg, index) => {
+  // 為普通字幕生成樣式
+  const normalStyles = segments.map((seg, index) => {
     const style = seg.style;
     
     // 字體回退策略: 根據平台選擇最佳字體
@@ -141,29 +144,117 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
     return `Style: Style${index},${fontName},${actualFontSize},${primaryColor},&H000000FF,${outlineColor},${backgroundColor},${bold},${italic},${underline},${strikeout},${scale},${scale},0,0,${borderStyle},${outline},${shadowDistance},${alignment},10,10,10,1`;
   }).join('\n');
 
-  // 事件 (字幕內容)
-  const events = `
+  // 為固定字幕生成樣式（只處理啟用的固定字幕）
+  const pinnedStyles = (pinnedSubtitles || [])
+    .filter(p => p.enabled)
+    .map((pinned, index) => {
+      const style = pinned.style;
+      const styleIndex = segments.length + index; // 避免與普通字幕索引衝突
 
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-` + segments.map((seg, index) => {
+      const fontName = style.fontFamily;
+
+      // ASS 顏色格式
+      const primaryColor = hexToAssColor(style.color, style.opacity);
+      const shadowColor = style.enableShadow
+        ? hexToAssColor(style.shadowColor, 1)
+        : '&H00000000';
+      const outlineColor = style.enableStroke
+        ? hexToAssColor(style.strokeColor, 1)
+        : '&H00000000';
+      const backgroundColor = style.backgroundColor === 'transparent'
+        ? '&H00000000'
+        : hexToAssColor(style.backgroundColor, 1);
+
+      // 對齊方式：固定字幕使用中央對齊
+      const alignment = 2;
+
+      const bold = style.fontWeight === 'bold' ? -1 : 0;
+      const italic = style.fontStyle === 'italic' ? -1 : 0;
+
+      // 固定字幕不使用 underline/strikeout
+      const underline = 0;
+      const strikeout = 0;
+
+      // 陰影距離
+      const shadowDistance = style.enableShadow
+        ? Math.sqrt(
+            style.shadowOffsetX ** 2 +
+            style.shadowOffsetY ** 2
+          )
+        : 0;
+
+      const actualFontSize = style.fontSize;
+      const scale = 100;
+
+      // BorderStyle 邏輯
+      const hasBackground = style.backgroundColor !== 'transparent';
+      const hasStroke = style.enableStroke && style.strokeWidth > 0;
+
+      let borderStyle: number;
+      let outline: number;
+
+      if (hasBackground) {
+        borderStyle = 3;
+        outline = 8;
+      } else if (hasStroke) {
+        borderStyle = 1;
+        outline = style.strokeWidth;
+      } else {
+        borderStyle = 1;
+        outline = 0;
+      }
+
+      return `Style: PinnedStyle${styleIndex},${fontName},${actualFontSize},${primaryColor},&H000000FF,${outlineColor},${backgroundColor},${bold},${italic},${underline},${strikeout},${scale},${scale},0,0,${borderStyle},${outline},${shadowDistance},${alignment},10,10,10,1`;
+    }).join('\n');
+
+  // 合併所有樣式
+  const allStyles = pinnedStyles ? normalStyles + '\n' + pinnedStyles : normalStyles;
+
+  // 普通字幕事件
+  const normalEvents = segments.map((seg, index) => {
     const start = formatAssTime(seg.startTime);
     const end = formatAssTime(seg.endTime);
     const text = (seg.translatedText || seg.text).replace(/\n/g, '\\N');
-    
+
     // 計算位置 (1920x1080 為基準)
     // positionX: 0-100% (水平位置,可能超出範圍 -50 到 150)
     // positionY: 0-100% (垂直位置,可能超出範圍 -50 到 150)
     const posX = Math.round(1920 * (seg.style.positionX / 100));
     const posY = Math.round(1080 * (seg.style.positionY / 100));
-    
+
     // 使用 \pos 標籤精確定位,支援 X/Y 雙軸
     const posTag = `{\\pos(${posX},${posY})}`;
-    
+
     return `Dialogue: 0,${start},${end},Style${index},,0,0,0,,${posTag}${text}`;
   }).join('\n');
 
-  return header + styles + events;
+  // 固定字幕事件（貫穿整個視頻）
+  const pinnedEvents = (pinnedSubtitles || [])
+    .filter(p => p.enabled)
+    .map((pinned, index) => {
+      const styleIndex = segments.length + index;
+      const text = pinned.text.replace(/\n/g, '\\N');
+
+      // 計算位置
+      const posX = 1920 / 2; // 水平居中
+      const posY = Math.round(1080 * (pinned.style.positionY / 100));
+      const posTag = `{\\pos(${posX},${posY})}`;
+
+      // 固定字幕時間跨度：0:00:00.00 到 99:59:59.99（整個視頻）
+      return `Dialogue: 0,0:00:00.00,99:59:59.99,PinnedStyle${styleIndex},,0,0,0,,${posTag}${text}`;
+    }).join('\n');
+
+  // 合併所有事件
+  const allEvents = pinnedEvents ? normalEvents + '\n' + pinnedEvents : normalEvents;
+
+  // 完整的事件部分
+  const events = `
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+` + allEvents;
+
+  return header + allStyles + events;
 }
 
 /**

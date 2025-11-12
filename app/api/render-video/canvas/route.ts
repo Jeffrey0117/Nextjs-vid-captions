@@ -44,10 +44,108 @@ interface SubtitleSegment {
   };
 }
 
+interface PinnedSubtitle {
+  id: string;
+  text: string;
+  position: 'top' | 'bottom';
+  enabled: boolean;
+  style: {
+    fontSize: number;
+    fontFamily: string;
+    fontWeight: 'normal' | 'bold';
+    fontStyle: 'normal' | 'italic';
+    color: string;
+    opacity: number;
+    backgroundColor: string;
+    enableShadow: boolean;
+    shadowColor: string;
+    shadowOffsetX: number;
+    shadowOffsetY: number;
+    shadowBlur: number;
+    enableStroke: boolean;
+    strokeColor: string;
+    strokeWidth: number;
+    positionY: number;
+  };
+}
+
+// 渲染固定字幕到 Canvas
+function renderPinnedSubtitle(
+  ctx: any,
+  pinned: PinnedSubtitle,
+  width: number,
+  height: number
+): void {
+  const style = pinned.style;
+  const displayText = pinned.text;
+
+  // 設置字體
+  const fontWeight = style.fontWeight === 'bold' ? 'bold' : 'normal';
+  const fontStyle = style.fontStyle === 'italic' ? 'italic' : 'normal';
+  ctx.font = `${fontStyle} ${fontWeight} ${style.fontSize}px ${style.fontFamily}`;
+
+  // 設置文字顏色和透明度
+  ctx.fillStyle = style.color;
+  ctx.globalAlpha = style.opacity;
+
+  // 計算文字位置
+  const x = width / 2; // 水平居中
+  const y = (style.positionY / 100) * height;
+
+  // 設置文字對齊
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // 處理陰影
+  if (style.enableShadow) {
+    ctx.shadowColor = style.shadowColor;
+    ctx.shadowOffsetX = style.shadowOffsetX;
+    ctx.shadowOffsetY = style.shadowOffsetY;
+    ctx.shadowBlur = style.shadowBlur;
+  } else {
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+  }
+
+  // 處理背景色
+  if (style.backgroundColor !== 'transparent') {
+    const textMetrics = ctx.measureText(displayText);
+    const padding = 16;
+    const prevAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = 1; // 背景不透明
+    ctx.fillStyle = style.backgroundColor;
+    ctx.fillRect(
+      x - textMetrics.width / 2 - padding,
+      y - style.fontSize / 2 - padding / 2,
+      textMetrics.width + padding * 2,
+      style.fontSize + padding
+    );
+    ctx.globalAlpha = prevAlpha; // 恢復文字透明度
+    ctx.fillStyle = style.color;
+  }
+
+  // 繪製描邊
+  if (style.enableStroke && style.strokeWidth > 0) {
+    ctx.strokeStyle = style.strokeColor;
+    ctx.lineWidth = style.strokeWidth;
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+    ctx.strokeText(displayText, x, y);
+  }
+
+  // 繪製文字
+  ctx.fillText(displayText, x, y);
+
+  // 重置陰影
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
+}
+
 // 渲染字幕到 Canvas 並生成 PNG
 async function renderSubtitleToCanvas(
-  segment: SubtitleSegment, 
-  width: number, 
+  segment: SubtitleSegment,
+  width: number,
   height: number
 ): Promise<Buffer> {
   if (!canvasLib) {
@@ -64,7 +162,7 @@ async function renderSubtitleToCanvas(
   const { text, translatedText, style } = segment;
   // 優先使用翻譯文本，如果沒有則使用原文
   const displayText = translatedText || text;
-  
+
   // 設置字體
   const fontWeight = style.fontWeight === 'bold' ? 'bold' : 'normal';
   const fontStyle = style.fontStyle === 'italic' ? 'italic' : 'normal';
@@ -129,9 +227,10 @@ async function renderSubtitleToCanvas(
   return canvas.toBuffer('image/png');
 }
 
-// 為每一秒生成字幕幀
+// 為每一秒生成字幕幀（支持固定字幕）
 async function generateSubtitleFrames(
   subtitles: SubtitleSegment[],
+  pinnedSubtitles: PinnedSubtitle[],
   width: number,
   height: number,
   duration: number,
@@ -141,9 +240,14 @@ async function generateSubtitleFrames(
   const totalFrames = Math.ceil(duration * fps);
   let framesGenerated = 0;
 
-  // Frame caching mechanism to avoid re-rendering identical subtitles
-  const frameCache = new Map<string, Buffer>();
-  let cacheHits = 0;
+  // 只處理啟用的固定字幕
+  const activePinnedSubtitles = pinnedSubtitles.filter(p => p.enabled);
+
+  if (!canvasLib) {
+    throw new Error('Canvas library not available');
+  }
+
+  const { createCanvas } = canvasLib;
 
   for (let frameNumber = 0; frameNumber < totalFrames; frameNumber++) {
     const currentTime = frameNumber / fps;
@@ -155,44 +259,94 @@ async function generateSubtitleFrames(
 
     const framePath = path.join(outputDir, `frame_${frameNumber.toString().padStart(8, '0')}.png`);
 
+    // 創建 Canvas
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, width, height);
+
+    // 先渲染固定字幕（底層）
+    for (const pinned of activePinnedSubtitles) {
+      renderPinnedSubtitle(ctx, pinned, width, height);
+    }
+
+    // 再渲染普通字幕（頂層）
     if (activeSubtitle) {
       try {
-        // Generate cache key based on subtitle content and style
-        const cacheKey = JSON.stringify({
-          text: activeSubtitle.translatedText || activeSubtitle.text,
-          style: activeSubtitle.style
-        });
+        const { text, translatedText, style } = activeSubtitle;
+        const displayText = translatedText || text;
 
-        let frameBuffer: Buffer;
+        // 設置字體
+        const fontWeight = style.fontWeight === 'bold' ? 'bold' : 'normal';
+        const fontStyle = style.fontStyle === 'italic' ? 'italic' : 'normal';
+        ctx.font = `${fontStyle} ${fontWeight} ${style.fontSize}px ${style.fontFamily}`;
 
-        // Check cache first
-        if (frameCache.has(cacheKey)) {
-          frameBuffer = frameCache.get(cacheKey)!;
-          cacheHits++;
-        } else {
-          // Render new frame and cache it
-          frameBuffer = await renderSubtitleToCanvas(activeSubtitle, width, height);
-          frameCache.set(cacheKey, frameBuffer);
+        // 設置文字顏色和透明度
+        ctx.fillStyle = style.color;
+        ctx.globalAlpha = style.opacity;
+
+        // 計算文字位置
+        const x = (style.positionX / 100) * width;
+        const y = (style.positionY / 100) * height;
+
+        // 設置文字對齊
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // 處理陰影
+        if (style.enableShadow) {
+          ctx.shadowColor = style.shadowColor;
+          ctx.shadowOffsetX = style.shadowOffsetX;
+          ctx.shadowOffsetY = style.shadowOffsetY;
+          ctx.shadowBlur = style.shadowBlur;
         }
 
-        await fs.promises.writeFile(framePath, frameBuffer);
-        framesGenerated++;
+        // 處理背景色
+        if (style.backgroundColor !== 'transparent') {
+          const textMetrics = ctx.measureText(displayText);
+          const padding = 16;
+          ctx.fillStyle = style.backgroundColor;
+          ctx.fillRect(
+            x - textMetrics.width / 2 - padding,
+            y - style.fontSize / 2 - padding / 2,
+            textMetrics.width + padding * 2,
+            style.fontSize + padding
+          );
+          ctx.fillStyle = style.color;
+        }
+
+        // 繪製文字 (支持多行)
+        const lines = displayText.split('\n');
+        const lineHeight = style.fontSize * 1.2;
+        const totalHeight = lines.length * lineHeight;
+        const startY = y - totalHeight / 2;
+
+        // 先繪製描邊
+        if (style.enableStroke && style.strokeWidth && style.strokeWidth > 0) {
+          ctx.strokeStyle = style.strokeColor || '#000000';
+          ctx.lineWidth = style.strokeWidth;
+          ctx.lineJoin = 'round';
+          ctx.miterLimit = 2;
+          lines.forEach((line, index) => {
+            ctx.strokeText(line, x, startY + (index + 0.5) * lineHeight);
+          });
+        }
+
+        // 再繪製填充文字
+        lines.forEach((line, index) => {
+          ctx.fillText(line, x, startY + (index + 0.5) * lineHeight);
+        });
       } catch (error) {
-        console.error(`Error rendering frame ${frameNumber}:`, error);
-        // 創建空的透明幀
-        const transparentPng = Buffer.from(
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI9jU8l6wAAAABJRU5ErkJggg==',
-          'base64'
-        );
-        await fs.promises.writeFile(framePath, transparentPng);
+        console.error(`Error rendering subtitle on frame ${frameNumber}:`, error);
       }
-    } else {
-      // 創建空的透明幀
-      const transparentPng = Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI9jU8l6wAAAABJRU5ErkJggg==',
-        'base64'
-      );
-      await fs.promises.writeFile(framePath, transparentPng);
+    }
+
+    // 保存幀到文件
+    try {
+      const frameBuffer = canvas.toBuffer('image/png');
+      await fs.promises.writeFile(framePath, frameBuffer);
+      framesGenerated++;
+    } catch (error) {
+      console.error(`Error saving frame ${frameNumber}:`, error);
     }
     
     // 進度報告
@@ -200,9 +354,6 @@ async function generateSubtitleFrames(
       console.log(`Canvas rendering progress: ${Math.round((frameNumber / totalFrames) * 100)}%`);
     }
   }
-
-  // Log cache performance statistics
-  console.log(`📊 Frame cache performance: ${cacheHits} cache hits out of ${framesGenerated} frames (${Math.round((cacheHits / Math.max(framesGenerated, 1)) * 100)}% cache efficiency)`);
 
   return framesGenerated;
 }
@@ -222,11 +373,13 @@ export async function POST(request: Request) {
     const videoFile = formData.get("video") as File;
     const videoPath = formData.get("videoPath") as string;
     const subtitlesJson = formData.get("subtitles") as string;
-    
+    const pinnedSubtitlesJson = formData.get("pinnedSubtitles") as string; // 新增：固定字幕
+
     console.log("📊 Form data received:", {
       hasVideoFile: !!videoFile,
       videoPath: videoPath,
-      subtitlesExists: !!subtitlesJson
+      subtitlesExists: !!subtitlesJson,
+      pinnedSubtitlesExists: !!pinnedSubtitlesJson
     });
 
     if ((!videoFile && !videoPath) || !subtitlesJson) {
@@ -237,7 +390,8 @@ export async function POST(request: Request) {
     }
 
     const subtitles: SubtitleSegment[] = JSON.parse(subtitlesJson);
-    console.log("📝 Parsed", subtitles.length, "subtitle segments");
+    const pinnedSubtitles: PinnedSubtitle[] = pinnedSubtitlesJson ? JSON.parse(pinnedSubtitlesJson) : [];
+    console.log("📝 Parsed", subtitles.length, "subtitle segments and", pinnedSubtitles.filter(p => p.enabled).length, "enabled pinned subtitles");
 
     // 創建臨時目錄
     const tempDir = path.join(process.cwd(), "public", "temp");
@@ -294,10 +448,11 @@ export async function POST(request: Request) {
     let outputBuffer: Buffer | null = null;
 
     try {
-      // 使用 Canvas 生成字幕幀
+      // 使用 Canvas 生成字幕幀（包含固定字幕）
       console.log("🎨 Starting Canvas subtitle frame generation...");
       const framesGenerated = await generateSubtitleFrames(
         subtitles,
+        pinnedSubtitles,
         videoWidth,
         videoHeight,
         videoDuration,

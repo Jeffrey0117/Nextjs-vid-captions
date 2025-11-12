@@ -40,6 +40,32 @@ export interface StyleTemplate {
   createdAt: number; // 創建時間戳
 }
 
+// 固定字幕（貫穿整個影片的字幕）
+export interface PinnedSubtitle {
+  id: string;
+  text: string;
+  position: 'top' | 'bottom';
+  enabled: boolean; // 是否启用
+  style: {
+    fontSize: number;
+    fontFamily: string;
+    fontWeight: 'normal' | 'bold';
+    fontStyle: 'normal' | 'italic';
+    color: string;
+    opacity: number;
+    backgroundColor: string; // 顶部固定字幕用
+    enableShadow: boolean;
+    shadowColor: string;
+    shadowOffsetX: number;
+    shadowOffsetY: number;
+    shadowBlur: number;
+    enableStroke: boolean;
+    strokeColor: string;
+    strokeWidth: number;
+    positionY: number; // 精确垂直位置（0-100）
+  };
+}
+
 // 字幕軌道類型定義 (參考 OpenCut TimelineTrack)
 export interface SubtitleTrack {
   id: string;
@@ -58,10 +84,13 @@ interface SubtitleStore {
   tracks: SubtitleTrack[];
   selectedTrackId: string | null;
   selectedSegmentId: string | null;
-  
+
   // 樣式模板支援
   styleTemplates: StyleTemplate[];
-  
+
+  // 固定字幕支援
+  pinnedSubtitles: PinnedSubtitle[];
+
   // 軌道管理
   addTrack: (name: string, defaultStyle?: Partial<SubtitleSegment['style']>) => void;
   deleteTrack: (trackId: string) => void;
@@ -84,6 +113,12 @@ interface SubtitleStore {
   updateStyleTemplate: (templateId: string, updates: Partial<StyleTemplate>) => void;
   getDefaultTemplate: () => StyleTemplate | null;
   setDefaultTemplate: (templateId: string) => void;
+
+  // 固定字幕管理
+  addPinnedSubtitle: (position: 'top' | 'bottom') => void;
+  updatePinnedSubtitle: (id: string, updates: Partial<PinnedSubtitle>) => void;
+  deletePinnedSubtitle: (id: string) => void;
+  togglePinnedSubtitle: (id: string, enabled: boolean) => void;
   
   // 匯入 SRT (可指定軌道)
   importFromSrt: (srtContent: string, targetTrackId?: string) => void;
@@ -101,6 +136,9 @@ interface SubtitleStore {
   
   // 批量載入專案字幕 (用於從 localStorage 載入)
   loadProjectSegments: (segments: SubtitleSegment[]) => void;
+
+  // 批量載入固定字幕 (用於從 localStorage 載入)
+  loadPinnedSubtitles: (pinnedSubtitles: PinnedSubtitle[]) => void;
 }
 
 // 簡單的 ID 生成器
@@ -153,7 +191,59 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
   tracks: [],
   selectedTrackId: null,
   selectedSegmentId: null,
-  
+
+  // 固定字幕初始化
+  pinnedSubtitles: [
+    {
+      id: 'pinned-top',
+      text: '影片標題',
+      position: 'top',
+      enabled: false, // 預設關閉
+      style: {
+        fontSize: 28,
+        fontFamily: 'Noto Sans SC',
+        fontWeight: 'bold',
+        fontStyle: 'normal',
+        color: '#FFFFFF',
+        opacity: 1,
+        backgroundColor: 'rgba(0,0,0,0.8)',
+        enableShadow: true,
+        shadowColor: '#000000',
+        shadowOffsetX: 2,
+        shadowOffsetY: 2,
+        shadowBlur: 4,
+        enableStroke: false,
+        strokeColor: '#000000',
+        strokeWidth: 0,
+        positionY: 10, // 頂部 10%
+      },
+    },
+    {
+      id: 'pinned-bottom',
+      text: '@your_watermark',
+      position: 'bottom',
+      enabled: false, // 預設關閉
+      style: {
+        fontSize: 24,
+        fontFamily: 'Noto Sans SC',
+        fontWeight: 'bold',
+        fontStyle: 'normal',
+        color: '#FFFFFF',
+        opacity: 0.6, // 浮水印半透明
+        backgroundColor: 'transparent',
+        enableShadow: true,
+        shadowColor: '#000000',
+        shadowOffsetX: 2,
+        shadowOffsetY: 2,
+        shadowBlur: 4,
+        enableStroke: false,
+        strokeColor: '#000000',
+        strokeWidth: 0,
+        positionY: 95, // 底部 95%
+      },
+    },
+  ],
+
   // 樣式模板初始化 - 包含預設模板
   styleTemplates: [
     {
@@ -491,14 +581,14 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       const segment = track.segments.find(s => s.id === id);
       if (!segment) return state;
 
-      // 如果提供了切割时间点，按时间切割
+      // 如果提供了切割時間點，按時間切割
       if (splitTime !== undefined) {
-        // 确保切割点在字幕时间范围内
+        // 確保切割點在字幕時間範圍內
         if (splitTime <= segment.startTime || splitTime >= segment.endTime) {
           return state;
         }
 
-        // 计算切割比例
+        // 計算切割比例
         const totalDuration = segment.endTime - segment.startTime;
         const firstDuration = splitTime - segment.startTime;
         const ratio = firstDuration / totalDuration;
@@ -1016,5 +1106,67 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     }));
     
     console.log('✅ 字幕載入完成');
+  },
+
+  // 固定字幕管理方法
+  addPinnedSubtitle: (position) => {
+    const newPinned: PinnedSubtitle = {
+      id: `pinned-${position}-${Date.now()}`,
+      text: position === 'top' ? '新標題' : '新浮水印',
+      position,
+      enabled: true,
+      style: {
+        fontSize: position === 'top' ? 28 : 24,
+        fontFamily: 'Noto Sans SC',
+        fontWeight: 'bold',
+        fontStyle: 'normal',
+        color: '#FFFFFF',
+        opacity: position === 'top' ? 1 : 0.6,
+        backgroundColor: position === 'top' ? 'rgba(0,0,0,0.8)' : 'transparent',
+        enableShadow: true,
+        shadowColor: '#000000',
+        shadowOffsetX: 2,
+        shadowOffsetY: 2,
+        shadowBlur: 4,
+        enableStroke: false,
+        strokeColor: '#000000',
+        strokeWidth: 0,
+        positionY: position === 'top' ? 10 : 95,
+      },
+    };
+    set((state) => ({
+      pinnedSubtitles: [...state.pinnedSubtitles, newPinned],
+    }));
+  },
+
+  updatePinnedSubtitle: (id, updates) => {
+    set((state) => ({
+      pinnedSubtitles: state.pinnedSubtitles.map((pinned) =>
+        pinned.id === id ? { ...pinned, ...updates } : pinned
+      ),
+    }));
+  },
+
+  togglePinnedSubtitle: (id, enabled) => {
+    get().updatePinnedSubtitle(id, { enabled });
+  },
+
+  deletePinnedSubtitle: (id) => {
+    set((state) => ({
+      pinnedSubtitles: state.pinnedSubtitles.filter((p) => p.id !== id),
+    }));
+  },
+
+  // 批量載入固定字幕
+  loadPinnedSubtitles: (loadedPinnedSubtitles) => {
+    console.log('🔍 載入固定字幕:', loadedPinnedSubtitles);
+
+    if (!loadedPinnedSubtitles || loadedPinnedSubtitles.length === 0) {
+      console.log('⚠️ 沒有固定字幕資料，保持預設值');
+      return;
+    }
+
+    set({ pinnedSubtitles: loadedPinnedSubtitles });
+    console.log('✅ 固定字幕載入完成');
   },
 }));
