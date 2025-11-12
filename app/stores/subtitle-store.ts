@@ -125,7 +125,7 @@ const formatSrtTime = (seconds: number): string => {
 // 預設樣式常數
 const DEFAULT_STYLE: SubtitleSegment['style'] = {
   fontSize: 32,
-  fontFamily: 'Noto Sans TC',
+  fontFamily: 'Noto Sans SC',
   fontWeight: 'normal',
   fontStyle: 'normal',
   textDecoration: 'none',
@@ -167,7 +167,7 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       name: 'Netflix 風格',
       style: {
         fontSize: 32,
-        fontFamily: 'Noto Sans TC',
+        fontFamily: 'Noto Sans SC',
         fontWeight: 'normal',
         fontStyle: 'normal',
         textDecoration: 'none',
@@ -225,7 +225,7 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       name: '粗體描邊',
       style: {
         fontSize: 36,
-        fontFamily: 'Noto Sans TC',
+        fontFamily: 'Noto Sans SC',
         fontWeight: 'bold',
         fontStyle: 'normal',
         textDecoration: 'none',

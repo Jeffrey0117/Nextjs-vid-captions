@@ -235,7 +235,15 @@ export default function SubtitlePropertiesPanel({
               <option value="Arial">Arial</option>
               <option value="Helvetica">Helvetica</option>
               <option value="Microsoft JhengHei">微软正黑体</option>
-              <option value="SimSun">宋体</option>
+              <option value="PingFang TC">苹方-繁体</option>
+              <option value="PingFang SC">苹方-简体</option>
+            </optgroup>
+            <optgroup label="Google Fonts - 中文 (完整支持)">
+              <option value="Noto Sans TC">Noto Sans TC (繁体黑体)</option>
+              <option value="Noto Sans SC">Noto Sans SC (简体黑体)</option>
+              <option value="Noto Serif TC">Noto Serif TC (繁体宋体)</option>
+              <option value="Noto Serif SC">Noto Serif SC (简体宋体)</option>
+              <option value="Noto Sans HK">Noto Sans HK (香港)</option>
             </optgroup>
             <optgroup label="Google Fonts - 英文">
               <option value="Roboto">Roboto</option>
@@ -243,26 +251,14 @@ export default function SubtitlePropertiesPanel({
               <option value="Montserrat">Montserrat</option>
               <option value="Poppins">Poppins</option>
               <option value="Inter">Inter</option>
-              <option value="Oswald">Oswald</option>
-              <option value="Raleway">Raleway</option>
-              <option value="Ubuntu">Ubuntu</option>
+              <option value="Lato">Lato</option>
             </optgroup>
-            <optgroup label="Google Fonts - 中文">
-              <option value="Noto Sans TC">Noto Sans TC</option>
-              <option value="Noto Serif TC">Noto Serif TC</option>
-              <option value="Ma Shan Zheng">Ma Shan Zheng</option>
-              <option value="Zhi Mang Xing">Zhi Mang Xing</option>
-              <option value="ZCOOL XiaoWei">ZCOOL XiaoWei</option>
-              <option value="ZCOOL KuaiLe">ZCOOL KuaiLe</option>
-              <option value="Liu Jian Mao Cao">Liu Jian Mao Cao</option>
-            </optgroup>
-            <optgroup label="特效字体">
-              <option value="Orbitron">Orbitron (科技风)</option>
-              <option value="Bangers">Bangers (漫画风)</option>
-              <option value="Creepster">Creepster (恐怖风)</option>
-              <option value="Bungee">Bungee (立体感)</option>
-              <option value="Fredoka One">Fredoka One (圆润)</option>
+            <optgroup label="特效字体 (英文为主)">
+              <option value="Orbitron">Orbitron (科技)</option>
+              <option value="Bangers">Bangers (漫画)</option>
               <option value="Righteous">Righteous (复古)</option>
+              <option value="Anton">Anton (粗体)</option>
+              <option value="Bebas Neue">Bebas Neue (窄体)</option>
             </optgroup>
           </select>
         </div>
