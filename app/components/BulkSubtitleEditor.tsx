@@ -99,7 +99,7 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
         });
       }
     }
-  }, [isOpen, segments]);
+  }, [isOpen]); // 只監聽 isOpen，移除 segments 依賴避免重置編輯內容
 
   // 儲存字體大小到 localStorage
   useEffect(() => {
@@ -161,8 +161,8 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
       }
     });
 
-    // 顯示儲存成功訊息，但不自動關閉
-    alert(`已儲存 ${segments.length} 條字幕的文字變更`);
+    // 顯示儲存成功訊息
+    console.log(`✅ 已儲存 ${segments.length} 條字幕的文字變更（包括空字幕）`);
   };
 
   const handleReplaceAll = () => {
@@ -341,9 +341,8 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
   if (!isOpen) return null;
 
   return (
-    <div 
+    <div
       className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3"
-      onClick={onClose}
     >
       <div 
         className="bg-gray-900 rounded-lg border border-gray-700 w-full max-w-2xl max-h-[85vh] flex flex-col"
@@ -468,7 +467,7 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
                 {/* 文字編輯區 */}
                 <input
                   type="text"
-                  value={editedTexts[segment.id] || segment.translatedText || segment.text || ''}
+                  value={segment.id in editedTexts ? editedTexts[segment.id] : (segment.translatedText || segment.text || '')}
                   onChange={(e) => setEditedTexts({
                     ...editedTexts,
                     [segment.id]: e.target.value
