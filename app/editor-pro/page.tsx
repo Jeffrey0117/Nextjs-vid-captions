@@ -967,7 +967,7 @@ export default function EditorProPage() {
         backgroundColor: 'transparent',
         position: 'bottom' as const,
         positionX: 50,
-        positionY: 10,
+        positionY: 75,
         maxWidth: 80,
         scale: 1,
         enableStroke: true,
@@ -1597,18 +1597,17 @@ export default function EditorProPage() {
                       {/* 預設文字樣板 */}
                       {activeMediaTab === 'text' && (
                         <div className="relative group w-28 h-28">
-                          <div className="flex flex-col gap-1 p-1 h-auto w-full relative cursor-default">
+                          <div className="flex flex-col gap-1 p-1 h-auto w-full relative">
                             <div data-radix-aspect-ratio-wrapper="" style={{ position: 'relative', width: '100%', paddingBottom: '100%' }}>
-                              <div className="bg-panel-accent relative overflow-hidden rounded-md" draggable="true" style={{ position: 'absolute', inset: '0px' }}>
+                              <div
+                                className="bg-panel-accent relative overflow-hidden rounded-md cursor-pointer hover:bg-panel-accent/80 transition-colors"
+                                style={{ position: 'absolute', inset: '0px' }}
+                                onClick={handleAddSubtitle}
+                                title="點擊新增字幕"
+                              >
                                 <div className="flex items-center justify-center w-full h-full bg-panel-accent rounded">
                                   <span className="text-xs select-none">Default text</span>
                                 </div>
-                                <button className="inline-flex items-center cursor-pointer justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 shadow-sm absolute bottom-2 right-2 size-5 bg-background hover:bg-panel text-foreground opacity-0 group-hover:opacity-100">
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-plus size-4">
-                                    <path d="M5 12h14" />
-                                    <path d="M12 5v14" />
-                                  </svg>
-                                </button>
                               </div>
                             </div>
                           </div>

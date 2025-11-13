@@ -181,7 +181,7 @@ const DEFAULT_STYLE: SubtitleSegment['style'] = {
   strokeColor: '#000000',
   strokeWidth: 2,
   positionX: 50,
-  positionY: 80,
+  positionY: 75,
   maxWidth: 80,
   scale: 1.0,
 };
