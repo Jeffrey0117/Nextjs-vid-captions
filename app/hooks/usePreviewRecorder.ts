@@ -1,8 +1,11 @@
 import { useState, useRef, useCallback } from 'react';
 import { SubtitleSegment, PinnedSubtitle } from '../stores/subtitle-store';
+import { VideoQualityConfig, CanvasRenderingConfig, getQualityConfig, QualityLevel } from '../types/video-quality';
 
 interface RecorderOptions {
   fps?: number;
+  qualityLevel?: QualityLevel;
+  customQuality?: Partial<VideoQualityConfig>;
   onProgress?: (progress: number) => void;
   onComplete?: () => void;
   onError?: (error: Error) => void;
@@ -27,7 +30,25 @@ export function usePreviewRecorder() {
     videoPath: string,
     options: RecorderOptions = {}
   ) => {
-    const { fps = 30, onProgress, onComplete, onError } = options;
+    const {
+      fps = 30,
+      qualityLevel = 'balanced',
+      customQuality,
+      onProgress,
+      onComplete,
+      onError
+    } = options;
+
+    // 获取质量配置
+    const qualityConfig = getQualityConfig(qualityLevel, customQuality);
+    const renderConfig = qualityConfig.rendering;
+
+    console.log(`📊 质量配置: ${qualityConfig.name || qualityLevel}`, {
+      crf: qualityConfig.encoding.crf,
+      preset: qualityConfig.encoding.preset,
+      exportFormat: renderConfig.exportFormat,
+      exportQuality: renderConfig.exportQuality,
+    });
 
     setIsRecording(true);
     setProgress(0);
@@ -51,26 +72,107 @@ export function usePreviewRecorder() {
       const totalFrames = Math.ceil(duration * fps);
       const frameDuration = 1 / fps;
 
-      console.log(`🎬 開始錄製: ${duration}秒, ${totalFrames}幀, ${fps}FPS`);
+      // 批次處理配置
+      const BATCH_SIZE = 30; // 每批30幀（約1秒視頻，約15MB數據）
+      const MAX_RETRIES = 3; // 最大重試次數
+      const sessionId = `session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const totalBatches = Math.ceil(totalFrames / BATCH_SIZE);
 
-      // 創建離屏Canvas用於渲染
+      console.log(`🎬 開始錄製: ${duration}秒, ${totalFrames}幀, ${fps}FPS`);
+      console.log(`📦 批次配置: ${totalBatches}批, 每批${BATCH_SIZE}幀, SessionID: ${sessionId}`);
+      console.log(`💾 預計內存峰值: ~${Math.ceil(BATCH_SIZE * 0.5)}MB (批次) vs ~${Math.ceil(totalFrames * 0.5)}MB (原方案)`);
+
+      // 創建離屏Canvas用於渲染（优化：配置高质量渲染选项）
       const canvas = document.createElement('canvas');
       canvas.width = videoElement.videoWidth;
       canvas.height = videoElement.videoHeight;
-      const ctx = canvas.getContext('2d', { alpha: false })!;
 
-      // 存儲所有幀
-      const frames: string[] = [];
+      // 使用高质量渲染设置
+      const ctx = canvas.getContext('2d', {
+        alpha: false,           // 禁用alpha通道，提升性能
+        desynchronized: false,  // 确保同步渲染，保证质量
+        willReadFrequently: true, // 优化频繁读取
+      })!;
+
+      // 应用Canvas渲染质量配置
+      if (ctx.imageSmoothingEnabled !== undefined) {
+        ctx.imageSmoothingEnabled = renderConfig.imageSmoothingEnabled;
+      }
+      if (ctx.imageSmoothingQuality) {
+        ctx.imageSmoothingQuality = renderConfig.imageSmoothingQuality;
+      }
+
+      // 字体渲染优化（如果支持）
+      if ((ctx as any).textRendering) {
+        (ctx as any).textRendering = renderConfig.textRendering.quality;
+      }
+      if ((ctx as any).fontSmooth) {
+        (ctx as any).fontSmooth = renderConfig.textRendering.fontSmoothing ? 'always' : 'never';
+      }
+
+      // 暫存當前批次的幀（內存優化關鍵：只保留當前批次，不保留所有幀）
+      let currentBatchFrames: Blob[] = [];
+      let currentBatchIndex = 0;
 
       // 暫停影片
       const wasPlaying = !videoElement.paused;
       videoElement.pause();
+
+      /**
+       * 發送批次數據到後端（帶重試機制）
+       */
+      const sendBatch = async (batchId: number, frames: Blob[], isLastBatch: boolean, retryCount = 0): Promise<void> => {
+        const formData = new FormData();
+        formData.append('sessionId', sessionId);
+        formData.append('batchId', batchId.toString());
+        formData.append('totalBatches', totalBatches.toString());
+        formData.append('isLastBatch', isLastBatch.toString());
+        formData.append('videoPath', videoPath);
+        formData.append('fps', fps.toString());
+        formData.append('totalFrames', totalFrames.toString());
+
+        // 添加所有幀的Blob
+        frames.forEach((frameBlob, index) => {
+          const frameIndex = batchId * BATCH_SIZE + index;
+          formData.append(`frame_${frameIndex}`, frameBlob, `frame_${frameIndex.toString().padStart(8, '0')}.png`);
+        });
+
+        try {
+          const response = await fetch('/api/record-preview/batch', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`批次${batchId}上傳失敗: ${errorText}`);
+          }
+
+          const result = await response.json();
+          console.log(`✅ 批次 ${batchId + 1}/${totalBatches} 上傳成功`, result);
+
+        } catch (error: any) {
+          if (retryCount < MAX_RETRIES) {
+            console.warn(`⚠️ 批次${batchId}上傳失敗，重試 ${retryCount + 1}/${MAX_RETRIES}:`, error.message);
+            await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))); // 遞增延遲
+            return sendBatch(batchId, frames, isLastBatch, retryCount + 1);
+          } else {
+            throw new Error(`批次${batchId}上傳失敗（已重試${MAX_RETRIES}次）: ${error.message}`);
+          }
+        }
+      };
 
       // 逐幀錄製
       for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
         if (cancelledRef.current) {
           setStatus('已取消');
           setIsRecording(false);
+          // 清理未完成的會話
+          await fetch('/api/record-preview/cleanup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId }),
+          }).catch(err => console.warn('清理會話失敗:', err));
           return;
         }
 
@@ -110,68 +212,76 @@ export function usePreviewRecorder() {
           videoDisplaySize
         );
 
-        // 導出PNG
-        const frameData = canvas.toDataURL('image/png', 1.0);
-        frames.push(frameData);
+        // 導出幀為Blob（性能優化：避免Base64編碼）
+        const frameBlob = await new Promise<Blob>((resolve) => {
+          canvas.toBlob(
+            (b) => resolve(b!),
+            renderConfig.exportFormat,
+            renderConfig.exportQuality
+          );
+        });
+        currentBatchFrames.push(frameBlob);
 
-        // 更新進度
+        // 當批次滿了或是最後一幀，發送批次
+        const isBatchFull = currentBatchFrames.length >= BATCH_SIZE;
+        const isLastFrame = frameIndex === totalFrames - 1;
+
+        if (isBatchFull || isLastFrame) {
+          const batchId = currentBatchIndex;
+          const isLastBatch = isLastFrame;
+
+          setStatus(`上傳批次 ${batchId + 1}/${totalBatches}... (${currentBatchFrames.length}幀)`);
+          console.log(`📤 發送批次 ${batchId}, ${currentBatchFrames.length} 幀`);
+
+          await sendBatch(batchId, currentBatchFrames, isLastBatch);
+
+          // 清空當前批次（內存優化關鍵點！立即釋放內存）
+          currentBatchFrames = [];
+          currentBatchIndex++;
+        }
+
+        // 更新進度（80%錄製+上傳，20%合成）
         const currentProgress = (frameIndex + 1) / totalFrames;
-        setProgress(currentProgress * 0.8); // 80%用於錄製，20%用於合成
+        setProgress(currentProgress * 0.8);
         setStatus(`錄製中... ${frameIndex + 1}/${totalFrames} 幀`);
         onProgress?.(currentProgress * 0.8);
 
         // 每10幀輸出一次日誌
         if (frameIndex % 10 === 0) {
-          console.log(`錄製進度: ${frameIndex}/${totalFrames}`);
+          console.log(`錄製進度: ${frameIndex}/${totalFrames} (當前批次: ${currentBatchFrames.length}幀)`);
         }
       }
 
-      console.log(`✅ 錄製完成，共 ${frames.length} 幀`);
+      console.log(`✅ 所有批次已發送，共 ${totalFrames} 幀`);
       setStatus('合成影片中...');
+      setProgress(0.85);
 
-      // 恢復影片播放狀態（添加錯誤處理）
+      // 恢復影片播放狀態
       if (wasPlaying) {
         videoElement.play().catch(err => {
           console.warn('無法恢復播放:', err);
         });
       }
 
-      // 發送到後端合成
-      const formData = new FormData();
-      formData.append('videoPath', videoPath);
-      formData.append('framesData', JSON.stringify(frames));
-      formData.append('fps', fps.toString());
-      formData.append('totalFrames', totalFrames.toString());
-
-      setStatus('上傳幀數據...');
-      console.log('📤 上傳幀數據到後端...');
-
-      const response = await fetch('/api/record-preview', {
+      // 等待後端完成合成並下載影片
+      setStatus('等待後端合成...');
+      const finalizeResponse = await fetch('/api/record-preview/finalize', {
         method: 'POST',
-        body: formData,
-      }).catch(err => {
-        console.error('❌ API 請求失敗:', err);
-        throw new Error(`無法連接到伺服器: ${err.message}`);
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ API 回應錯誤:', errorText);
-        let errorMsg = '合成失敗';
-        try {
-          const errorJson = JSON.parse(errorText);
-          errorMsg = errorJson.error || errorMsg;
-        } catch {
-          errorMsg = errorText || errorMsg;
-        }
-        throw new Error(errorMsg);
+      if (!finalizeResponse.ok) {
+        const errorText = await finalizeResponse.text();
+        console.error('❌ 合成失敗:', errorText);
+        throw new Error(`合成失敗: ${errorText}`);
       }
 
       setProgress(0.95);
       setStatus('下載影片...');
 
       // 下載影片
-      const blob = await response.blob();
+      const blob = await finalizeResponse.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -191,6 +301,17 @@ export function usePreviewRecorder() {
       setStatus(`錯誤: ${error.message}`);
       setIsRecording(false);
       onError?.(error);
+
+      // 嘗試清理會話
+      try {
+        await fetch('/api/record-preview/cleanup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId }),
+        });
+      } catch (cleanupError) {
+        console.warn('清理會話失敗:', cleanupError);
+      }
     }
   }, []);
 
