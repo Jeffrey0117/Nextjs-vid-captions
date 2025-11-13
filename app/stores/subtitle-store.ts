@@ -181,10 +181,82 @@ const DEFAULT_STYLE: SubtitleSegment['style'] = {
   strokeColor: '#000000',
   strokeWidth: 2,
   positionX: 50,
-  positionY: 90,
+  positionY: 80,
   maxWidth: 80,
   scale: 1.0,
 };
+
+// 從 localStorage 載入固定字幕（如果存在）
+const loadSavedPinnedSubtitles = (): PinnedSubtitle[] => {
+  if (typeof window === 'undefined') {
+    return getDefaultPinnedSubtitles();
+  }
+
+  try {
+    const saved = localStorage.getItem('subtitle-pinned-subtitles');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      console.log('✅ 從 localStorage 載入固定字幕');
+      return parsed;
+    }
+  } catch (error) {
+    console.error('❌ 載入固定字幕失敗:', error);
+  }
+
+  return getDefaultPinnedSubtitles();
+};
+
+// 預設固定字幕
+const getDefaultPinnedSubtitles = (): PinnedSubtitle[] => [
+  {
+    id: 'pinned-top',
+    text: '影片標題',
+    position: 'top',
+    enabled: true,
+    style: {
+      fontSize: 28,
+      fontFamily: 'Noto Sans SC',
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      color: '#FFFFFF',
+      opacity: 1,
+      backgroundColor: 'rgba(0,0,0,0.8)',
+      enableShadow: true,
+      shadowColor: '#000000',
+      shadowOffsetX: 2,
+      shadowOffsetY: 2,
+      shadowBlur: 4,
+      enableStroke: false,
+      strokeColor: '#000000',
+      strokeWidth: 0,
+      positionY: 10,
+    },
+  },
+  {
+    id: 'pinned-bottom',
+    text: '@your_watermark',
+    position: 'bottom',
+    enabled: true,
+    style: {
+      fontSize: 24,
+      fontFamily: 'Noto Sans SC',
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      color: '#FFFFFF',
+      opacity: 0.6,
+      backgroundColor: 'transparent',
+      enableShadow: true,
+      shadowColor: '#000000',
+      shadowOffsetX: 2,
+      shadowOffsetY: 2,
+      shadowBlur: 4,
+      enableStroke: false,
+      strokeColor: '#000000',
+      strokeWidth: 0,
+      positionY: 95,
+    },
+  },
+];
 
 export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
   // 多軌道狀態初始化
@@ -192,57 +264,8 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
   selectedTrackId: null,
   selectedSegmentId: null,
 
-  // 固定字幕初始化
-  pinnedSubtitles: [
-    {
-      id: 'pinned-top',
-      text: '影片標題',
-      position: 'top',
-      enabled: true, // 預設開啟
-      style: {
-        fontSize: 28,
-        fontFamily: 'Noto Sans SC',
-        fontWeight: 'bold',
-        fontStyle: 'normal',
-        color: '#FFFFFF',
-        opacity: 1,
-        backgroundColor: 'rgba(0,0,0,0.8)',
-        enableShadow: true,
-        shadowColor: '#000000',
-        shadowOffsetX: 2,
-        shadowOffsetY: 2,
-        shadowBlur: 4,
-        enableStroke: false,
-        strokeColor: '#000000',
-        strokeWidth: 0,
-        positionY: 10, // 頂部 10%
-      },
-    },
-    {
-      id: 'pinned-bottom',
-      text: '@your_watermark',
-      position: 'bottom',
-      enabled: true, // 預設開啟
-      style: {
-        fontSize: 24,
-        fontFamily: 'Noto Sans SC',
-        fontWeight: 'bold',
-        fontStyle: 'normal',
-        color: '#FFFFFF',
-        opacity: 0.6, // 浮水印半透明
-        backgroundColor: 'transparent',
-        enableShadow: true,
-        shadowColor: '#000000',
-        shadowOffsetX: 2,
-        shadowOffsetY: 2,
-        shadowBlur: 4,
-        enableStroke: false,
-        strokeColor: '#000000',
-        strokeWidth: 0,
-        positionY: 95, // 底部 95%
-      },
-    },
-  ],
+  // 固定字幕初始化 - 從 localStorage 載入或使用預設值
+  pinnedSubtitles: loadSavedPinnedSubtitles(),
 
   // 樣式模板初始化 - 包含預設模板
   styleTemplates: [
@@ -1205,11 +1228,18 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
   },
 
   updatePinnedSubtitle: (id, updates) => {
-    set((state) => ({
-      pinnedSubtitles: state.pinnedSubtitles.map((pinned) =>
+    set((state) => {
+      const updatedPinnedSubtitles = state.pinnedSubtitles.map((pinned) =>
         pinned.id === id ? { ...pinned, ...updates } : pinned
-      ),
-    }));
+      );
+
+      // 持久化到 localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('subtitle-pinned-subtitles', JSON.stringify(updatedPinnedSubtitles));
+      }
+
+      return { pinnedSubtitles: updatedPinnedSubtitles };
+    });
   },
 
   togglePinnedSubtitle: (id, enabled) => {
