@@ -11,9 +11,11 @@ import SubtitlePlayhead from '../components/SubtitlePlayhead';
 import TimelineAdjustDialog from '../components/TimelineAdjustDialog';
 import { parseSrt } from '@/lib/parseSrt';
 import { useToast } from '../hooks/useToast';
+import { usePreviewRecorder } from '../hooks/usePreviewRecorder';
 
 export default function EditorProPage() {
   const toast = useToast();
+  const { recordPreview, cancelRecording, isRecording, progress: recordProgress, status: recordStatus } = usePreviewRecorder();
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -67,6 +69,7 @@ export default function EditorProPage() {
   const DRAG_THRESHOLD = 5;
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null); // 預覽容器，用於錄製
   const timelineRef = useRef<HTMLDivElement>(null);
   const timelineContainerRef = useRef<HTMLDivElement>(null); // 整個時間軸容器 (用於計算播放頭高度)
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -787,6 +790,63 @@ export default function EditorProPage() {
     }
   };
 
+  const handleRecordPreview = async () => {
+    if (!videoRef.current || !previewContainerRef.current || !videoUrl) {
+      toast.warning('請先上傳影片');
+      return;
+    }
+
+    const actualSegments = tracks[0]?.segments || [];
+    if (actualSegments.length === 0) {
+      toast.warning('請先添加字幕');
+      return;
+    }
+
+    try {
+      toast.info('開始錄製預覽畫面...');
+
+      // 獲取videoPath（從videoUrl或上傳的檔案）
+      let videoPath = '';
+      if (videoUrl && videoUrl.startsWith('/temp/')) {
+        videoPath = videoUrl.replace('/temp/', '');
+      } else if (videoFile) {
+        // 需要先上傳
+        const uploadFormData = new FormData();
+        uploadFormData.append('video', videoFile);
+        const uploadRes = await fetch('/api/upload-video', {
+          method: 'POST',
+          body: uploadFormData,
+        });
+        const uploadData = await uploadRes.json();
+        videoPath = uploadData.filePath;
+      }
+
+      await recordPreview(
+        videoRef.current,
+        previewContainerRef.current,
+        actualSegments,
+        pinnedSubtitles.filter(p => p.enabled),
+        videoDisplaySize,
+        videoPath,
+        {
+          fps: 30,
+          onProgress: (progress) => {
+            console.log(`錄製進度: ${(progress * 100).toFixed(1)}%`);
+          },
+          onComplete: () => {
+            toast.success('錄製完成！');
+          },
+          onError: (error) => {
+            toast.error(`錄製失敗: ${error.message}`);
+          },
+        }
+      );
+    } catch (error: any) {
+      console.error('錄製失敗:', error);
+      toast.error(`錄製失敗: ${error.message}`);
+    }
+  };
+
   const togglePlayPause = () => {
     if (videoRef.current) {
       if (isPlaying) {
@@ -1412,11 +1472,22 @@ export default function EditorProPage() {
 
         <button
           onClick={handleExportVideo}
-          disabled={(!videoFile && !videoUrl) || (tracks.length > 0 && tracks[0]?.segments.length === 0) || isExporting}
+          disabled={(!videoFile && !videoUrl) || (tracks.length > 0 && tracks[0]?.segments.length === 0) || isExporting || isRecording}
           className="flex items-center gap-1 px-2 py-1 bg-emerald-600 hover:bg-emerald-700 rounded transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Film size={12} />
           {isExporting ? `輸出中 ${exportProgress}%` : '輸出影片'}
+        </button>
+
+        {/* 錄製預覽按鈕 */}
+        <button
+          onClick={isRecording ? cancelRecording : handleRecordPreview}
+          disabled={(!videoFile && !videoUrl) || (tracks.length > 0 && tracks[0]?.segments.length === 0) || isExporting}
+          className={`flex items-center gap-1 px-2 py-1 ${isRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} rounded transition text-xs disabled:opacity-50 disabled:cursor-not-allowed`}
+          title="直接錄製預覽畫面，保證100%一致"
+        >
+          <Video size={12} />
+          {isRecording ? `錄製中 ${Math.round(recordProgress * 100)}%` : '🎬 錄製預覽'}
         </button>
 
         <button
@@ -1561,7 +1632,7 @@ export default function EditorProPage() {
 
                   {/* 中間: 預覽面板 */}
                   <Panel defaultSize={80} minSize={60}>
-            <div className="h-full flex items-center justify-center bg-black overflow-hidden relative">
+            <div ref={previewContainerRef} className="h-full flex items-center justify-center bg-black overflow-hidden relative">
                 {!videoUrl ? (
                   <div className="text-center">
                     <Upload size={64} className="mx-auto mb-4 text-gray-600" />
