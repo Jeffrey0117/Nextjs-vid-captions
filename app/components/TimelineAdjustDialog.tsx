@@ -39,8 +39,9 @@ export default function TimelineAdjustDialog({
   const timelineRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const isInitializedRef = useRef(false);
 
-  const pixelsPerSecond = 100 * zoomLevel; // 基準100px/秒，可縮放
+  const pixelsPerSecond = 40 * zoomLevel; // 基準40px/秒，可縮放
   const MIN_DURATION = 0.1; // 最小持續時間0.1秒
 
   // 格式化時間顯示
@@ -79,8 +80,6 @@ export default function TimelineAdjustDialog({
     } else {
       setClickOffsetTime(0);
     }
-
-    console.log('🎯 彈窗拖拽開始:', { type, startTime: tempStartTime, endTime: tempEndTime });
   };
 
   // Document-level 拖拽監聽
@@ -136,7 +135,6 @@ export default function TimelineAdjustDialog({
     };
 
     const handleMouseUp = () => {
-      console.log('✋ 彈窗拖拽結束');
       setIsDragging(false);
       setDragType(null);
     };
@@ -186,6 +184,34 @@ export default function TimelineAdjustDialog({
     setCurrentTime(tempEndTime);
   };
 
+  // 對話框掛載時攔截所有空白鍵
+  useEffect(() => {
+    // 在捕獲階段攔截空白鍵，比主頁面的監聽器更早執行
+    const interceptSpace = (e: KeyboardEvent) => {
+      if (e.code === 'Space' || e.key === ' ' || e.keyCode === 32) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        const video = videoRef.current;
+        if (video) {
+          if (video.paused) {
+            video.play();
+          } else {
+            video.pause();
+          }
+        }
+      }
+    };
+
+    // 使用捕獲階段，優先級最高
+    window.addEventListener('keydown', interceptSpace, { capture: true });
+
+    return () => {
+      window.removeEventListener('keydown', interceptSpace, { capture: true });
+    };
+  }, []);
+
   // 監聽視頻時間更新和初始化
   useEffect(() => {
     const video = videoRef.current;
@@ -198,14 +224,12 @@ export default function TimelineAdjustDialog({
     if (mainVideo && !mainVideo.paused) {
       mainVideoWasPlaying = true;
       mainVideo.pause();
-      console.log('⏸️ 暫停主視頻');
     }
 
     // 阻止主視頻響應任何事件
     const blockMainVideoEvents = (e: Event) => {
       e.stopPropagation();
       e.preventDefault();
-      console.log('🚫 阻止主視頻事件');
       return false;
     };
 
@@ -222,52 +246,29 @@ export default function TimelineAdjustDialog({
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
 
-    // 空白鍵控制播放/暫停 - 捕獲階段攔截
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        togglePlayPause();
-        console.log('⌨️ 彈窗空白鍵切換播放');
-      }
-    };
-
-    // 全局阻止空白鍵默認行為
-    const blockGlobalSpace = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    };
-
     video.addEventListener('timeupdate', handleTimeUpdate);
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
 
-    // 使用捕獲階段攔截，優先級最高
-    document.addEventListener('keydown', handleKeyDown, true);
-    window.addEventListener('keydown', blockGlobalSpace, true);
+    // 只在第一次初始化時設置初始時間為字幕開始時間
+    if (!isInitializedRef.current) {
+      video.currentTime = tempStartTime;
+      setCurrentTime(tempStartTime);
+      isInitializedRef.current = true;
 
-    // 設置初始時間為字幕開始時間
-    video.currentTime = tempStartTime;
-    setCurrentTime(tempStartTime);
-
-    // 自動滾動讓字幕居中顯示
-    setTimeout(() => {
-      const segmentCenter = segmentLeft + segmentWidth / 2;
-      const containerWidth = container.clientWidth;
-      const scrollTo = segmentCenter - containerWidth / 2;
-      container.scrollLeft = Math.max(0, scrollTo);
-      console.log('📍 自動跳到字幕位置:', tempStartTime);
-    }, 100);
+      // 自動滾動讓字幕居中顯示
+      setTimeout(() => {
+        const segmentCenter = segmentLeft + segmentWidth / 2;
+        const containerWidth = container.clientWidth;
+        const scrollTo = segmentCenter - containerWidth / 2;
+        container.scrollLeft = Math.max(0, scrollTo);
+      }, 100);
+    }
 
     return () => {
       video.removeEventListener('timeupdate', handleTimeUpdate);
       video.removeEventListener('play', handlePlay);
       video.removeEventListener('pause', handlePause);
-      document.removeEventListener('keydown', handleKeyDown, true);
-      window.removeEventListener('keydown', blockGlobalSpace, true);
 
       // 恢復主視頻
       if (mainVideo) {
@@ -276,8 +277,7 @@ export default function TimelineAdjustDialog({
         mainVideo.removeEventListener('pause', blockMainVideoEvents, true);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [togglePlayPause]);
+  }, []); // 只在組件掛載時執行一次
 
   // 同步到播放頭
   const syncToPlayhead = () => {
@@ -315,8 +315,6 @@ export default function TimelineAdjustDialog({
 
     videoRef.current.currentTime = clickTime;
     setCurrentTime(clickTime);
-
-    console.log('⏱️ 點擊時間軸跳轉:', clickTime);
   };
 
   return (
@@ -415,7 +413,7 @@ export default function TimelineAdjustDialog({
             {/* 時間軸容器 */}
             <div
               ref={containerRef}
-              className="bg-gray-800 rounded border border-gray-700 overflow-x-auto h-20"
+              className="bg-gray-800 rounded border border-gray-700 overflow-x-auto h-32"
               style={{ cursor: isDragging ? 'grabbing' : 'pointer' }}
               onClick={handleTimelineClick}
             >
@@ -439,7 +437,7 @@ export default function TimelineAdjustDialog({
 
                 {/* 字幕條 */}
                 <div
-                  className="absolute top-8 h-10 bg-[#5DBAA0] rounded border-2 border-blue-500 shadow-lg group cursor-move"
+                  className="absolute top-8 h-6 bg-[#5DBAA0] rounded border-2 border-blue-500 shadow-lg group cursor-move"
                   style={{
                     left: `${segmentLeft}px`,
                     width: `${segmentWidth}px`,
@@ -448,28 +446,28 @@ export default function TimelineAdjustDialog({
                 >
                   {/* 左邊緣拖拽手柄 */}
                   <div
-                    className="absolute left-0 top-0 bottom-0 w-4 cursor-w-resize bg-blue-600 hover:bg-blue-500 transition z-20 flex items-center justify-center"
+                    className="absolute left-0 top-0 bottom-0 w-3 cursor-w-resize bg-blue-600 hover:bg-blue-500 transition z-20 flex items-center justify-center"
                     onMouseDown={(e) => handleDragStart(e, 'left')}
                   >
-                    <div className="w-1 h-6 bg-white/90 rounded-full" />
+                    <div className="w-0.5 h-4 bg-white/90 rounded-full" />
                   </div>
 
                   {/* 中間區域 */}
                   <div
-                    className="h-full flex items-center justify-center px-5 cursor-move"
+                    className="h-full flex items-center justify-center px-4 cursor-move"
                     onMouseDown={(e) => handleDragStart(e, 'move')}
                   >
-                    <span className="text-xs text-white font-medium truncate">
+                    <span className="text-[0.65rem] text-white font-medium truncate">
                       {segment.text}
                     </span>
                   </div>
 
                   {/* 右邊緣拖拽手柄 */}
                   <div
-                    className="absolute right-0 top-0 bottom-0 w-4 cursor-e-resize bg-blue-600 hover:bg-blue-500 transition z-20 flex items-center justify-center"
+                    className="absolute right-0 top-0 bottom-0 w-3 cursor-e-resize bg-blue-600 hover:bg-blue-500 transition z-20 flex items-center justify-center"
                     onMouseDown={(e) => handleDragStart(e, 'right')}
                   >
-                    <div className="w-1 h-6 bg-white/90 rounded-full" />
+                    <div className="w-0.5 h-4 bg-white/90 rounded-full" />
                   </div>
                 </div>
               </div>
@@ -512,7 +510,6 @@ export default function TimelineAdjustDialog({
           </button>
           <button
             onClick={() => {
-              console.log('✅ 確認調整:', { startTime: tempStartTime, endTime: tempEndTime });
               onConfirm(tempStartTime, tempEndTime);
               onClose();
             }}
