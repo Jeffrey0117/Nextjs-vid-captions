@@ -850,7 +850,7 @@ export default function EditorProPage() {
     const scrollLeft = tracksScroll ? tracksScroll.scrollLeft : 0;
 
     // 計算實際的時間位置（考慮滾動偏移和縮放）
-    const pixelsPerSecond = 50 * zoomLevel;
+    const pixelsPerSecond = 100 * zoomLevel;
     const absoluteClickX = clickX + scrollLeft;
     let newTime = absoluteClickX / pixelsPerSecond;
 
@@ -1172,7 +1172,7 @@ export default function EditorProPage() {
     if (dragType === 'move') {
       const elementRect = (e.target as HTMLElement).getBoundingClientRect();
       const clickOffsetX = e.clientX - elementRect.left;
-      const pixelsPerSecond = 50 * zoomLevel;
+      const pixelsPerSecond = 100 * zoomLevel;
       clickOffsetTime = clickOffsetX / pixelsPerSecond;
       console.log('📐 移動模式 clickOffset:', clickOffsetTime);
     }
@@ -1215,7 +1215,7 @@ export default function EditorProPage() {
         }
       }
 
-      const pixelsPerSecond = 50 * zoomLevel;
+      const pixelsPerSecond = 100 * zoomLevel;
       const deltaX = e.clientX - timelineDragState.startMouseX;
       const deltaTime = deltaX / pixelsPerSecond;
 
@@ -2046,7 +2046,7 @@ export default function EditorProPage() {
                           <div
                             className="relative h-8 select-none cursor-pointer"
                             style={{
-                              width: `${Math.max(duration * 50 * zoomLevel, 1500)}px`,
+                              width: `${Math.max(duration * 100 * zoomLevel, 1500)}px`,
                             }}
                             onMouseDown={(e) => {
                               setMouseDownPosition({ x: e.clientX, y: e.clientY });
@@ -2075,7 +2075,7 @@ export default function EditorProPage() {
                           >
                             {/* 時間標記 */}
                             {duration > 0 && (() => {
-                              const pixelsPerSecond = 50 * zoomLevel;
+                              const pixelsPerSecond = 100 * zoomLevel;
                               const getTimeInterval = (zoom: number) => {
                                 const pps = 50 * zoom;
                                 if (pps >= 200) return 0.1;
@@ -2114,7 +2114,7 @@ export default function EditorProPage() {
                                 key={`bookmark-${i}`}
                                 className="absolute top-0 h-8 w-0.5 bg-blue-500 cursor-pointer"
                                 style={{
-                                  left: `${bookmarkTime * 50 * zoomLevel}px`,
+                                  left: `${bookmarkTime * 100 * zoomLevel}px`,
                                 }}
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -2188,7 +2188,7 @@ export default function EditorProPage() {
                                 const clickX = e.clientX - rect.left;
                                 const scrollLeft = container.scrollLeft;
 
-                                const pixelsPerSecond = 50 * zoomLevel;
+                                const pixelsPerSecond = 100 * zoomLevel;
                                 const absoluteClickX = clickX + scrollLeft;
                                 let newTime = absoluteClickX / pixelsPerSecond;
 
@@ -2220,7 +2220,7 @@ export default function EditorProPage() {
                             className="relative flex-1 cursor-pointer"
                             style={{
                               height: '60px',
-                              width: `${Math.max(duration * 50 * zoomLevel, 1500)}px`,
+                              width: `${Math.max(duration * 100 * zoomLevel, 1500)}px`,
                             }}
                             onMouseDown={(e) => {
                               // 檢查是否點擊在字幕段落上
@@ -2261,7 +2261,7 @@ export default function EditorProPage() {
                             {duration > 0 && (
                               <SubtitlePlayhead
                                 currentTime={currentTime}
-                                pixelsPerSecond={50 * zoomLevel}
+                                pixelsPerSecond={100 * zoomLevel}
                                 containerRef={tracksScrollRef}
                                 onSeek={seekTo}
                                 duration={duration}
@@ -2278,8 +2278,8 @@ export default function EditorProPage() {
                               >
                                 {/* 字幕片段 */}
                                 {tracks.length > 0 && tracks[0].segments.map((segment) => {
-                                    const left = segment.startTime * 50 * zoomLevel;
-                                    const width = (segment.endTime - segment.startTime) * 50 * zoomLevel;
+                                    const left = segment.startTime * 100 * zoomLevel;
+                                    const width = (segment.endTime - segment.startTime) * 100 * zoomLevel;
                                     const isSelected = selectedSegmentId === segment.id;
                                     
                                     return (
