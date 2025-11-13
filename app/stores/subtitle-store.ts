@@ -139,6 +139,11 @@ interface SubtitleStore {
 
   // 批量載入固定字幕 (用於從 localStorage 載入)
   loadPinnedSubtitles: (pinnedSubtitles: PinnedSubtitle[]) => void;
+
+  // AI 自動優化功能
+  autoOptimizeSegment: (segmentId: string, videoWidth: number) => void;
+  autoOptimizeAllSegments: (videoWidth: number) => void;
+  detectOverflowSegments: (videoWidth: number) => SubtitleSegment[];
 }
 
 // 簡單的 ID 生成器
@@ -1263,5 +1268,89 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
 
     set({ pinnedSubtitles: loadedPinnedSubtitles });
     console.log('✅ 固定字幕載入完成');
+  },
+
+  // AI 自動優化功能實現
+  autoOptimizeSegment: (segmentId, videoWidth) => {
+    const { autoOptimizeSubtitle, FontAdaptStrategy } = require('@/lib/split-utils');
+    const state = get();
+    const allSegments = state.getAllSegments();
+    const segment = allSegments.find(s => s.id === segmentId);
+
+    if (!segment) {
+      console.error('❌ 找不到字幕片段:', segmentId);
+      return;
+    }
+
+    console.log('🔧 開始優化字幕:', segment.text);
+
+    const result = autoOptimizeSubtitle(segment, {
+      videoWidth,
+      strategy: FontAdaptStrategy.HYBRID,
+      minFontSize: 20,
+      maxFontSize: 60,
+      preserveSemantics: true,
+    });
+
+    console.log('✅ 優化完成:', result.changes);
+
+    set((state) => {
+      // 找到包含此字幕的軌道
+      const trackIndex = state.tracks.findIndex(track =>
+        track.segments.some(s => s.id === segmentId)
+      );
+
+      if (trackIndex === -1) return state;
+
+      const track = state.tracks[trackIndex];
+      const segmentIndex = track.segments.findIndex(s => s.id === segmentId);
+
+      // 替換原字幕為優化後的字幕（可能是多個）
+      const newSegments = [
+        ...track.segments.slice(0, segmentIndex),
+        ...result.segments,
+        ...track.segments.slice(segmentIndex + 1),
+      ];
+
+      const newTracks = [...state.tracks];
+      newTracks[trackIndex] = {
+        ...track,
+        segments: newSegments,
+      };
+
+      return { tracks: newTracks };
+    });
+  },
+
+  autoOptimizeAllSegments: (videoWidth) => {
+    const { detectOverflowSegments: detectOverflow } = require('@/lib/split-utils');
+    const state = get();
+    const allSegments = state.getAllSegments();
+
+    console.log('🔍 掃描所有字幕，檢測溢出...');
+
+    const overflowSegments = detectOverflow(allSegments, videoWidth);
+
+    console.log(`📊 檢測到 ${overflowSegments.length} 條溢出字幕`);
+
+    if (overflowSegments.length === 0) {
+      console.log('✅ 所有字幕長度正常');
+      return;
+    }
+
+    // 批量優化所有溢出字幕
+    overflowSegments.forEach(segment => {
+      get().autoOptimizeSegment(segment.id, videoWidth);
+    });
+
+    console.log(`✅ 批量優化完成，共處理 ${overflowSegments.length} 條字幕`);
+  },
+
+  detectOverflowSegments: (videoWidth) => {
+    const { detectOverflowSegments: detectOverflow } = require('@/lib/split-utils');
+    const state = get();
+    const allSegments = state.getAllSegments();
+
+    return detectOverflow(allSegments, videoWidth);
   },
 }));
