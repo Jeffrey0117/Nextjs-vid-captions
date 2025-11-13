@@ -1,14 +1,16 @@
 'use client';
 
 import { useSubtitleStore, PinnedSubtitle } from '../stores/subtitle-store';
-import { Pin, Trash2 } from 'lucide-react';
+import { Pin, Trash2, Sparkles, Loader2 } from 'lucide-react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 
 export default function PinnedSubtitlePanel() {
   const {
     pinnedSubtitles,
     updatePinnedSubtitle,
-    togglePinnedSubtitle
+    togglePinnedSubtitle,
+    segments
   } = useSubtitleStore();
 
   const topPinned = pinnedSubtitles.find(p => p.position === 'top');
@@ -26,6 +28,7 @@ export default function PinnedSubtitlePanel() {
           icon={<Pin size={18} />}
           onUpdate={updatePinnedSubtitle}
           onToggle={togglePinnedSubtitle}
+          segments={segments}
         />
       )}
 
@@ -49,14 +52,66 @@ function PinnedSubtitleEditor({
   title,
   icon,
   onUpdate,
-  onToggle
+  onToggle,
+  segments
 }: {
   pinned: PinnedSubtitle;
   title: string;
   icon: React.ReactNode;
   onUpdate: (id: string, updates: Partial<PinnedSubtitle>) => void;
   onToggle: (id: string, enabled: boolean) => void;
+  segments?: any[];
 }) {
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedTitles, setGeneratedTitles] = useState<{
+    catchy: string;
+    informative: string;
+    professional: string;
+  } | null>(null);
+  const [showTitleDropdown, setShowTitleDropdown] = useState(false);
+
+  const handleGenerateTitle = async () => {
+    if (!segments || segments.length === 0) {
+      toast.error('沒有字幕內容可供分析');
+      return;
+    }
+
+    setIsGenerating(true);
+    setGeneratedTitles(null);
+
+    try {
+      const response = await fetch('/api/generate-title', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ subtitles: segments }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'AI 生成失敗');
+      }
+
+      setGeneratedTitles(data.titles);
+      setShowTitleDropdown(true);
+      toast.success('AI 標題生成完成！');
+    } catch (error: any) {
+      console.error('AI 標題生成錯誤:', error);
+      toast.error(`生成失敗: ${error.message}`);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleApplyTitle = (titleType: 'catchy' | 'informative' | 'professional') => {
+    if (generatedTitles) {
+      onUpdate(pinned.id, { text: generatedTitles[titleType] });
+      setShowTitleDropdown(false);
+      toast.success('標題已套用！');
+    }
+  };
   return (
     <div className="p-4 bg-gray-800/30 border border-gray-700/50 rounded-lg">
       {/* 標題欄 + 啟用開關 */}
@@ -80,7 +135,28 @@ function PinnedSubtitleEditor({
         <>
           {/* 文字內容 */}
           <div className="mb-4">
-            <label className="block text-xs text-gray-400 mb-2">文字內容</label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs text-gray-400">文字內容</label>
+              {segments && pinned.position === 'top' && (
+                <button
+                  onClick={handleGenerateTitle}
+                  disabled={isGenerating}
+                  className="flex items-center gap-1 px-2 py-1 text-xs bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 size={12} className="animate-spin" />
+                      <span>生成中...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={12} />
+                      <span>AI生成標題</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
             <textarea
               value={pinned.text}
               onChange={(e) => onUpdate(pinned.id, { text: e.target.value })}
@@ -88,6 +164,51 @@ function PinnedSubtitleEditor({
               rows={2}
               placeholder="輸入字幕文字..."
             />
+
+            {/* AI 生成的標題選項 */}
+            {showTitleDropdown && generatedTitles && (
+              <div className="mt-3 p-3 bg-gray-900 border border-purple-500/50 rounded-lg space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={14} className="text-purple-400" />
+                    <span className="text-sm font-semibold text-purple-400">AI 生成的標題建議</span>
+                  </div>
+                  <button
+                    onClick={() => setShowTitleDropdown(false)}
+                    className="text-xs text-gray-500 hover:text-gray-300"
+                  >
+                    關閉
+                  </button>
+                </div>
+
+                {/* 吸睛標題 */}
+                <button
+                  onClick={() => handleApplyTitle('catchy')}
+                  className="w-full text-left p-2 bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 hover:border-orange-500 transition-all group"
+                >
+                  <div className="text-xs text-orange-400 mb-1">🔥 吸睛標題</div>
+                  <div className="text-sm text-gray-200 group-hover:text-white">{generatedTitles.catchy}</div>
+                </button>
+
+                {/* 資訊標題 */}
+                <button
+                  onClick={() => handleApplyTitle('informative')}
+                  className="w-full text-left p-2 bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 hover:border-blue-500 transition-all group"
+                >
+                  <div className="text-xs text-blue-400 mb-1">📋 資訊標題</div>
+                  <div className="text-sm text-gray-200 group-hover:text-white">{generatedTitles.informative}</div>
+                </button>
+
+                {/* 專業標題 */}
+                <button
+                  onClick={() => handleApplyTitle('professional')}
+                  className="w-full text-left p-2 bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 hover:border-green-500 transition-all group"
+                >
+                  <div className="text-xs text-green-400 mb-1">🎓 專業標題</div>
+                  <div className="text-sm text-gray-200 group-hover:text-white">{generatedTitles.professional}</div>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* 樣式控制 */}
