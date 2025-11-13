@@ -35,6 +35,18 @@ export function usePreviewRecorder() {
     cancelledRef.current = false;
 
     try {
+      // 確保視頻已經載入
+      if (videoElement.readyState < 2) {
+        setStatus('等待視頻載入...');
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('視頻載入超時')), 30000);
+          videoElement.addEventListener('loadeddata', () => {
+            clearTimeout(timeout);
+            resolve();
+          }, { once: true });
+        });
+      }
+
       const duration = videoElement.duration;
       const totalFrames = Math.ceil(duration * fps);
       const frameDuration = 1 / fps;
@@ -117,9 +129,11 @@ export function usePreviewRecorder() {
       console.log(`✅ 錄製完成，共 ${frames.length} 幀`);
       setStatus('合成影片中...');
 
-      // 恢復影片播放狀態
+      // 恢復影片播放狀態（添加錯誤處理）
       if (wasPlaying) {
-        videoElement.play();
+        videoElement.play().catch(err => {
+          console.warn('無法恢復播放:', err);
+        });
       }
 
       // 發送到後端合成
@@ -135,11 +149,22 @@ export function usePreviewRecorder() {
       const response = await fetch('/api/record-preview', {
         method: 'POST',
         body: formData,
+      }).catch(err => {
+        console.error('❌ API 請求失敗:', err);
+        throw new Error(`無法連接到伺服器: ${err.message}`);
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || '合成失敗');
+        const errorText = await response.text();
+        console.error('❌ API 回應錯誤:', errorText);
+        let errorMsg = '合成失敗';
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMsg = errorJson.error || errorMsg;
+        } catch {
+          errorMsg = errorText || errorMsg;
+        }
+        throw new Error(errorMsg);
       }
 
       setProgress(0.95);

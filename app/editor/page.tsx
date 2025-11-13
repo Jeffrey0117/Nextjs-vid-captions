@@ -104,7 +104,8 @@ export default function ProjectsPage() {
       const video = document.createElement('video');
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      
+
+      video.crossOrigin = 'anonymous';
       video.preload = 'metadata';
       video.muted = true;
       

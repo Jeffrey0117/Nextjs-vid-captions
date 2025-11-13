@@ -96,6 +96,7 @@ export default function VideoPlayer({
         <video
           ref={videoRef}
           src={videoUrl}
+          crossOrigin="anonymous"
           className="w-full h-full object-contain"
           onClick={togglePlay}
           controls

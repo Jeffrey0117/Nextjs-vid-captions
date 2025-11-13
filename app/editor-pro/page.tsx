@@ -1648,6 +1648,7 @@ export default function EditorProPage() {
                     <video
                       ref={videoRef}
                       src={videoUrl}
+                      crossOrigin="anonymous"
                       className="w-full h-full object-contain"
                       style={{
                         pointerEvents: showTimelineAdjust ? 'none' : 'auto'
