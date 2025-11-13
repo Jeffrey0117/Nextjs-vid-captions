@@ -22,7 +22,7 @@ export default function EditorProPage() {
   const [isTranslating, setIsTranslating] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
-  const [renderMethod, setRenderMethod] = useState<'ffmpeg' | 'canvas'>('canvas');
+  const [renderMethod, setRenderMethod] = useState<'ffmpeg' | 'canvas' | 'drawtext'>('drawtext');
   const [targetLang, setTargetLang] = useState('zh-TW');
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -723,6 +723,7 @@ export default function EditorProPage() {
       
       formData.append('subtitles', JSON.stringify(actualSegments));
       formData.append('pinnedSubtitles', JSON.stringify(pinnedSubtitles));
+      formData.append('renderMethod', renderMethod);
 
       // 模擬進度
       const progressInterval = setInterval(() => {
@@ -732,7 +733,9 @@ export default function EditorProPage() {
       // 根據選擇的渲染方式調用不同的 API
       let apiEndpoint: string;
       if (renderMethod === 'canvas') {
-        apiEndpoint = '/api/render-video/drawtext'; // 使用 FFmpeg drawtext 高品質渲染
+        apiEndpoint = '/api/render-video/canvas'; // 使用 Canvas 高品質渲染
+      } else if (renderMethod === 'drawtext') {
+        apiEndpoint = '/api/render-video/drawtext'; // 使用 FFmpeg DrawText 高品質渲染
       } else {
         apiEndpoint = '/api/burn-subtitles'; // 傳統 FFmpeg ASS 燒錄
       }
@@ -1358,16 +1361,17 @@ export default function EditorProPage() {
         <div className="flex items-center gap-1">
           <select
             value={renderMethod}
-            onChange={(e) => setRenderMethod(e.target.value as 'ffmpeg' | 'canvas')}
+            onChange={(e) => setRenderMethod(e.target.value as 'ffmpeg' | 'canvas' | 'drawtext')}
             className="px-2 py-1 text-xs bg-gray-800 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
             disabled={isExporting}
             title={
-              renderMethod === 'canvas' ?
-                '使用高級 drawtext 渲染，支援描邊、陰影和字體效果' :
+              renderMethod === 'drawtext' ?
+                '使用 FFmpeg DrawText 渲染，支援固定字幕、描邊和陰影，與瀏覽器預覽一致' :
                 '基本 FFmpeg ASS 渲染，速度較快但效果有限'
             }
           >
-            <option value="canvas">🎨 Canvas 渲染 (高質量)</option>
+            {/* <option value="canvas">🎨 Canvas 渲染 (高質量)</option> */}
+            <option value="drawtext">✏️ DrawText 渲染 (高質量)</option>
             <option value="ffmpeg">⚡ FFmpeg 渲染 (快速)</option>
           </select>
         </div>

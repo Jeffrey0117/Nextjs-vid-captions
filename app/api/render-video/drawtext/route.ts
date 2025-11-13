@@ -10,6 +10,7 @@ interface SubtitleSegment {
   startTime: number;
   endTime: number;
   text: string;
+  translatedText?: string;
   style: {
     fontSize: number;
     fontFamily: string;
@@ -35,18 +36,112 @@ interface SubtitleSegment {
   };
 }
 
+interface PinnedSubtitle {
+  id: string;
+  text: string;
+  position: 'top' | 'bottom';
+  enabled: boolean;
+  style: {
+    fontSize: number;
+    fontFamily: string;
+    fontWeight: 'normal' | 'bold';
+    fontStyle: 'normal' | 'italic';
+    color: string;
+    opacity: number;
+    backgroundColor: string;
+    enableShadow: boolean;
+    shadowColor: string;
+    shadowOffsetX: number;
+    shadowOffsetY: number;
+    shadowBlur: number;
+    enableStroke: boolean;
+    strokeColor: string;
+    strokeWidth: number;
+    positionY: number;
+  };
+}
+
 // 將 HEX 顏色轉換為 FFmpeg 顏色格式
 function hexToFFmpegColor(hex: string): string {
   if (hex.startsWith('#')) hex = hex.slice(1);
   return `0x${hex}`;
 }
 
+// 生成固定字幕的 drawtext filter
+function generatePinnedDrawTextFilters(pinnedSubtitles: PinnedSubtitle[], videoWidth: number, videoHeight: number): string {
+  const filters: string[] = [];
+
+  pinnedSubtitles.forEach((pinned, index) => {
+    if (!pinned.enabled) return; // 跳過未啟用的固定字幕
+
+    const style = pinned.style;
+    const displayText = pinned.text;
+
+    // 基於 1080p 的縮放係數
+    const scaleFactor = videoHeight / 1080;
+
+    // 計算位置 (水平居中，垂直使用 positionY)
+    const x = videoWidth / 2; // 水平居中
+    const y = Math.round((style.positionY / 100) * videoHeight);
+
+    // 使用 fontconfig 讓 FFmpeg 自動找字體（支援中文）
+    // FFmpeg 會自動查找系統中支持的字體，優先使用微軟正黑體等中文字體
+    const fontName = 'Microsoft JhengHei UI'; // 微軟正黑體
+
+    // 字體大小 (基於 1080p 縮放)
+    const fontSize = Math.round((style.fontSize / 1080) * videoHeight);
+
+    // 顏色處理
+    const textColor = hexToFFmpegColor(style.color);
+    const shadowColor = style.enableShadow ? hexToFFmpegColor(style.shadowColor) : textColor;
+
+    // 處理文字內容，轉義特殊字符
+    const escapedText = displayText
+      .replace(/\\/g, '\\\\\\\\')
+      .replace(/'/g, "\\\\'")
+      .replace(/"/g, '\\\\"')
+      .replace(/:/g, '\\\\:')
+      .replace(/\n/g, '\\n');
+
+    // 構建 drawtext filter (固定字幕持續顯示整個視頻期間)
+    // 使用 font 參數讓 FFmpeg 通過 fontconfig 自動查找字體
+    let drawTextFilter = `drawtext=font='${fontName}':text='${escapedText}':fontsize=${fontSize}:fontcolor=${textColor}:x=${x}-text_w/2:y=${y}-text_h/2`;
+
+    // 添加描邊效果
+    if (style.enableStroke && style.strokeWidth > 0) {
+      const strokeColor = hexToFFmpegColor(style.strokeColor);
+      const scaledStrokeWidth = Math.round((style.strokeWidth / 1080) * videoHeight);
+      drawTextFilter += `:borderw=${scaledStrokeWidth}:bordercolor=${strokeColor}`;
+    }
+
+    // 添加陰影效果
+    if (style.enableShadow) {
+      const scaledShadowX = Math.round((style.shadowOffsetX / 1080) * videoHeight);
+      const scaledShadowY = Math.round((style.shadowOffsetY / 1080) * videoHeight);
+      drawTextFilter += `:shadowcolor=${shadowColor}:shadowx=${scaledShadowX}:shadowy=${scaledShadowY}`;
+    }
+
+    // 添加背景色
+    if (style.backgroundColor !== 'transparent') {
+      const bgColor = hexToFFmpegColor(style.backgroundColor);
+      const boxPadding = Math.round((10 / 1080) * videoHeight);
+      drawTextFilter += `:box=1:boxcolor=${bgColor}:boxborderw=${boxPadding}`;
+    }
+
+    filters.push(drawTextFilter);
+  });
+
+  return filters.join(',');
+}
+
 // 生成高品質的 FFmpeg drawtext filter
 function generateDrawTextFilters(subtitles: SubtitleSegment[], videoWidth: number, videoHeight: number): string {
   const filters: string[] = [];
-  
+
   subtitles.forEach((segment, index) => {
-    const { text, style: rawStyle } = segment;
+    const { text, translatedText, style: rawStyle } = segment;
+    // 優先使用翻譯文本
+    const displayText = translatedText || text;
     
     // 確保樣式包含所有必要的屬性，提供預設值
     const defaultStyle = {
@@ -74,56 +169,56 @@ function generateDrawTextFilters(subtitles: SubtitleSegment[], videoWidth: numbe
     };
     
     const style = { ...defaultStyle, ...rawStyle };
-    
-    // 計算位置
+
+    // 基於 1080p 的縮放係數（與瀏覽器預覽一致）
+    const scaleFactor = videoHeight / 1080;
+
+    // 計算位置 (百分比轉像素)
     const x = Math.round((style.positionX / 100) * videoWidth);
     const y = Math.round((style.positionY / 100) * videoHeight);
-    
-    // 處理字體樣式
-    let fontFile = '';
-    if (style.fontFamily.toLowerCase().includes('arial')) {
-      fontFile = process.platform === 'win32' ? 'C\\:/Windows/Fonts/arial.ttf' : '/System/Library/Fonts/Arial.ttf';
-    } else {
-      fontFile = process.platform === 'win32' ? 'C\\:/Windows/Fonts/arial.ttf' : '/System/Library/Fonts/Arial.ttf';
-    }
-    
-    // 字體大小 (考慮縮放)
-    const fontSize = Math.round(style.fontSize * style.scale);
-    
+
+    // 使用 fontconfig 讓 FFmpeg 自動找字體（支援中文）
+    const fontName = 'Microsoft JhengHei UI'; // 微軟正黑體
+
+    // 字體大小 (基於 1080p 縮放，與瀏覽器預覽一致)
+    const fontSize = Math.round((style.fontSize * style.scale / 1080) * videoHeight);
+
     // 顏色處理
     const textColor = hexToFFmpegColor(style.color);
     const shadowColor = style.enableShadow ? hexToFFmpegColor(style.shadowColor) : textColor;
-    
+
     // 處理文字內容，轉義特殊字符
-    const escapedText = text
+    const escapedText = displayText
       .replace(/\\/g, '\\\\\\\\')  // 反斜線
       .replace(/'/g, "\\\\'")      // 單引號
       .replace(/"/g, '\\\\"')      // 雙引號
       .replace(/:/g, '\\\\:')      // 冒號
       .replace(/\n/g, '\\n');      // 換行
-    
+
     // 構建 drawtext filter
-    let drawTextFilter = `drawtext=fontfile='${fontFile}':text='${escapedText}':fontsize=${fontSize}:fontcolor=${textColor}:x=${x}:y=${y}:enable='between(t,${segment.startTime},${segment.endTime})'`;
-    
-    // 添加描邊效果
+    // 使用 font 參數讓 FFmpeg 通過 fontconfig 自動查找字體
+    let drawTextFilter = `drawtext=font='${fontName}':text='${escapedText}':fontsize=${fontSize}:fontcolor=${textColor}:x=${x}-text_w/2:y=${y}-text_h/2:enable='between(t,${segment.startTime},${segment.endTime})'`;
+
+    // 添加描邊效果 (基於 1080p 縮放)
     if (style.enableStroke && style.strokeWidth > 0) {
       const strokeColor = hexToFFmpegColor(style.strokeColor);
-      drawTextFilter += `:borderw=${style.strokeWidth}:bordercolor=${strokeColor}`;
+      const scaledStrokeWidth = Math.round((style.strokeWidth / 1080) * videoHeight);
+      drawTextFilter += `:borderw=${scaledStrokeWidth}:bordercolor=${strokeColor}`;
     }
-    
-    // 添加陰影效果
+
+    // 添加陰影效果 (基於 1080p 縮放)
     if (style.enableShadow) {
-      drawTextFilter += `:shadowcolor=${shadowColor}:shadowx=${style.shadowOffsetX}:shadowy=${style.shadowOffsetY}`;
+      const scaledShadowX = Math.round((style.shadowOffsetX / 1080) * videoHeight);
+      const scaledShadowY = Math.round((style.shadowOffsetY / 1080) * videoHeight);
+      drawTextFilter += `:shadowcolor=${shadowColor}:shadowx=${scaledShadowX}:shadowy=${scaledShadowY}`;
     }
-    
+
     // 添加背景色
     if (style.backgroundColor !== 'transparent') {
       const bgColor = hexToFFmpegColor(style.backgroundColor);
-      drawTextFilter += `:box=1:boxcolor=${bgColor}:boxborderw=10`;
+      const boxPadding = Math.round((10 / 1080) * videoHeight);
+      drawTextFilter += `:box=1:boxcolor=${bgColor}:boxborderw=${boxPadding}`;
     }
-    
-    // 文字對齊
-    drawTextFilter += ':x=(w-text_w)/2:y=(h-text_h)/2'; // 居中對齊
     
     filters.push(drawTextFilter);
   });
@@ -139,11 +234,13 @@ export async function POST(request: Request) {
     const videoFile = formData.get("video") as File;
     const videoPath = formData.get("videoPath") as string;
     const subtitlesJson = formData.get("subtitles") as string;
-    
+    const pinnedSubtitlesJson = formData.get("pinnedSubtitles") as string;
+
     console.log("📊 Form data received:", {
       hasVideoFile: !!videoFile,
       videoPath: videoPath,
-      subtitlesExists: !!subtitlesJson
+      subtitlesExists: !!subtitlesJson,
+      pinnedSubtitlesExists: !!pinnedSubtitlesJson
     });
 
     if ((!videoFile && !videoPath) || !subtitlesJson) {
@@ -154,7 +251,8 @@ export async function POST(request: Request) {
     }
 
     const subtitles: SubtitleSegment[] = JSON.parse(subtitlesJson);
-    console.log("📝 Processing", subtitles.length, "subtitle segments");
+    const pinnedSubtitles: PinnedSubtitle[] = pinnedSubtitlesJson ? JSON.parse(pinnedSubtitlesJson) : [];
+    console.log("📝 Processing", subtitles.length, "subtitle segments and", pinnedSubtitles.filter(p => p.enabled).length, "enabled pinned subtitles");
     console.log("📝 First subtitle sample:", {
       text: subtitles[0]?.text,
       start: subtitles[0]?.startTime,
@@ -202,9 +300,16 @@ export async function POST(request: Request) {
 
     console.log(`📐 Video info: ${videoWidth}x${videoHeight}, duration: ${videoDuration}s`);
 
-    // 生成 drawtext filters
+    // 生成 drawtext filters (固定字幕 + 普通字幕)
     console.log("🎨 Generating drawtext filters...");
-    const drawTextFilters = generateDrawTextFilters(subtitles, videoWidth, videoHeight);
+    const pinnedFilters = generatePinnedDrawTextFilters(pinnedSubtitles, videoWidth, videoHeight);
+    const subtitleFilters = generateDrawTextFilters(subtitles, videoWidth, videoHeight);
+
+    // 合併 filter：先渲染固定字幕（底層），再渲染普通字幕（頂層）
+    const drawTextFilters = pinnedFilters
+      ? (subtitleFilters ? `${pinnedFilters},${subtitleFilters}` : pinnedFilters)
+      : subtitleFilters;
+
     console.log("🎬 Generated filters preview:", drawTextFilters.substring(0, 200) + "...");
 
     // 輸出檔案路徑

@@ -79,10 +79,16 @@ function renderPinnedSubtitle(
   const style = pinned.style;
   const displayText = pinned.text;
 
-  // 設置字體
+  // 基於 1080p 的縮放係數（與瀏覽器預覽一致）
+  const scaleFactor = height / 1080;
+
+  // 設置字體 (基於 1080p 縮放)
   const fontWeight = style.fontWeight === 'bold' ? 'bold' : 'normal';
   const fontStyle = style.fontStyle === 'italic' ? 'italic' : 'normal';
-  ctx.font = `${fontStyle} ${fontWeight} ${style.fontSize}px ${style.fontFamily}`;
+  const scaledFontSize = Math.round((style.fontSize / 1080) * height);
+  // 使用支援中文的字體：微軟正黑體或系統默認中文字體
+  const fontFamily = process.platform === 'win32' ? 'Microsoft JhengHei, sans-serif' : 'PingFang SC, sans-serif';
+  ctx.font = `${fontStyle} ${fontWeight} ${scaledFontSize}px ${fontFamily}`;
 
   // 設置文字顏色和透明度
   ctx.fillStyle = style.color;
@@ -96,38 +102,38 @@ function renderPinnedSubtitle(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  // 處理陰影
+  // 處理陰影 (基於 1080p 縮放)
   if (style.enableShadow) {
     ctx.shadowColor = style.shadowColor;
-    ctx.shadowOffsetX = style.shadowOffsetX;
-    ctx.shadowOffsetY = style.shadowOffsetY;
-    ctx.shadowBlur = style.shadowBlur;
+    ctx.shadowOffsetX = (style.shadowOffsetX / 1080) * height;
+    ctx.shadowOffsetY = (style.shadowOffsetY / 1080) * height;
+    ctx.shadowBlur = (style.shadowBlur / 1080) * height;
   } else {
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
   }
 
-  // 處理背景色
+  // 處理背景色 (基於 1080p 縮放)
   if (style.backgroundColor !== 'transparent') {
     const textMetrics = ctx.measureText(displayText);
-    const padding = 16;
+    const padding = (16 / 1080) * height;
     const prevAlpha = ctx.globalAlpha;
     ctx.globalAlpha = 1; // 背景不透明
     ctx.fillStyle = style.backgroundColor;
     ctx.fillRect(
       x - textMetrics.width / 2 - padding,
-      y - style.fontSize / 2 - padding / 2,
+      y - scaledFontSize / 2 - padding / 2,
       textMetrics.width + padding * 2,
-      style.fontSize + padding
+      scaledFontSize + padding
     );
     ctx.globalAlpha = prevAlpha; // 恢復文字透明度
     ctx.fillStyle = style.color;
   }
 
-  // 繪製描邊
+  // 繪製描邊 (基於 1080p 縮放)
   if (style.enableStroke && style.strokeWidth > 0) {
     ctx.strokeStyle = style.strokeColor;
-    ctx.lineWidth = style.strokeWidth;
+    ctx.lineWidth = (style.strokeWidth / 1080) * height;
     ctx.lineJoin = 'round';
     ctx.miterLimit = 2;
     ctx.strokeText(displayText, x, y);
@@ -163,55 +169,61 @@ async function renderSubtitleToCanvas(
   // 優先使用翻譯文本，如果沒有則使用原文
   const displayText = translatedText || text;
 
-  // 設置字體
+  // 基於 1080p 的縮放係數（與瀏覽器預覽一致）
+  const scaleFactor = height / 1080;
+
+  // 設置字體 (包含 scale 的效果，並根據視頻分辨率縮放)
   const fontWeight = style.fontWeight === 'bold' ? 'bold' : 'normal';
   const fontStyle = style.fontStyle === 'italic' ? 'italic' : 'normal';
-  ctx.font = `${fontStyle} ${fontWeight} ${style.fontSize}px ${style.fontFamily}`;
-  
+  const scaledFontSize = Math.round((style.fontSize * style.scale / 1080) * height);
+  // 使用支援中文的字體：微軟正黑體或系統默認中文字體
+  const fontFamily = process.platform === 'win32' ? 'Microsoft JhengHei, sans-serif' : 'PingFang SC, sans-serif';
+  ctx.font = `${fontStyle} ${fontWeight} ${scaledFontSize}px ${fontFamily}`;
+
   // 設置文字顏色和透明度
   ctx.fillStyle = style.color;
   ctx.globalAlpha = style.opacity;
-  
+
   // 計算文字位置
   const x = (style.positionX / 100) * width;
   const y = (style.positionY / 100) * height;
-  
+
   // 設置文字對齊
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  
-  // 處理陰影
+
+  // 處理陰影 (基於 1080p 縮放)
   if (style.enableShadow) {
     ctx.shadowColor = style.shadowColor;
-    ctx.shadowOffsetX = style.shadowOffsetX;
-    ctx.shadowOffsetY = style.shadowOffsetY;
-    ctx.shadowBlur = style.shadowBlur;
+    ctx.shadowOffsetX = (style.shadowOffsetX / 1080) * height;
+    ctx.shadowOffsetY = (style.shadowOffsetY / 1080) * height;
+    ctx.shadowBlur = (style.shadowBlur / 1080) * height;
   }
-  
+
   // 處理背景色
   if (style.backgroundColor !== 'transparent') {
     const textMetrics = ctx.measureText(displayText);
-    const padding = 16;
+    const padding = (16 / 1080) * height;
     ctx.fillStyle = style.backgroundColor;
     ctx.fillRect(
       x - textMetrics.width / 2 - padding,
-      y - style.fontSize / 2 - padding / 2,
+      y - scaledFontSize / 2 - padding / 2,
       textMetrics.width + padding * 2,
-      style.fontSize + padding
+      scaledFontSize + padding
     );
     ctx.fillStyle = style.color; // 重設文字顏色
   }
-  
+
   // 繪製文字
   const lines = displayText.split('\n');
-  const lineHeight = style.fontSize * 1.2;
+  const lineHeight = scaledFontSize * 1.2;
   const totalHeight = lines.length * lineHeight;
   const startY = y - totalHeight / 2;
 
-  // Draw stroke first (behind the text)
+  // Draw stroke first (behind the text) - 基於 1080p 縮放
   if (style.enableStroke && style.strokeWidth && style.strokeWidth > 0) {
     ctx.strokeStyle = style.strokeColor || '#000000';
-    ctx.lineWidth = style.strokeWidth;
+    ctx.lineWidth = (style.strokeWidth / 1080) * height;
     ctx.lineJoin = 'round';
     ctx.miterLimit = 2;
     lines.forEach((line, index) => {
@@ -275,10 +287,16 @@ async function generateSubtitleFrames(
         const { text, translatedText, style } = activeSubtitle;
         const displayText = translatedText || text;
 
-        // 設置字體
+        // 基於 1080p 的縮放係數（與瀏覽器預覽一致）
+        const scaleFactor = height / 1080;
+
+        // 設置字體 (包含 scale 的效果，並根據視頻分辨率縮放)
         const fontWeight = style.fontWeight === 'bold' ? 'bold' : 'normal';
         const fontStyle = style.fontStyle === 'italic' ? 'italic' : 'normal';
-        ctx.font = `${fontStyle} ${fontWeight} ${style.fontSize}px ${style.fontFamily}`;
+        const scaledFontSize = Math.round((style.fontSize * style.scale / 1080) * height);
+        // 使用支援中文的字體：微軟正黑體或系統默認中文字體
+        const fontFamily = process.platform === 'win32' ? 'Microsoft JhengHei, sans-serif' : 'PingFang SC, sans-serif';
+        ctx.font = `${fontStyle} ${fontWeight} ${scaledFontSize}px ${fontFamily}`;
 
         // 設置文字顏色和透明度
         ctx.fillStyle = style.color;
@@ -292,38 +310,38 @@ async function generateSubtitleFrames(
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        // 處理陰影
+        // 處理陰影 (基於 1080p 縮放)
         if (style.enableShadow) {
           ctx.shadowColor = style.shadowColor;
-          ctx.shadowOffsetX = style.shadowOffsetX;
-          ctx.shadowOffsetY = style.shadowOffsetY;
-          ctx.shadowBlur = style.shadowBlur;
+          ctx.shadowOffsetX = (style.shadowOffsetX / 1080) * height;
+          ctx.shadowOffsetY = (style.shadowOffsetY / 1080) * height;
+          ctx.shadowBlur = (style.shadowBlur / 1080) * height;
         }
 
         // 處理背景色
         if (style.backgroundColor !== 'transparent') {
           const textMetrics = ctx.measureText(displayText);
-          const padding = 16;
+          const padding = (16 / 1080) * height;
           ctx.fillStyle = style.backgroundColor;
           ctx.fillRect(
             x - textMetrics.width / 2 - padding,
-            y - style.fontSize / 2 - padding / 2,
+            y - scaledFontSize / 2 - padding / 2,
             textMetrics.width + padding * 2,
-            style.fontSize + padding
+            scaledFontSize + padding
           );
           ctx.fillStyle = style.color;
         }
 
         // 繪製文字 (支持多行)
         const lines = displayText.split('\n');
-        const lineHeight = style.fontSize * 1.2;
+        const lineHeight = scaledFontSize * 1.2;
         const totalHeight = lines.length * lineHeight;
         const startY = y - totalHeight / 2;
 
-        // 先繪製描邊
+        // 先繪製描邊 (基於 1080p 縮放)
         if (style.enableStroke && style.strokeWidth && style.strokeWidth > 0) {
           ctx.strokeStyle = style.strokeColor || '#000000';
-          ctx.lineWidth = style.strokeWidth;
+          ctx.lineWidth = (style.strokeWidth / 1080) * height;
           ctx.lineJoin = 'round';
           ctx.miterLimit = 2;
           lines.forEach((line, index) => {
