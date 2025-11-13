@@ -22,13 +22,13 @@ export async function POST(request: Request) {
 
     console.log('📝 字幕內容摘要:', subtitleTexts.substring(0, 200) + '...');
 
-    // 初始化 Grok API
-    const apiKey = "REDACTED_XAI_KEY";
+    // 使用本地 Ollama API（完全免費，無限使用！）
+    console.log('🦙 使用本地 Ollama API (qwen2.5:3b)');
 
     // 建構標題生成提示
     const systemPrompt = `你是專業的影片標題生成專家。
 
-請根據提供的字幕內容，生成3種風格的標題：
+請根據提供的字幕內容，生成3種風格的影片標題：
 
 1. 吸睛標題 (catchy)
    - 目標：最大化點擊率
@@ -48,8 +48,6 @@ export async function POST(request: Request) {
    - 技巧：使用專業術語、正式語氣
    - 例如：「機器學習模型優化技術深度解析」
 
-請分析字幕內容的主題、核心概念和目標受眾，生成最合適的3種標題。
-
 輸出格式（純JSON，不要markdown代碼塊）：
 {
   "catchy": "吸睛標題內容",
@@ -62,9 +60,10 @@ export async function POST(request: Request) {
 字幕內容：
 ${subtitleTexts}
 
-請直接輸出JSON格式的標題，不要加其他文字或markdown格式。`;
+請直接輸出JSON格式，不要加任何其他文字或markdown標記。`;
 
     const requestBody = {
+      model: "qwen2.5:3b",
       messages: [
         {
           role: "system",
@@ -75,36 +74,34 @@ ${subtitleTexts}
           content: userPrompt
         }
       ],
-      model: "grok-beta",
+      temperature: 0.7,
       stream: false,
-      temperature: 0.7, // 適度創意
     };
 
-    console.log('🚀 發送到 Grok API...');
+    console.log('🚀 發送到本地 Ollama API...');
 
-    const response = await fetch('https://api.x.ai/v1/chat/completions', {
+    const response = await fetch('http://localhost:11434/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify(requestBody),
     });
 
-    console.log('📥 Grok API 回應狀態:', response.status);
+    console.log('📥 Ollama API 回應狀態:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ Grok API 錯誤回應:', errorText);
-      throw new Error(`Grok API 請求失敗: ${response.status} - ${errorText}`);
+      console.error('❌ Ollama API 錯誤回應:', errorText);
+      throw new Error(`Ollama API 請求失敗: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
-    console.log('✅ Grok API 原始結果:', data);
+    console.log('✅ Ollama API 原始結果:', data);
 
     const generatedContent = data.choices?.[0]?.message?.content;
     if (!generatedContent) {
-      throw new Error('Grok API 返回無效數據');
+      throw new Error('Ollama API 返回無效數據');
     }
 
     console.log('📄 生成的內容:', generatedContent);

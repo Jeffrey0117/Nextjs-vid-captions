@@ -2,7 +2,7 @@
 
 import { useSubtitleStore, PinnedSubtitle } from '../stores/subtitle-store';
 import { Pin, Trash2, Sparkles, Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { toast } from 'sonner';
 
 export default function PinnedSubtitlePanel() {
@@ -10,8 +10,19 @@ export default function PinnedSubtitlePanel() {
     pinnedSubtitles,
     updatePinnedSubtitle,
     togglePinnedSubtitle,
-    segments
+    tracks,
   } = useSubtitleStore();
+
+  // 使用 useMemo 避免無限循環
+  const segments = useMemo(() => {
+    return tracks
+      .filter(t => t.visible && !t.muted)
+      .flatMap(t => t.segments)
+      .sort((a, b) => a.startTime - b.startTime);
+  }, [tracks]);
+
+  // Debug: 確認 segments 是否正確取得
+  console.log('🔍 PinnedSubtitlePanel - segments 數量:', segments?.length || 0);
 
   const topPinned = pinnedSubtitles.find(p => p.position === 'top');
   const bottomPinned = pinnedSubtitles.find(p => p.position === 'bottom');
@@ -71,15 +82,20 @@ function PinnedSubtitleEditor({
   const [showTitleDropdown, setShowTitleDropdown] = useState(false);
 
   const handleGenerateTitle = async () => {
+    console.log('📝 handleGenerateTitle 被調用，segments:', segments?.length);
+
     if (!segments || segments.length === 0) {
+      console.error('❌ 沒有字幕內容');
       toast.error('沒有字幕內容可供分析');
       return;
     }
 
+    console.log('🚀 開始生成標題，字幕數量:', segments.length);
     setIsGenerating(true);
     setGeneratedTitles(null);
 
     try {
+      console.log('📤 發送 API 請求到 /api/generate-title');
       const response = await fetch('/api/generate-title', {
         method: 'POST',
         headers: {
@@ -88,7 +104,9 @@ function PinnedSubtitleEditor({
         body: JSON.stringify({ subtitles: segments }),
       });
 
+      console.log('📥 收到 API 回應，狀態:', response.status);
       const data = await response.json();
+      console.log('📄 API 回應資料:', data);
 
       if (!data.success) {
         throw new Error(data.error || 'AI 生成失敗');
@@ -97,8 +115,9 @@ function PinnedSubtitleEditor({
       setGeneratedTitles(data.titles);
       setShowTitleDropdown(true);
       toast.success('AI 標題生成完成！');
+      console.log('✅ 標題生成成功:', data.titles);
     } catch (error: any) {
-      console.error('AI 標題生成錯誤:', error);
+      console.error('❌ AI 標題生成錯誤:', error);
       toast.error(`生成失敗: ${error.message}`);
     } finally {
       setIsGenerating(false);
@@ -137,25 +156,37 @@ function PinnedSubtitleEditor({
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
               <label className="block text-xs text-gray-400">文字內容</label>
-              {segments && pinned.position === 'top' && (
-                <button
-                  onClick={handleGenerateTitle}
-                  disabled={isGenerating}
-                  className="flex items-center gap-1 px-2 py-1 text-xs bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 size={12} className="animate-spin" />
-                      <span>生成中...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles size={12} />
-                      <span>AI生成標題</span>
-                    </>
-                  )}
-                </button>
-              )}
+              {(() => {
+                const shouldShowButton = segments && segments.length > 0 && pinned.position === 'top';
+                console.log('✨ AI按鈕渲染檢查:', {
+                  hasSegments: !!segments,
+                  segmentsCount: segments?.length || 0,
+                  isTopPosition: pinned.position === 'top',
+                  shouldShowButton
+                });
+                return shouldShowButton ? (
+                  <button
+                    onClick={() => {
+                      console.log('🎯 AI生成標題按鈕被點擊！');
+                      handleGenerateTitle();
+                    }}
+                    disabled={isGenerating}
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 size={12} className="animate-spin" />
+                        <span>生成中...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={12} />
+                        <span>AI生成標題</span>
+                      </>
+                    )}
+                  </button>
+                ) : null;
+              })()}
             </div>
             <textarea
               value={pinned.text}
