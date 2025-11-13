@@ -303,7 +303,7 @@ export default function TimelineAdjustDialog({
     return ticks;
   };
 
-  // 點擊時間軸跳轉視頻並播放
+  // 點擊時間軸跳轉視頻位置
   const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!containerRef.current || !videoRef.current) return;
     if (isDragging) return; // 拖拽時不觸發
@@ -316,11 +316,7 @@ export default function TimelineAdjustDialog({
     videoRef.current.currentTime = clickTime;
     setCurrentTime(clickTime);
 
-    // 自動播放
-    videoRef.current.play();
-    setIsPlaying(true);
-
-    console.log('⏱️ 點擊時間軸跳轉並播放:', clickTime);
+    console.log('⏱️ 點擊時間軸跳轉:', clickTime);
   };
 
   return (

@@ -198,7 +198,7 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       id: 'pinned-top',
       text: '影片標題',
       position: 'top',
-      enabled: false, // 預設關閉
+      enabled: true, // 預設開啟
       style: {
         fontSize: 28,
         fontFamily: 'Noto Sans SC',
@@ -222,7 +222,7 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       id: 'pinned-bottom',
       text: '@your_watermark',
       position: 'bottom',
-      enabled: false, // 預設關閉
+      enabled: true, // 預設開啟
       style: {
         fontSize: 24,
         fontFamily: 'Noto Sans SC',

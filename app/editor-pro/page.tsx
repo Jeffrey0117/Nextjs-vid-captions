@@ -1331,7 +1331,7 @@ export default function EditorProPage() {
 
         <button
           onClick={handleAddSubtitle}
-          disabled={!videoFile || duration === 0}
+          disabled={!videoUrl || duration === 0}
           className="flex items-center gap-1 px-2 py-1 bg-cyan-600 hover:bg-cyan-700 rounded transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
           title="在當前時間創建新字幕 (Ctrl+N)"
         >

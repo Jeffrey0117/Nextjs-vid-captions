@@ -61,13 +61,35 @@ interface PinnedSubtitle {
   };
 }
 
-// 將 HEX 顏色轉換為 FFmpeg 顏色格式
-function hexToFFmpegColor(hex: string): string {
-  if (hex.startsWith('#')) hex = hex.slice(1);
+// 將顏色轉換為 FFmpeg 顏色格式
+function hexToFFmpegColor(color: string): string {
+  // 處理 transparent
+  if (color === 'transparent') {
+    return '0x00000000'; // 完全透明的黑色
+  }
+
+  // 處理 rgba(r,g,b,a) 格式
+  const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+  if (rgbaMatch) {
+    const r = parseInt(rgbaMatch[1]).toString(16).padStart(2, '0');
+    const g = parseInt(rgbaMatch[2]).toString(16).padStart(2, '0');
+    const b = parseInt(rgbaMatch[3]).toString(16).padStart(2, '0');
+    const a = rgbaMatch[4] ? Math.round(parseFloat(rgbaMatch[4]) * 255).toString(16).padStart(2, '0') : 'FF';
+    return `0x${a}${r}${g}${b}`; // FFmpeg 格式: 0xAARRGGBB
+  }
+
+  // 處理 #RRGGBB 或 #RGB 格式
+  let hex = color.startsWith('#') ? color.slice(1) : color;
+
+  // 處理 #RGB 格式，轉為 #RRGGBB
+  if (hex.length === 3) {
+    hex = hex.split('').map(c => c + c).join('');
+  }
+
   return `0x${hex}`;
 }
 
-// 生成固定字幕的 drawtext filter
+// 生成固定字幕的 drawbox + drawtext filters（支援全寬背景）
 function generatePinnedDrawTextFilters(pinnedSubtitles: PinnedSubtitle[], videoWidth: number, videoHeight: number): string {
   const filters: string[] = [];
 
@@ -81,18 +103,35 @@ function generatePinnedDrawTextFilters(pinnedSubtitles: PinnedSubtitle[], videoW
     const scaleFactor = videoHeight / 1080;
 
     // 計算位置 (水平居中，垂直使用 positionY)
-    const x = videoWidth / 2; // 水平居中
-    const y = Math.round((style.positionY / 100) * videoHeight);
+    const centerX = videoWidth / 2; // 水平居中
+    const centerY = Math.round((style.positionY / 100) * videoHeight);
 
     // 使用 fontconfig 讓 FFmpeg 自動找字體（支援中文）
-    // FFmpeg 會自動查找系統中支持的字體，優先使用微軟正黑體等中文字體
-    const fontName = 'Microsoft JhengHei UI'; // 微軟正黑體
+    // 根據 fontWeight 選擇正確的字體
+    const fontName = style.fontWeight === 'bold'
+      ? 'Microsoft JhengHei UI Bold'  // 粗體
+      : 'Microsoft JhengHei UI';       // 正常
 
     // 字體大小 (基於 1080p 縮放)
     const fontSize = Math.round((style.fontSize / 1080) * videoHeight);
 
-    // 顏色處理
-    const textColor = hexToFFmpegColor(style.color);
+    // 顏色處理 - 需要考慮 opacity
+    let textColor = hexToFFmpegColor(style.color);
+    // 應用 opacity 到文字顏色
+    if (style.opacity < 1) {
+      const colorStr = textColor.replace('0x', '');
+      let alpha, rgb;
+      if (colorStr.length === 8) {
+        alpha = parseInt(colorStr.substring(0, 2), 16);
+        rgb = colorStr.substring(2);
+      } else {
+        alpha = 255;
+        rgb = colorStr;
+      }
+      const finalAlpha = Math.round(alpha * style.opacity).toString(16).padStart(2, '0');
+      textColor = `0x${finalAlpha}${rgb}`;
+    }
+
     const shadowColor = style.enableShadow ? hexToFFmpegColor(style.shadowColor) : textColor;
 
     // 處理文字內容，轉義特殊字符
@@ -103,9 +142,54 @@ function generatePinnedDrawTextFilters(pinnedSubtitles: PinnedSubtitle[], videoW
       .replace(/:/g, '\\\\:')
       .replace(/\n/g, '\\n');
 
-    // 構建 drawtext filter (固定字幕持續顯示整個視頻期間)
-    // 使用 font 參數讓 FFmpeg 通過 fontconfig 自動查找字體
-    let drawTextFilter = `drawtext=font='${fontName}':text='${escapedText}':fontsize=${fontSize}:fontcolor=${textColor}:x=${x}-text_w/2:y=${y}-text_h/2`;
+    // 如果有背景色且不是透明，先繪製全寬背景矩形
+    if (style.backgroundColor !== 'transparent') {
+      let bgColor = hexToFFmpegColor(style.backgroundColor);
+
+      // 應用 opacity 到背景色
+      if (style.opacity < 1) {
+        const colorStr = bgColor.replace('0x', '');
+        let alpha, rgb;
+        if (colorStr.length === 8) {
+          alpha = parseInt(colorStr.substring(0, 2), 16);
+          rgb = colorStr.substring(2);
+        } else {
+          alpha = 255;
+          rgb = colorStr;
+        }
+        const finalAlpha = Math.round(alpha * style.opacity).toString(16).padStart(2, '0');
+        bgColor = `0x${finalAlpha}${rgb}`;
+      }
+
+      // 計算背景矩形尺寸（寬度90%，高度根據字體大小 + padding）
+      const boxWidth = Math.round(videoWidth * 0.9);
+      const boxX = Math.round(videoWidth * 0.05); // 左邊距 5%
+      const verticalPadding = Math.round(fontSize * 0.5); // 上下 padding
+      const boxHeight = Math.round(fontSize + verticalPadding * 2);
+      const boxY = Math.round(centerY - boxHeight / 2); // 垂直居中
+
+      // 繪製全寬背景矩形（使用 drawbox filter）
+      // drawbox 格式: drawbox=x:y:w:h:color:t (t=thickness, fill 用 'fill')
+      // 轉換顏色格式從 0xAARRGGBB 到 drawbox 需要的格式
+      // drawbox 接受 color@alpha 格式，其中 alpha 是 0.0-1.0
+      let boxColorStr = bgColor.replace('0x', '');
+      let boxAlpha = '1.0';
+      let boxRGB = boxColorStr;
+
+      if (boxColorStr.length === 8) {
+        // 有 alpha: 0xAARRGGBB
+        const alphaHex = boxColorStr.substring(0, 2);
+        boxAlpha = (parseInt(alphaHex, 16) / 255).toFixed(2);
+        boxRGB = boxColorStr.substring(2);
+      }
+
+      // FFmpeg drawbox 使用 0xRRGGBB@alpha 格式
+      const drawBoxFilter = `drawbox=x=${boxX}:y=${boxY}:w=${boxWidth}:h=${boxHeight}:color=0x${boxRGB}@${boxAlpha}:t=fill`;
+      filters.push(drawBoxFilter);
+    }
+
+    // 構建 drawtext filter (在背景之上繪製文字)
+    let drawTextFilter = `drawtext=font='${fontName}':text='${escapedText}':fontsize=${fontSize}:fontcolor=${textColor}:x=${centerX}-text_w/2:y=${centerY}-text_h/2`;
 
     // 添加描邊效果
     if (style.enableStroke && style.strokeWidth > 0) {
@@ -119,13 +203,6 @@ function generatePinnedDrawTextFilters(pinnedSubtitles: PinnedSubtitle[], videoW
       const scaledShadowX = Math.round((style.shadowOffsetX / 1080) * videoHeight);
       const scaledShadowY = Math.round((style.shadowOffsetY / 1080) * videoHeight);
       drawTextFilter += `:shadowcolor=${shadowColor}:shadowx=${scaledShadowX}:shadowy=${scaledShadowY}`;
-    }
-
-    // 添加背景色
-    if (style.backgroundColor !== 'transparent') {
-      const bgColor = hexToFFmpegColor(style.backgroundColor);
-      const boxPadding = Math.round((10 / 1080) * videoHeight);
-      drawTextFilter += `:box=1:boxcolor=${bgColor}:boxborderw=${boxPadding}`;
     }
 
     filters.push(drawTextFilter);
@@ -178,7 +255,10 @@ function generateDrawTextFilters(subtitles: SubtitleSegment[], videoWidth: numbe
     const y = Math.round((style.positionY / 100) * videoHeight);
 
     // 使用 fontconfig 讓 FFmpeg 自動找字體（支援中文）
-    const fontName = 'Microsoft JhengHei UI'; // 微軟正黑體
+    // 根據 fontWeight 選擇正確的字體
+    const fontName = style.fontWeight === 'bold'
+      ? 'Microsoft JhengHei UI Bold'  // 粗體
+      : 'Microsoft JhengHei UI';       // 正常
 
     // 字體大小 (基於 1080p 縮放，與瀏覽器預覽一致)
     const fontSize = Math.round((style.fontSize * style.scale / 1080) * videoHeight);
