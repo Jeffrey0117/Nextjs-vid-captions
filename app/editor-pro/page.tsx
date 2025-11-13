@@ -8,6 +8,7 @@ import SubtitlePropertiesPanel from '../components/SubtitlePropertiesPanel';
 import PinnedSubtitlePanel from '../components/PinnedSubtitlePanel';
 import BulkSubtitleEditor from '../components/BulkSubtitleEditor';
 import SubtitlePlayhead from '../components/SubtitlePlayhead';
+import TimelineAdjustDialog from '../components/TimelineAdjustDialog';
 import { parseSrt } from '@/lib/parseSrt';
 import { useToast } from '../hooks/useToast';
 
@@ -55,6 +56,8 @@ export default function EditorProPage() {
   const [videoDisplaySize, setVideoDisplaySize] = useState({ width: 1920, height: 1080 });
   const [activeMediaTab, setActiveMediaTab] = useState<'media' | 'sounds' | 'text' | 'captions' | 'filters' | 'settings'>('text');
   const [editMode, setEditMode] = useState<'normal' | 'pinned'>('normal');
+  const [showTimelineAdjust, setShowTimelineAdjust] = useState(false);
+  const [adjustingSegmentId, setAdjustingSegmentId] = useState<string | null>(null);
 
   // 時間軸點擊/拖動檢測狀態
   const [isClickAction, setIsClickAction] = useState(true);
@@ -1144,6 +1147,10 @@ export default function EditorProPage() {
     setResizeDragType(null);
   };
 
+  // 記錄鼠標按下位置，用於區分點擊和拖拽
+  const [mouseDownPos, setMouseDownPos] = useState<{ x: number; y: number } | null>(null);
+  const [hasMoved, setHasMoved] = useState(false);
+
   // 時間軸字幕區塊拖曳處理 - OpenCut 風格 (document-level listeners)
   const handleTimelineDragStart = (
     e: React.MouseEvent,
@@ -1154,6 +1161,12 @@ export default function EditorProPage() {
     const segment = segments.find(s => s.id === segmentId);
     if (!segment || !timelineRef.current) return;
 
+    console.log('🎯 拖拽開始:', { segmentId, dragType, startTime: segment.startTime, endTime: segment.endTime });
+
+    // 記錄鼠標按下位置
+    setMouseDownPos({ x: e.clientX, y: e.clientY });
+    setHasMoved(false);
+
     // 計算 click offset (關鍵: 讓拖曳時元素不會跳動)
     let clickOffsetTime = 0;
     if (dragType === 'move') {
@@ -1161,6 +1174,7 @@ export default function EditorProPage() {
       const clickOffsetX = e.clientX - elementRect.left;
       const pixelsPerSecond = 50 * zoomLevel;
       clickOffsetTime = clickOffsetX / pixelsPerSecond;
+      console.log('📐 移動模式 clickOffset:', clickOffsetTime);
     }
 
     setTimelineDragState({
@@ -1188,8 +1202,18 @@ export default function EditorProPage() {
   useEffect(() => {
     if (!timelineDragState.isDragging || !timelineRef.current) return;
 
+    console.log('👂 設置拖拽監聽器:', timelineDragState.dragType);
+
     const handleMouseMove = (e: MouseEvent) => {
       if (!timelineRef.current) return;
+
+      // 檢測是否真的移動了（超過5px視為拖拽）
+      if (mouseDownPos && !hasMoved) {
+        const moved = Math.abs(e.clientX - mouseDownPos.x) > 5 || Math.abs(e.clientY - mouseDownPos.y) > 5;
+        if (moved) {
+          setHasMoved(true);
+        }
+      }
 
       const pixelsPerSecond = 50 * zoomLevel;
       const deltaX = e.clientX - timelineDragState.startMouseX;
@@ -1208,12 +1232,14 @@ export default function EditorProPage() {
         // 拖曳左邊緣,調整 startTime
         let newStartTime = snapTimeToFrame(Math.max(0, timelineDragState.startTime.start + deltaTime));
         if (newStartTime < segment.endTime) {
+          console.log('⬅️ 更新左邊緣:', { oldStart: segment.startTime, newStart: newStartTime });
           updateSegment(timelineDragState.segmentId!, { startTime: newStartTime });
         }
       } else if (timelineDragState.dragType === 'right') {
         // 拖曳右邊緣,調整 endTime
         let newEndTime = snapTimeToFrame(Math.min(duration, timelineDragState.startTime.end + deltaTime));
         if (newEndTime > segment.startTime) {
+          console.log('➡️ 更新右邊緣:', { oldEnd: segment.endTime, newEnd: newEndTime });
           updateSegment(timelineDragState.segmentId!, { endTime: newEndTime });
         }
       } else if (timelineDragState.dragType === 'move') {
@@ -1240,6 +1266,13 @@ export default function EditorProPage() {
           newStartTime = duration - segmentDuration;
         }
 
+        console.log('🔄 更新整體位置:', {
+          oldStart: segment.startTime,
+          oldEnd: segment.endTime,
+          newStart: newStartTime,
+          newEnd: newEndTime
+        });
+
         updateSegment(timelineDragState.segmentId!, {
           startTime: newStartTime,
           endTime: newEndTime,
@@ -1248,6 +1281,7 @@ export default function EditorProPage() {
     };
 
     const handleMouseUp = () => {
+      console.log('✋ 拖拽結束');
       handleTimelineDragEnd();
     };
 
@@ -1258,7 +1292,7 @@ export default function EditorProPage() {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [timelineDragState, segments, duration, zoomLevel, updateSegment]);
+  }, [timelineDragState, segments, duration, zoomLevel, updateSegment, mouseDownPos, hasMoved]);
 
   return (
     <>
@@ -1545,8 +1579,20 @@ export default function EditorProPage() {
                       ref={videoRef}
                       src={videoUrl}
                       className="w-full h-full object-contain"
+                      style={{
+                        pointerEvents: showTimelineAdjust ? 'none' : 'auto'
+                      }}
                     />
-                    
+
+                    {/* 彈窗鎖定遮罩 */}
+                    {showTimelineAdjust && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
+                        <div className="bg-gray-800 px-4 py-2 rounded-lg border border-gray-600">
+                          <p className="text-white text-sm">🔒 時間軸調整中...</p>
+                        </div>
+                      </div>
+                    )}
+
                     {/* 字幕疊加層 */}
                     {currentSubtitle && (
                       <div
@@ -2261,13 +2307,25 @@ export default function EditorProPage() {
                                           )}
                                         </div>
                                         
-                                        {/* 中間區域:點擊選中,拖曳移動 */}
+                                        {/* 中間區域:點擊選中,拖曳移動,雙擊打開調整面板 */}
                                         <div
                                           className="h-full flex items-center px-2 cursor-move"
                                           onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'move')}
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            handleSegmentClick(segment.id, segment.startTime);
+                                            // 只有沒有拖拽才觸發點擊
+                                            if (!hasMoved) {
+                                              handleSegmentClick(segment.id, segment.startTime);
+                                            }
+                                          }}
+                                          onDoubleClick={(e) => {
+                                            e.stopPropagation();
+                                            // 只有沒有拖拽才觸發雙擊
+                                            if (!hasMoved) {
+                                              console.log('🖱️ 雙擊字幕條（中間區域），打開調整面板');
+                                              setAdjustingSegmentId(segment.id);
+                                              setShowTimelineAdjust(true);
+                                            }
                                           }}
                                         >
                                           <span className="text-[0.65rem] text-white truncate flex-1" title={segment.text}>
@@ -2359,6 +2417,53 @@ export default function EditorProPage() {
         onClose={() => setShowBulkEditor(false)}
         videoUrl={videoUrl || undefined}
       />
+
+      {/* 時間軸精確調整彈窗 */}
+      {showTimelineAdjust && adjustingSegmentId && (() => {
+        console.log('🔍 彈窗渲染檢查:', {
+          showTimelineAdjust,
+          adjustingSegmentId,
+          segmentsCount: segments.length,
+          tracksCount: tracks.length,
+          allSegments: tracks.flatMap(t => t.segments).length
+        });
+
+        // 從所有軌道中查找字幕
+        const allSegments = tracks.flatMap(t => t.segments);
+        const adjustingSegment = allSegments.find(s => s.id === adjustingSegmentId);
+
+        if (!adjustingSegment) {
+          console.error('❌ 找不到字幕片段:', adjustingSegmentId);
+          return null;
+        }
+
+        console.log('✅ 找到字幕，渲染彈窗:', adjustingSegment.text);
+
+        // 暫停主視頻並設置標記
+        if (videoRef.current && !videoRef.current.paused) {
+          videoRef.current.pause();
+        }
+
+        return (
+          <TimelineAdjustDialog
+            segment={adjustingSegment}
+            videoDuration={duration}
+            currentTime={currentTime}
+            videoUrl={videoUrl}
+            mainVideoRef={videoRef}
+            onClose={() => {
+              console.log('🚪 關閉彈窗');
+              setShowTimelineAdjust(false);
+              setAdjustingSegmentId(null);
+            }}
+            onConfirm={(startTime, endTime) => {
+              console.log('✅ 確認更新時間:', { startTime, endTime });
+              updateSegment(adjustingSegmentId, { startTime, endTime });
+              toast.success('字幕時間已更新！');
+            }}
+          />
+        );
+      })()}
     </div>
     </>
   );
