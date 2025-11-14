@@ -68,9 +68,22 @@ export async function POST(request: NextRequest) {
 
     console.log('💾 無音軌視頻已保存:', noAudioVideoPath);
 
-    // 4. 驗證原始視頻存在
-    if (!fs.existsSync(originalVideoPath)) {
-      throw new Error(`原始視頻不存在: ${originalVideoPath}`);
+    // 4. 處理原始視頻路徑（補全相對路徑）
+    let fullOriginalVideoPath = originalVideoPath;
+
+    // 如果不是絕對路徑，補全為 public/temp/ 目錄
+    if (!path.isAbsolute(originalVideoPath)) {
+      const publicTempDir = path.join(process.cwd(), 'public', 'temp');
+      fullOriginalVideoPath = path.join(publicTempDir, originalVideoPath);
+      console.log('📂 補全視頻路徑:', {
+        original: originalVideoPath,
+        full: fullOriginalVideoPath,
+      });
+    }
+
+    // 驗證原始視頻存在
+    if (!fs.existsSync(fullOriginalVideoPath)) {
+      throw new Error(`原始視頻不存在: ${fullOriginalVideoPath}`);
     }
 
     // 5. 輸出路徑
@@ -82,7 +95,7 @@ export async function POST(request: NextRequest) {
 
     const ffmpegArgs = [
       '-i', noAudioVideoPath,     // 輸入1：WebCodecs生成的無音軌視頻
-      '-i', originalVideoPath,     // 輸入2：原始視頻（音軌來源）
+      '-i', fullOriginalVideoPath, // 輸入2：原始視頻（音軌來源）
       '-map', '0:v',              // 映射輸入0的視頻流
       '-map', '1:a',              // 映射輸入1的音頻流
       '-c:v', 'copy',             // 🔥 關鍵：視頻流不重編碼（極快）
