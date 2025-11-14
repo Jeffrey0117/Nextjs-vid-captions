@@ -110,8 +110,25 @@ export function usePreviewRecorder() {
       // 計算超采样尺寸
       const ssConfig = renderConfig.supersampling;
       const ssMultiplier = ssConfig.mode === '4x' ? 4 : ssConfig.mode === '2x' ? 2 : 1;
-      const targetWidth = videoElement.videoWidth;
-      const targetHeight = videoElement.videoHeight;
+
+      // 获取源视频分辨率
+      const sourceWidth = videoElement.videoWidth;
+      const sourceHeight = videoElement.videoHeight;
+
+      // 强制输出到更高分辨率（提升画质）
+      // 如果源视频小于1080p，upscale到1080p
+      let targetWidth = sourceWidth;
+      let targetHeight = sourceHeight;
+
+      const MIN_HEIGHT = 1080; // 最小输出高度
+      if (sourceHeight < MIN_HEIGHT) {
+        const scale = MIN_HEIGHT / sourceHeight;
+        targetWidth = Math.round(sourceWidth * scale);
+        targetHeight = MIN_HEIGHT;
+        console.log(`📈 视频分辨率提升: ${sourceWidth}x${sourceHeight} → ${targetWidth}x${targetHeight} (${scale.toFixed(2)}x)`);
+      } else {
+        console.log(`✅ 源视频分辨率: ${sourceWidth}x${sourceHeight} (已达标)`);
+      }
 
       console.log(`🎨 超采样配置: ${ssConfig.mode} (${ssMultiplier}x), 仅字幕: ${ssConfig.subtitlesOnly}, 算法: ${ssConfig.downscaleAlgorithm}`);
 
