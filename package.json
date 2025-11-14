@@ -17,6 +17,7 @@
     "deepl-node": "^1.20.0",
     "framer-motion": "^12.23.24",
     "lucide-react": "^0.548.0",
+    "mp4-muxer": "^5.2.2",
     "next": "15.4.6",
     "puppeteer": "^24.27.0",
     "react": "19.1.0",

@@ -11,11 +11,11 @@ import SubtitlePlayhead from '../components/SubtitlePlayhead';
 import TimelineAdjustDialog from '../components/TimelineAdjustDialog';
 import { parseSrt } from '@/lib/parseSrt';
 import { useToast } from '../hooks/useToast';
-import { usePreviewRecorder } from '../hooks/usePreviewRecorder';
+import { useSmartRecorder } from '../hooks/useSmartRecorder';
 
 export default function EditorProPage() {
   const toast = useToast();
-  const { recordPreview, cancelRecording, isRecording, progress: recordProgress, status: recordStatus } = usePreviewRecorder();
+  const { record, cancel, isRecording, progress: recordProgress, status: recordStatus, recordingMethod, isWebCodecsSupported } = useSmartRecorder();
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -821,7 +821,7 @@ export default function EditorProPage() {
         videoPath = uploadData.filePath;
       }
 
-      await recordPreview(
+      await record(
         videoRef.current,
         previewContainerRef.current,
         actualSegments,
@@ -830,7 +830,7 @@ export default function EditorProPage() {
         videoPath,
         {
           fps: 30,
-          qualityLevel: 'high', // 启用高画质模式（2x超采样 + 优化编码）
+          qualityLevel: 'high', // 启用高画质模式（2x超采样 + 优化编码 + WebCodecs GPU加速）
           onProgress: (progress) => {
             console.log(`錄製進度: ${(progress * 100).toFixed(1)}%`);
           },
@@ -1482,7 +1482,7 @@ export default function EditorProPage() {
 
         {/* 錄製預覽按鈕 */}
         <button
-          onClick={isRecording ? cancelRecording : handleRecordPreview}
+          onClick={isRecording ? cancel : handleRecordPreview}
           disabled={(!videoFile && !videoUrl) || (tracks.length > 0 && tracks[0]?.segments.length === 0) || isExporting}
           className={`flex items-center gap-1 px-2 py-1 ${isRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} rounded transition text-xs disabled:opacity-50 disabled:cursor-not-allowed`}
           title="直接錄製預覽畫面，保證100%一致"
