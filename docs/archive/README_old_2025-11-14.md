@@ -16,25 +16,25 @@
 ### 性能優化歷程（按時間順序）
 
 #### 階段1：規劃與方案評估
-**01. [RECORDING_PERFORMANCE_PLAN.md](01-RECORDING_PERFORMANCE_PLAN.md)**
+**01. [RECORDING_PERFORMANCE_OPTIMIZATION.md](planning/RECORDING_PERFORMANCE_OPTIMIZATION.md)**
 - 6個性能優化方案對比評估
 - WebCodecs、批次處理、ffmpeg.wasm、WebGL等
 - 為什麼選擇 WebCodecs + 批次處理
 
 #### 階段2：批次流式處理（v2.0）
-**02. [BATCH_STREAMING_IMPLEMENTATION.md](02-BATCH_STREAMING_IMPLEMENTATION.md)**
+**02. [IMPLEMENTATION_SUMMARY_BATCH_STREAMING.md](planning/IMPLEMENTATION_SUMMARY_BATCH_STREAMING.md)**
 - 批次傳輸架構設計
 - 內存優化：900MB → 15MB（-98%）
 - API設計：batch/finalize/cleanup
 
 #### 階段3：WebCodecs GPU加速（v3.0）
-**03. [WEBCODECS_IMPLEMENTATION.md](03-WEBCODECS_IMPLEMENTATION.md)**
+**03. [WEBCODECS_IMPLEMENTATION_SUMMARY.md](WEBCODECS_IMPLEMENTATION_SUMMARY.md)**
 - WebCodecs GPU硬件加速實現
 - 速度提升：400-500%（4-5倍）
 - 技術挑戰與解決方案
 
 #### 階段4：完整優化總結
-**04. [RECORDING_OPTIMIZATION_SUMMARY.md](04-RECORDING_OPTIMIZATION_SUMMARY.md)**
+**04. [RECORDING_OPTIMIZATION_FINAL.md](RECORDING_OPTIMIZATION_FINAL.md)**
 - v1.0-v3.0 所有階段總結
 - 性能指標對比表
 - 最終錄製流程架構
@@ -43,21 +43,40 @@
 
 ### 畫質優化
 
-#### 規劃與實施
-**05. [VIDEO_QUALITY_PLAN.md](05-VIDEO_QUALITY_PLAN.md)**
+#### 規劃階段
+**05. [VIDEO_QUALITY_OPTIMIZATION.md](planning/VIDEO_QUALITY_OPTIMIZATION.md)**
 - Canvas渲染質量配置
 - FFmpeg參數優化規劃
 - 色彩管理與性能平衡
 
-**06. [SUPERSAMPLING_IMPLEMENTATION.md](06-SUPERSAMPLING_IMPLEMENTATION.md)**
-- SSAA（超採樣抗鋸齒）原理與實施
-- 2x/4x超採樣詳細配置
-- 性能影響分析與質量對比
+**06. [SUPERSAMPLING_IMPLEMENTATION.md](planning/SUPERSAMPLING_IMPLEMENTATION.md)**
+- SSAA（超採樣抗鋸齒）原理
+- 2x/4x超採樣實施細節
+- 性能影響分析
 
-**07. [QUALITY_REFERENCE.md](07-QUALITY_REFERENCE.md)**
+#### 實施階段
+**07. [VIDEO_QUALITY_OPTIMIZATION_SUMMARY.md](planning/VIDEO_QUALITY_OPTIMIZATION_SUMMARY.md)**
+- 質量配置系統實施
+- Canvas渲染優化
+- FFmpeg參數調優
+
+**08. [FFMPEG_QUALITY_OPTIMIZATION.md](FFMPEG_QUALITY_OPTIMIZATION.md)**
+- x264高級參數詳解
+- CRF/preset/tune配置
+- GOP結構優化
+
+---
+
+### 快速參考
+
+**09. [QUALITY_QUICK_REFERENCE.md](QUALITY_QUICK_REFERENCE.md)**
 - 4級質量預設（fast/balanced/high/ultra）
-- FFmpeg x264參數詳解
-- 快速配置參考手冊
+- 超採樣配置速查
+- 推薦配置一覽表
+
+**10. [SUPERSAMPLING_QUICK_START.md](SUPERSAMPLING_QUICK_START.md)**
+- 5分鐘快速配置超採樣
+- 使用示例與常見問題
 
 ---
 
@@ -77,13 +96,13 @@
 
 ### 路線3：調整畫質參數
 ```
-07 快速參考 → 06 超採樣配置
+09 快速參考 → 10 超採樣快速上手
 ```
 了解：如何快速調整quality level
 
 ### 路線4：深入技術細節
 ```
-05 畫質規劃 → 06 超採樣原理 → 07 FFmpeg深度優化
+05 畫質規劃 → 06 超採樣原理 → 08 FFmpeg深度優化
 ```
 了解：底層技術實現原理
 
@@ -186,6 +205,6 @@
 
 **最後更新**: 2025-11-14
 **版本**: v3.0 WebCodecs GPU加速版
-**總文檔數**: 7個核心文檔
+**總文檔數**: 10個核心文檔
 
 🎉 這是瀏覽器端字幕錄製的性能巔峰！

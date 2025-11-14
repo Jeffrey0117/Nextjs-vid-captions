@@ -20,9 +20,9 @@
 - ✅ 技術：WebCodecs GPU硬件加速
 
 **快速閱讀**：
-- [WebCodecs實施總結](docs/WEBCODECS_IMPLEMENTATION_SUMMARY.md) - 最新優化成果
-- [完整優化報告](docs/RECORDING_OPTIMIZATION_FINAL.md) - 所有階段總結
-- [質量快速參考](docs/QUALITY_QUICK_REFERENCE.md) - 參數配置
+- [WebCodecs實施](docs/03-WEBCODECS_IMPLEMENTATION.md) - 最新優化成果
+- [錄製優化總結](docs/04-RECORDING_OPTIMIZATION_SUMMARY.md) - 所有階段總結
+- [質量參數參考](docs/07-QUALITY_REFERENCE.md) - 參數配置
 
 ---
 
