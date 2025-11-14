@@ -180,15 +180,14 @@ export function useWebCodecsRecorder() {
   const initializeMuxer = useCallback((
     width: number,
     height: number,
-    fps: number,
-    codec: string
+    fps: number
   ): Muxer<ArrayBufferTarget> => {
     const target = new ArrayBufferTarget();
 
     const muxer = new Muxer({
       target,
       video: {
-        codec,
+        codec: 'avc', // H.264 (mp4-muxer只接受'avc'不是'avc1.42E01E')
         width,
         height,
         frameRate: fps,
@@ -197,7 +196,7 @@ export function useWebCodecsRecorder() {
       firstTimestampBehavior: 'offset', // 從0開始
     });
 
-    console.log('✅ Muxer初始化完成（無音軌）');
+    console.log('✅ Muxer初始化完成（H.264無音軌）');
 
     return muxer;
   }, []);
@@ -448,8 +447,7 @@ export function useWebCodecsRecorder() {
       const muxer = initializeMuxer(
         targetWidth,
         targetHeight,
-        fps,
-        'avc1.42E01E' // H.264 Baseline
+        fps
       );
       muxerRef.current = muxer;
 
