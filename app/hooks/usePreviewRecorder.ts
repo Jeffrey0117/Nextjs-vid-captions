@@ -304,7 +304,7 @@ export function usePreviewRecorder() {
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
 
-          // 在超采样分辨率下绘制字幕
+          // 在超采样分辨率下绘制字幕（使用Canvas实际尺寸，确保字幕最大化）
           await drawSubtitles(
             ctx,
             currentTime,
@@ -312,7 +312,7 @@ export function usePreviewRecorder() {
             pinnedSubtitles,
             canvas.width,
             canvas.height,
-            { width: videoDisplaySize.width * ssMultiplier, height: videoDisplaySize.height * ssMultiplier }
+            { width: canvas.width, height: canvas.height }  // 使用Canvas实际尺寸
           );
 
           // 创建临时的downscale canvas
@@ -343,7 +343,7 @@ export function usePreviewRecorder() {
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
 
-          // 2. 在超采样canvas上绘制字幕
+          // 2. 在超采样canvas上绘制字幕（使用Canvas实际尺寸，确保字幕最大化）
           subtitleCtx.clearRect(0, 0, subtitleCanvas.width, subtitleCanvas.height);
           await drawSubtitles(
             subtitleCtx,
@@ -352,7 +352,7 @@ export function usePreviewRecorder() {
             pinnedSubtitles,
             subtitleCanvas.width,
             subtitleCanvas.height,
-            { width: videoDisplaySize.width * ssMultiplier, height: videoDisplaySize.height * ssMultiplier }
+            { width: subtitleCanvas.width, height: subtitleCanvas.height }  // 使用Canvas实际尺寸
           );
 
           // 3. Downscale字幕层
@@ -378,6 +378,7 @@ export function usePreviewRecorder() {
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
 
+          // 绘制字幕（使用Canvas实际尺寸，确保字幕最大化）
           await drawSubtitles(
             ctx,
             currentTime,
@@ -385,7 +386,7 @@ export function usePreviewRecorder() {
             pinnedSubtitles,
             canvas.width,
             canvas.height,
-            videoDisplaySize
+            { width: canvas.width, height: canvas.height }  // 使用Canvas实际尺寸
           );
 
           const frameBlob = await new Promise<Blob>((resolve) => {
