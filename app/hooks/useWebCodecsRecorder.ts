@@ -242,7 +242,147 @@ export function useWebCodecsRecorder() {
   }, []);
 
   /**
-   * 繪製字幕到Canvas（保留原有邏輯）
+   * 在Canvas上繪製文字（完全匹配CSS效果）
+   */
+  const drawText = useCallback((ctx: CanvasRenderingContext2D, options: {
+    text: string;
+    x: number;
+    y: number;
+    fontSize: number;
+    fontFamily: string;
+    fontWeight: string;
+    fontStyle: string;
+    color: string;
+    opacity: number;
+    backgroundColor: string;
+    enableShadow: boolean;
+    shadowColor: string;
+    shadowOffsetX: number;
+    shadowOffsetY: number;
+    shadowBlur: number;
+    enableStroke: boolean;
+    strokeColor: string;
+    strokeWidth: number;
+    maxWidth: number;
+    textAlign: 'left' | 'center' | 'right';
+    textDecoration?: string;
+  }) => {
+    const {
+      text,
+      x,
+      y,
+      fontSize,
+      fontFamily,
+      fontWeight,
+      fontStyle,
+      color,
+      opacity,
+      backgroundColor,
+      enableShadow,
+      shadowColor,
+      shadowOffsetX,
+      shadowOffsetY,
+      shadowBlur,
+      enableStroke,
+      strokeColor,
+      strokeWidth,
+      maxWidth,
+      textAlign,
+      textDecoration,
+    } = options;
+
+    ctx.save();
+
+    // 設置字體
+    ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px "${fontFamily}"`;
+    ctx.textAlign = textAlign;
+    ctx.textBaseline = 'middle';
+
+    // 處理多行文字
+    const lines = text.split('\n');
+    const lineHeight = fontSize * 1.2;
+    const totalHeight = lines.length * lineHeight;
+    const startY = y - totalHeight / 2 + lineHeight / 2;
+
+    // 繪製背景（如果有）
+    if (backgroundColor !== 'transparent') {
+      const padding = fontSize * 0.5;
+      const maxLineWidth = Math.max(...lines.map(line => ctx.measureText(line).width));
+      const bgWidth = maxLineWidth + padding * 2;
+      const bgHeight = totalHeight + padding;
+      const bgX = x - bgWidth / 2;
+      const bgY = y - totalHeight / 2 - padding / 2;
+
+      ctx.fillStyle = backgroundColor;
+      ctx.globalAlpha = 1;
+      ctx.fillRect(bgX, bgY, bgWidth, bgHeight);
+    }
+
+    ctx.globalAlpha = opacity;
+
+    // 繪製每一行
+    lines.forEach((line, index) => {
+      const lineY = startY + index * lineHeight;
+
+      // 描邊效果（使用16個方向模擬CSS text-shadow）
+      if (enableStroke && strokeWidth > 0) {
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = strokeWidth * 2;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+
+        const steps = 16;
+        for (let i = 0; i < steps; i++) {
+          const angle = (i * 2 * Math.PI) / steps;
+          const offsetX = Math.cos(angle) * strokeWidth;
+          const offsetY = Math.sin(angle) * strokeWidth;
+          ctx.strokeText(line, x + offsetX, lineY + offsetY, maxWidth);
+        }
+      }
+
+      // 陰影效果
+      if (enableShadow) {
+        ctx.shadowColor = shadowColor;
+        ctx.shadowOffsetX = shadowOffsetX;
+        ctx.shadowOffsetY = shadowOffsetY;
+        ctx.shadowBlur = shadowBlur;
+      }
+
+      // 填充文字
+      ctx.fillStyle = color;
+      ctx.fillText(line, x, lineY, maxWidth);
+
+      // 重置陰影
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+
+      // 文字裝飾（下劃線、刪除線）
+      if (textDecoration && textDecoration !== 'none') {
+        const metrics = ctx.measureText(line);
+        const lineWidth = metrics.width;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = Math.max(1, fontSize / 20);
+
+        if (textDecoration === 'underline') {
+          const underlineY = lineY + fontSize * 0.15;
+          ctx.beginPath();
+          ctx.moveTo(x - lineWidth / 2, underlineY);
+          ctx.lineTo(x + lineWidth / 2, underlineY);
+          ctx.stroke();
+        } else if (textDecoration === 'line-through') {
+          ctx.beginPath();
+          ctx.moveTo(x - lineWidth / 2, lineY);
+          ctx.lineTo(x + lineWidth / 2, lineY);
+          ctx.stroke();
+        }
+      }
+    });
+
+    ctx.restore();
+  }, []);
+
+  /**
+   * 繪製字幕到Canvas（完整邏輯，從usePreviewRecorder.ts複製）
    */
   const drawSubtitles = useCallback((
     ctx: CanvasRenderingContext2D,
@@ -250,69 +390,81 @@ export function useWebCodecsRecorder() {
     subtitles: SubtitleSegment[],
     pinnedSubtitles: PinnedSubtitle[],
     canvasWidth: number,
-    canvasHeight: number
+    canvasHeight: number,
+    videoDisplaySize: { width: number; height: number }
   ) => {
-    // 從原始usePreviewRecorder.ts複製字幕渲染邏輯
-    // 注意：使用Canvas實際尺寸，不是顯示尺寸
+    // 計算縮放係數（Canvas尺寸 vs 顯示尺寸）
+    const scaleX = canvasWidth / videoDisplaySize.width;
+    const scaleY = canvasHeight / videoDisplaySize.height;
 
-    const activeSubtitles = subtitles.filter(
-      (seg: any) => seg.currentTime ? currentTime >= seg.startTime && currentTime < seg.endTime : true
+    // === 1. 繪製固定字幕 ===
+    for (const pinned of pinnedSubtitles) {
+      if (!pinned.enabled) continue;
+
+      const x = canvasWidth / 2;
+      const y = (pinned.style.positionY / 100) * canvasHeight;
+      const fontSize = (pinned.style.fontSize / 1080) * videoDisplaySize.height * scaleY;
+
+      drawText(ctx, {
+        text: pinned.text,
+        x,
+        y,
+        fontSize,
+        fontFamily: pinned.style.fontFamily,
+        fontWeight: pinned.style.fontWeight,
+        fontStyle: pinned.style.fontStyle,
+        color: pinned.style.color,
+        opacity: pinned.style.opacity,
+        backgroundColor: pinned.style.backgroundColor,
+        enableShadow: pinned.style.enableShadow,
+        shadowColor: pinned.style.shadowColor,
+        shadowOffsetX: (pinned.style.shadowOffsetX / 1080) * videoDisplaySize.height * scaleY,
+        shadowOffsetY: (pinned.style.shadowOffsetY / 1080) * videoDisplaySize.height * scaleY,
+        shadowBlur: (pinned.style.shadowBlur / 1080) * videoDisplaySize.height * scaleY,
+        enableStroke: pinned.style.enableStroke,
+        strokeColor: pinned.style.strokeColor,
+        strokeWidth: (pinned.style.strokeWidth / 1080) * videoDisplaySize.height * scaleY,
+        maxWidth: canvasWidth * 0.9,
+        textAlign: 'center',
+      });
+    }
+
+    // === 2. 繪製當前字幕 ===
+    const currentSubtitle = subtitles.find(
+      seg => currentTime >= seg.startTime && currentTime <= seg.endTime
     );
 
-    // 繪製固定字幕
-    pinnedSubtitles.forEach((pinned: any) => {
-      if (!pinned.enabled || !pinned.text.trim()) return;
+    if (currentSubtitle) {
+      const x = (currentSubtitle.style.positionX / 100) * canvasWidth;
+      const y = (currentSubtitle.style.positionY / 100) * canvasHeight;
+      const fontSize = (currentSubtitle.style.fontSize * currentSubtitle.style.scale / 1080) * videoDisplaySize.height * scaleY;
+      const displayText = currentSubtitle.translatedText || currentSubtitle.text;
 
-      ctx.save();
-
-      // 使用Canvas實際尺寸計算字體大小（關鍵優化！）
-      const fontSize = ((pinned.fontSize || 5) / 100) * canvasHeight;
-
-      ctx.font = `${pinned.fontWeight || '700'} ${fontSize}px "${pinned.fontFamily || 'Arial'}"`;
-      ctx.fillStyle = pinned.color || '#FFFFFF';
-      ctx.strokeStyle = pinned.strokeColor || '#000000';
-      ctx.lineWidth = ((pinned.strokeWidth || 3) / 100) * canvasHeight;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-
-      const x = canvasWidth / 2;
-      const y = ((pinned.y || 5) / 100) * canvasHeight;
-
-      if ((pinned.strokeWidth || 0) > 0) {
-        ctx.strokeText(pinned.text, x, y);
-      }
-      ctx.fillText(pinned.text, x, y);
-
-      ctx.restore();
-    });
-
-    // 繪製當前字幕
-    activeSubtitles.forEach((segment: any) => {
-      if (!segment.text?.trim()) return;
-
-      ctx.save();
-
-      // 使用Canvas實際尺寸計算字體大小
-      const fontSize = ((segment.fontSize || 5) / 100) * canvasHeight;
-
-      ctx.font = `${segment.fontWeight || '700'} ${fontSize}px "${segment.fontFamily || 'Arial'}"`;
-      ctx.fillStyle = segment.color || '#FFFFFF';
-      ctx.strokeStyle = segment.strokeColor || '#000000';
-      ctx.lineWidth = ((segment.strokeWidth || 3) / 100) * canvasHeight;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-
-      const x = canvasWidth / 2;
-      const y = ((segment.y || 90) / 100) * canvasHeight;
-
-      if ((segment.strokeWidth || 0) > 0) {
-        ctx.strokeText(segment.text, x, y);
-      }
-      ctx.fillText(segment.text, x, y);
-
-      ctx.restore();
-    });
-  }, []);
+      drawText(ctx, {
+        text: displayText,
+        x,
+        y,
+        fontSize,
+        fontFamily: currentSubtitle.style.fontFamily,
+        fontWeight: currentSubtitle.style.fontWeight,
+        fontStyle: currentSubtitle.style.fontStyle,
+        color: currentSubtitle.style.color,
+        opacity: currentSubtitle.style.opacity,
+        backgroundColor: currentSubtitle.style.backgroundColor,
+        enableShadow: currentSubtitle.style.enableShadow,
+        shadowColor: currentSubtitle.style.shadowColor,
+        shadowOffsetX: (currentSubtitle.style.shadowOffsetX / 1080) * videoDisplaySize.height * scaleY,
+        shadowOffsetY: (currentSubtitle.style.shadowOffsetY / 1080) * videoDisplaySize.height * scaleY,
+        shadowBlur: (currentSubtitle.style.shadowBlur / 1080) * videoDisplaySize.height * scaleY,
+        enableStroke: currentSubtitle.style.enableStroke,
+        strokeColor: currentSubtitle.style.strokeColor,
+        strokeWidth: (currentSubtitle.style.strokeWidth / 1080) * videoDisplaySize.height * scaleY,
+        maxWidth: (currentSubtitle.style.maxWidth / 100) * canvasWidth,
+        textAlign: 'center',
+        textDecoration: currentSubtitle.style.textDecoration,
+      });
+    }
+  }, [drawText]);
 
   /**
    * WebCodecs錄製主函數（保留超採樣邏輯）
@@ -478,7 +630,16 @@ export function useWebCodecsRecorder() {
         ctx.drawImage(videoElement, 0, 0, canvasWidth, canvasHeight);
 
         // 3. 繪製字幕（使用Canvas實際尺寸）
-        drawSubtitles(ctx, currentTime, subtitles, pinnedSubtitles, canvasWidth, canvasHeight);
+        // videoDisplaySize 應該是目標分辨率（1080p），用於字體大小計算
+        drawSubtitles(
+          ctx,
+          currentTime,
+          subtitles,
+          pinnedSubtitles,
+          canvasWidth,
+          canvasHeight,
+          { width: targetWidth, height: targetHeight } // 基準尺寸（通常是1080p）
+        );
 
         // 4. Downscale（如果需要）
         let finalCanvas = canvas;
