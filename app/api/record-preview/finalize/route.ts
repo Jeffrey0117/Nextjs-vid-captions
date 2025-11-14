@@ -123,14 +123,7 @@ export async function POST(request: Request) {
           extraArgs: [
             '-tune', 'film',
             '-profile:v', 'high444',
-            '-g', '10',
-            '-bf', '8',
-            '-refs', '6',
-            '-me_method', 'umh',
-            '-subme', '10',
-            '-trellis', '2',
-            '-aq-mode', '3',
-            '-psy-rd', '1.0:0.15'
+            '-x264-params', 'ref=6:me=umh:subme=10:trellis=2:aq-mode=3:psy-rd=1.0,0.15:bframes=8:keyint=10'
           ]
         };
       } else if (filterConfig.sharpen?.enabled) {
@@ -141,11 +134,7 @@ export async function POST(request: Request) {
           pixFmt: 'yuv420p',
           extraArgs: [
             '-tune', 'film',
-            '-g', '15',
-            '-bf', '5',
-            '-refs', '4',
-            '-me_method', 'umh',
-            '-subme', '8'
+            '-x264-params', 'ref=4:me=umh:subme=8:bframes=5:keyint=15'
           ]
         };
       }
