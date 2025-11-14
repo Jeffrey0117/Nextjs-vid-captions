@@ -365,7 +365,7 @@ export const QUALITY_PRESETS: Record<Exclude<QualityLevel, 'custom'>, VideoQuali
       exportFormat: 'image/png',
       supersampling: {
         mode: '2x',               // 启用2x超采样
-        subtitlesOnly: true,      // 仅对字幕层超采样（性能优化）
+        subtitlesOnly: false,     // 全画面超采样（画质最佳）
         downscaleAlgorithm: 'lanczos',
         useSeperateCanvas: true,  // 使用独立canvas
       },

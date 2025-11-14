@@ -830,6 +830,7 @@ export default function EditorProPage() {
         videoPath,
         {
           fps: 30,
+          qualityLevel: 'high', // 启用高画质模式（2x超采样 + 优化编码）
           onProgress: (progress) => {
             console.log(`錄製進度: ${(progress * 100).toFixed(1)}%`);
           },
