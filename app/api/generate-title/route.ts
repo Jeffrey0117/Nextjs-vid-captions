@@ -22,38 +22,46 @@ export async function POST(request: Request) {
 
     console.log('📝 字幕內容摘要:', subtitleTexts.substring(0, 200) + '...');
 
-    // 使用本地 Ollama API（完全免費，無限使用！）
-    console.log('🦙 使用本地 Ollama API (qwen2.5:3b)');
+    // 根據環境變數選擇 AI Provider
+    const provider = process.env.AI_PROVIDER || 'ollama';
+    const groqApiKey = process.env.GROQ_API_KEY;
 
-    // 建構標題生成提示
-    const systemPrompt = `你是專業的影片標題生成專家。
+    console.log(`🤖 使用 AI Provider: ${provider}`);
 
-請根據提供的字幕內容，生成3種風格的影片標題：
+    // 建構標題生成提示（防暴雷策略：用情緒和共鳴代替具體內容）
+    const systemPrompt = `你是短影片標題專家。
 
-1. 吸睛標題 (catchy)
-   - 目標：最大化點擊率
-   - 長度：15-25字
-   - 技巧：使用數字、疑問句、情緒詞、emoji
-   - 例如：「🔥 3分鐘學會！新手都能懂的XX技巧」
+核心鐵律：絕對不要透露視頻具體內容和情節！
 
-2. 資訊標題 (informative)
-   - 目標：清晰傳達內容主題
-   - 長度：10-20字
-   - 技巧：包含核心關鍵字、客觀描述
-   - 例如：「Python基礎：變數與資料型態教學」
+策略：從字幕提取「情境主題」而非「具體事件」
+- 如果是工作相關 → 「打工人日常」「上班be like」
+- 如果是生活瑣事 → 「生活就是這樣」「真實得我」
+- 如果有驚訝反應 → 「沒想到會這樣」「這反應絕了」
+- 如果有情緒波動 → 「太真實了」「誰懂啊」
 
-3. 專業標題 (professional)
-   - 目標：展現專業性與權威性
-   - 長度：12-30字
-   - 技巧：使用專業術語、正式語氣
-   - 例如：「機器學習模型優化技術深度解析」
+禁止做法：
+❌ 不要說發生什麼事（如：忘了星期四、猜中數字、倒水反應）
+❌ 不要描述具體行為（如：讀心術、猜對、倒水上去）
+❌ 不要用疑問句引導內容（如：為什麼能猜對、怎麼會這樣）
 
-輸出格式（純JSON，不要markdown代碼塊）：
-{
-  "catchy": "吸睛標題內容",
-  "informative": "資訊標題內容",
-  "professional": "專業標題內容"
-}`;
+正確範例：
+字幕："猜數字...去你的"
+viral: "朋友之間就是這樣😂"
+funny: "這互動太真實了"
+mystery: "友情日常be like"
+
+字幕："倒水石頭...再試"
+viral: "好奇心害死貓系列🤯"
+funny: "實驗精神滿分"
+mystery: "生活小發現"
+
+字幕："沒想到今天星期四...工作"
+viral: "打工人真實日常😱"
+funny: "上班久了都這樣"
+mystery: "工作be like"
+
+輸出純JSON：
+{"viral":"...","funny":"...","mystery":"..."}`;
 
     const userPrompt = `請根據以下字幕內容生成3種風格的影片標題：
 
@@ -62,8 +70,37 @@ ${subtitleTexts}
 
 請直接輸出JSON格式，不要加任何其他文字或markdown標記。`;
 
+    // 根據 provider 設定 API endpoint 和 model
+    let apiUrl: string;
+    let apiHeaders: Record<string, string>;
+    let modelName: string;
+    let timeout: number;
+
+    if (provider === 'groq') {
+      if (!groqApiKey) {
+        throw new Error('GROQ_API_KEY 未設定');
+      }
+      apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
+      apiHeaders = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${groqApiKey}`,
+      };
+      modelName = 'llama-3.3-70b-versatile';  // 最強且適合中文
+      timeout = 60000;  // 雲端API 60秒
+      console.log('☁️ 使用 Groq API (llama-3.3-70b-versatile)');
+    } else {
+      // Ollama 本地
+      apiUrl = 'http://localhost:11434/v1/chat/completions';
+      apiHeaders = {
+        'Content-Type': 'application/json',
+      };
+      modelName = 'qwen2.5:3b';
+      timeout = 30000;
+      console.log('🦙 使用本地 Ollama API (qwen2.5:3b)');
+    }
+
     const requestBody = {
-      model: "qwen2.5:3b",
+      model: modelName,
       messages: [
         {
           role: "system",
@@ -74,34 +111,36 @@ ${subtitleTexts}
           content: userPrompt
         }
       ],
-      temperature: 0.7,
+      temperature: 0.8,
       stream: false,
     };
 
-    console.log('🚀 發送到本地 Ollama API...');
+    console.log('🚀 發送 API 請求...');
 
-    const response = await fetch('http://localhost:11434/v1/chat/completions', {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    const response = await fetch(apiUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: apiHeaders,
       body: JSON.stringify(requestBody),
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
 
-    console.log('📥 Ollama API 回應狀態:', response.status);
+    console.log('📥 API 回應狀態:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ Ollama API 錯誤回應:', errorText);
-      throw new Error(`Ollama API 請求失敗: ${response.status} - ${errorText}`);
+      console.error('❌ API 錯誤回應:', errorText);
+      throw new Error(`AI API 請求失敗: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
-    console.log('✅ Ollama API 原始結果:', data);
+    console.log('✅ API 原始結果:', data);
 
     const generatedContent = data.choices?.[0]?.message?.content;
     if (!generatedContent) {
-      throw new Error('Ollama API 返回無效數據');
+      throw new Error('AI API 返回無效數據');
     }
 
     console.log('📄 生成的內容:', generatedContent);
@@ -123,7 +162,7 @@ ${subtitleTexts}
     }
 
     // 驗證返回格式
-    if (!titles.catchy || !titles.informative || !titles.professional) {
+    if (!titles.viral || !titles.funny || !titles.mystery) {
       console.error('❌ 缺少必要的標題類型:', titles);
       throw new Error('AI 返回的標題不完整');
     }
@@ -133,18 +172,23 @@ ${subtitleTexts}
     return NextResponse.json({
       success: true,
       titles: {
-        catchy: titles.catchy,
-        informative: titles.informative,
-        professional: titles.professional,
+        viral: titles.viral,
+        funny: titles.funny,
+        mystery: titles.mystery,
       }
     });
 
   } catch (error) {
     console.error("❌ AI 標題生成錯誤:", error);
+    console.error("錯誤堆棧:", (error as Error).stack);
+
+    // 返回更詳細的錯誤信息
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
       {
         success: false,
-        error: "標題生成失敗: " + (error as Error).message
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? (error as Error).stack : undefined
       },
       { status: 500 }
     );

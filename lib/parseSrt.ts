@@ -1,6 +1,12 @@
 import { Subtitle } from "./types";
 
 export function parseSrt(srtText: string): Subtitle[] {
+  // 安全檢查
+  if (!srtText) {
+    console.error('❌ parseSrt: srtText is undefined or empty');
+    return [];
+  }
+
   console.log(
     "🔍 Original SRT text (first 500 chars):",
     srtText.substring(0, 500)

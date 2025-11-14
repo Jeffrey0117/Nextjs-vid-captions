@@ -75,9 +75,9 @@ function PinnedSubtitleEditor({
 }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedTitles, setGeneratedTitles] = useState<{
-    catchy: string;
-    informative: string;
-    professional: string;
+    viral: string;
+    funny: string;
+    mystery: string;
   } | null>(null);
   const [showTitleDropdown, setShowTitleDropdown] = useState(false);
 
@@ -105,11 +105,40 @@ function PinnedSubtitleEditor({
       });
 
       console.log('📥 收到 API 回應，狀態:', response.status);
-      const data = await response.json();
+
+      // 先讀取 response 為文本（只能讀一次）
+      const responseText = await response.text();
+
+      // 檢查 HTTP 狀態
+      if (!response.ok) {
+        let errorMessage = `API 請求失敗 (${response.status})`;
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          errorMessage = responseText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+
+      // 解析成功響應
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('❌ JSON 解析失敗:', parseError);
+        console.error('響應內容:', responseText ? responseText.substring(0, 200) : '(empty)');
+        throw new Error('API 返回格式錯誤');
+      }
+
       console.log('📄 API 回應資料:', data);
 
       if (!data.success) {
-        throw new Error(data.error || 'AI 生成失敗');
+        const errorMsg = data.error || 'AI 生成失敗';
+        if (data.details) {
+          console.error('詳細錯誤:', data.details);
+        }
+        throw new Error(errorMsg);
       }
 
       setGeneratedTitles(data.titles);
@@ -124,10 +153,12 @@ function PinnedSubtitleEditor({
     }
   };
 
-  const handleApplyTitle = (titleType: 'catchy' | 'informative' | 'professional') => {
+  const handleApplyTitle = (e: React.MouseEvent, titleType: 'viral' | 'funny' | 'mystery') => {
+    e.preventDefault();
+    e.stopPropagation();
     if (generatedTitles) {
       onUpdate(pinned.id, { text: generatedTitles[titleType] });
-      setShowTitleDropdown(false);
+      // 不關閉 dropdown，讓用戶可以繼續選擇其他標題
       toast.success('標題已套用！');
     }
   };
@@ -212,31 +243,31 @@ function PinnedSubtitleEditor({
                   </button>
                 </div>
 
-                {/* 吸睛標題 */}
+                {/* 病毒式傳播標題 */}
                 <button
-                  onClick={() => handleApplyTitle('catchy')}
-                  className="w-full text-left p-2 bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 hover:border-orange-500 transition-all group"
+                  onClick={(e) => handleApplyTitle(e, 'viral')}
+                  className="w-full text-left p-2 bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 hover:border-pink-500 transition-all group"
                 >
-                  <div className="text-xs text-orange-400 mb-1">🔥 吸睛標題</div>
-                  <div className="text-sm text-gray-200 group-hover:text-white">{generatedTitles.catchy}</div>
+                  <div className="text-xs text-pink-400 mb-1">🚀 病毒式傳播</div>
+                  <div className="text-sm text-gray-200 group-hover:text-white">{generatedTitles.viral}</div>
                 </button>
 
-                {/* 資訊標題 */}
+                {/* 搞笑直球標題 */}
                 <button
-                  onClick={() => handleApplyTitle('informative')}
-                  className="w-full text-left p-2 bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 hover:border-blue-500 transition-all group"
+                  onClick={(e) => handleApplyTitle(e, 'funny')}
+                  className="w-full text-left p-2 bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 hover:border-yellow-500 transition-all group"
                 >
-                  <div className="text-xs text-blue-400 mb-1">📋 資訊標題</div>
-                  <div className="text-sm text-gray-200 group-hover:text-white">{generatedTitles.informative}</div>
+                  <div className="text-xs text-yellow-400 mb-1">😂 搞笑直球</div>
+                  <div className="text-sm text-gray-200 group-hover:text-white">{generatedTitles.funny}</div>
                 </button>
 
-                {/* 專業標題 */}
+                {/* 懸念式標題 */}
                 <button
-                  onClick={() => handleApplyTitle('professional')}
-                  className="w-full text-left p-2 bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 hover:border-green-500 transition-all group"
+                  onClick={(e) => handleApplyTitle(e, 'mystery')}
+                  className="w-full text-left p-2 bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 hover:border-purple-500 transition-all group"
                 >
-                  <div className="text-xs text-green-400 mb-1">🎓 專業標題</div>
-                  <div className="text-sm text-gray-200 group-hover:text-white">{generatedTitles.professional}</div>
+                  <div className="text-xs text-purple-400 mb-1">❓ 懸念式</div>
+                  <div className="text-sm text-gray-200 group-hover:text-white">{generatedTitles.mystery}</div>
                 </button>
               </div>
             )}

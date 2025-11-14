@@ -8,10 +8,12 @@ import {
   MoreHorizontal,
   Plus,
   Search,
+  Settings,
   Trash2,
   Upload,
   Video,
   X,
+  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -20,22 +22,31 @@ import { useSubtitleStore } from "../stores/subtitle-store";
 import BulkSubtitleEditor from "../components/BulkSubtitleEditor";
 import { parseSrt } from "@/lib/parseSrt";
 
+// Whisper 模型類型
+type WhisperModel = 'tiny' | 'base' | 'small' | 'medium';
+type WhisperLanguage = 'auto' | 'zh' | 'en' | 'ja' | 'ko' | 'fr' | 'de' | 'es';
+
 // 專案資料類型
 interface Project {
   id: string;
   name: string;
   createdAt: Date;
   thumbnail?: string | null;
-  
+
   // 影片相關
   videoFile?: File | null;
   videoUrl?: string | null;
-  
+  videoDuration?: number; // 影片時長（秒）
+
   // 狀態追蹤
   status: 'idle' | 'uploading' | 'transcribing' | 'translating' | 'ready' | 'error';
   progress: number; // 0-100
   errorMessage?: string;
-  
+
+  // Whisper 設定
+  whisperModel?: WhisperModel;
+  whisperLanguage?: WhisperLanguage;
+
   // 字幕資料
   segments?: Array<{
     id: string;
@@ -61,7 +72,15 @@ export default function ProjectsPage() {
   const [showBulkEditor, setShowBulkEditor] = useState(false);
   const [currentEditingProjectId, setCurrentEditingProjectId] = useState<string | null>(null);
   const [renderMethod, setRenderMethod] = useState<'ass'>('ass'); // 渲染方法選擇
-  
+
+  // Whisper 設定狀態
+  const [showWhisperSettings, setShowWhisperSettings] = useState(false);
+  const [selectedWhisperModel, setSelectedWhisperModel] = useState<WhisperModel>('base');
+  const [selectedWhisperLanguage, setSelectedWhisperLanguage] = useState<WhisperLanguage>('auto');
+  const [recommendedModel, setRecommendedModel] = useState<WhisperModel | null>(null);
+  const [estimatedTime, setEstimatedTime] = useState<string>('');
+  const [pendingVideoFile, setPendingVideoFile] = useState<File | null>(null); // 臨時保存檔案（不存入 localStorage）
+
   // Zustand store
   const { tracks, loadProjectSegments, clearAll } = useSubtitleStore();
   
@@ -96,6 +115,69 @@ export default function ProjectsPage() {
   // 更新專案狀態
   const updateProject = (projectId: string, updates: Partial<Project>) => {
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updates } : p));
+  };
+
+  // 智能推薦模型
+  const getRecommendedModel = (durationInSeconds: number): WhisperModel => {
+    if (durationInSeconds < 120) { // < 2分鐘
+      return 'tiny';
+    } else if (durationInSeconds < 600) { // 2-10分鐘
+      return 'base';
+    } else { // > 10分鐘
+      return 'base'; // 避免等待過久
+    }
+  };
+
+  // 計算預估處理時間
+  const calculateEstimatedTime = (durationInSeconds: number, model: WhisperModel): string => {
+    // 基準：base 模型處理速度約為影片時長的 40-60%
+    const baseProcessingRatio = 0.5; // base 模型處理時間 = 影片時長 × 0.5
+
+    let processingRatio = baseProcessingRatio;
+    switch (model) {
+      case 'tiny':
+        processingRatio = baseProcessingRatio / 5; // 5倍速
+        break;
+      case 'base':
+        processingRatio = baseProcessingRatio;
+        break;
+      case 'small':
+        processingRatio = baseProcessingRatio * 2;
+        break;
+      case 'medium':
+        processingRatio = baseProcessingRatio * 4;
+        break;
+    }
+
+    const estimatedSeconds = Math.ceil(durationInSeconds * processingRatio);
+
+    if (estimatedSeconds < 60) {
+      return `約 ${estimatedSeconds} 秒`;
+    } else {
+      const minutes = Math.ceil(estimatedSeconds / 60);
+      return `約 ${minutes} 分鐘`;
+    }
+  };
+
+  // 獲取影片時長
+  const getVideoDuration = (file: File): Promise<number> => {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.muted = true;
+
+      video.onloadedmetadata = () => {
+        URL.revokeObjectURL(video.src);
+        resolve(video.duration);
+      };
+
+      video.onerror = () => {
+        URL.revokeObjectURL(video.src);
+        resolve(300); // 預設 5 分鐘
+      };
+
+      video.src = URL.createObjectURL(file);
+    });
   };
 
   // 產生影片封面圖
@@ -153,31 +235,120 @@ export default function ProjectsPage() {
     setProjects([newProject, ...projects]);
   };
   
+  // 輪詢任務狀態
+  const pollTaskStatus = async (
+    taskId: string,
+    onProgress?: (progress: number) => void
+  ): Promise<any> => {
+    while (true) {
+      const statusRes = await fetch(`/api/transcribe/status?taskId=${taskId}`);
+      if (!statusRes.ok) {
+        throw new Error('無法獲取任務狀態');
+      }
+
+      const taskStatus = await statusRes.json();
+      console.log('📊 任務狀態:', taskStatus);
+
+      // 更新進度
+      if (taskStatus.progress !== undefined && onProgress) {
+        onProgress(taskStatus.progress / 100);
+      }
+
+      // 檢查任務狀態
+      if (taskStatus.status === 'completed') {
+        return taskStatus.result || taskStatus;
+      } else if (taskStatus.status === 'failed' || taskStatus.status === 'error') {
+        throw new Error(taskStatus.error || '字幕識別失敗');
+      }
+
+      // 等待 2 秒後再次查詢
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  };
+
   // 處理專案卡片點擊 → 觸發影片上傳
-  const handleProjectClick = (projectId: string) => {
+  const handleProjectClick = async (projectId: string) => {
     if (isSelectionMode) return;
     setCurrentEditingProjectId(projectId);
     videoInputRef.current?.click();
+  };
+
+  // 處理影片檔案選擇後，顯示 Whisper 設定對話框
+  const handleVideoSelected = async (file: File, projectId: string) => {
+    // 獲取影片時長
+    const duration = await getVideoDuration(file);
+
+    // 更新專案的影片時長（不保存 File 對象到 localStorage）
+    updateProject(projectId, {
+      videoDuration: duration
+    });
+
+    // 臨時保存檔案（File 對象不能序列化到 localStorage）
+    setPendingVideoFile(file);
+
+    // 推薦模型
+    const recommended = getRecommendedModel(duration);
+    setRecommendedModel(recommended);
+    setSelectedWhisperModel(recommended);
+
+    // 計算預估時間
+    const estimated = calculateEstimatedTime(duration, recommended);
+    setEstimatedTime(estimated);
+
+    // 顯示設定對話框
+    setShowWhisperSettings(true);
+  };
+
+  // 確認 Whisper 設定並開始處理
+  const confirmWhisperSettings = async (file: File, projectId: string) => {
+    // 儲存設定到專案
+    updateProject(projectId, {
+      whisperModel: selectedWhisperModel,
+      whisperLanguage: selectedWhisperLanguage,
+    });
+
+    // 關閉對話框
+    setShowWhisperSettings(false);
+    setPendingVideoFile(null); // 清除臨時檔案
+
+    // 開始上傳和處理
+    await processVideoWithSettings(file, projectId, selectedWhisperModel, selectedWhisperLanguage);
   };
   
   // 處理影片檔案上傳
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !currentEditingProjectId) return;
-    
+
     const projectId = currentEditingProjectId;
-    
+
     // 檢查檔案大小 (限制 100MB)
     const maxSize = 100 * 1024 * 1024; // 100MB
     if (file.size > maxSize) {
       alert(`影片檔案過大 (${(file.size / 1024 / 1024).toFixed(1)}MB)。請選擇小於 100MB 的影片檔案。`);
+      e.target.value = '';
+      setCurrentEditingProjectId(null);
       return;
     }
-    
+
+    // 重置檔案選擇器
+    e.target.value = '';
+
+    // 顯示 Whisper 設定對話框
+    await handleVideoSelected(file, projectId);
+  };
+
+  // 使用選定的設定處理影片
+  const processVideoWithSettings = async (
+    file: File,
+    projectId: string,
+    model: WhisperModel,
+    language: WhisperLanguage
+  ) => {
     // 先上傳影片到伺服器
     const formData = new FormData();
     formData.append('video', file);
-    
+
     try {
       updateProject(projectId, {
         status: 'uploading',
@@ -202,79 +373,162 @@ export default function ProjectsPage() {
         status: 'uploading',
         progress: 100,
       });
+
+      // 產生影片封面圖
+      const thumbnailUrl = await generateVideoThumbnail(file);
+      updateProject(projectId, { thumbnail: thumbnailUrl });
+
+      // 自動執行字幕識別+翻譯（使用選定的模型和語言）
+      await autoProcessVideo(projectId, file, model, language);
+
+      // 重置狀態
+      setCurrentEditingProjectId(null);
     } catch (error) {
       updateProject(projectId, {
         status: 'error',
         errorMessage: '影片上傳失敗: ' + (error as Error).message,
       });
       alert('影片上傳失敗: ' + (error as Error).message);
-      return;
+      setCurrentEditingProjectId(null);
     }
-    
-    // 模擬上傳進度
-    updateProject(projectId, { status: 'uploading', progress: 100 });
-    
-    // 產生影片封面圖
-    const thumbnailUrl = await generateVideoThumbnail(file);
-    updateProject(projectId, { thumbnail: thumbnailUrl });
-    
-    // 自動執行字幕識別+翻譯
-    await autoProcessVideo(projectId, file);
-    
-    // 重置檔案選擇器
-    e.target.value = '';
-    setCurrentEditingProjectId(null);
   };
   
   // 自動處理流程:字幕識別 → 翻譯
-  const autoProcessVideo = async (projectId: string, videoFile: File) => {
+  const autoProcessVideo = async (
+    projectId: string,
+    videoFile: File,
+    model: WhisperModel = 'base',
+    language: WhisperLanguage = 'auto'
+  ) => {
     try {
       // Step 1: Whisper 字幕識別
       updateProject(projectId, { status: 'transcribing', progress: 0 });
-      
+
       const formData = new FormData();
-      formData.append('file', videoFile); // 修正:改用 'file' 參數名
-      formData.append('language', 'zh');
-      
+      formData.append('file', videoFile);
+      formData.append('model', model);
+      formData.append('language', language);
+
+      console.log(`開始 Whisper 字幕識別: 模型=${model}, 語言=${language}`);
+
       const transcribeRes = await fetch('/api/transcribe', {
         method: 'POST',
         body: formData,
       });
-      
+
       if (!transcribeRes.ok) {
         const errorData = await transcribeRes.json().catch(() => ({ error: 'Unknown error' }));
         throw new Error(errorData.error || '字幕識別失敗');
       }
-      
-      const { srtContent } = await transcribeRes.json(); // 修正:改用 'srtContent' 欄位名
-      const parsedSegments = parseSrt(srtContent);
-      
-      updateProject(projectId, { progress: 50 });
-      
-      // Step 2: Google Translate 翻譯
-      updateProject(projectId, { status: 'translating', progress: 50 });
-      
-      const translateRes = await fetch('/api/translate', {
-        method: 'PUT', // 修正:改用 PUT method (API route 定義)
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          texts: parsedSegments.map(s => s.text),
-          targetLang: 'zh-TW',
-        }),
-      });
-      
-      if (!translateRes.ok) {
-        const errorData = await translateRes.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || '翻譯失敗');
+
+      const transcribeData = await transcribeRes.json();
+      console.log('🎬 Transcribe API 返回數據:', transcribeData);
+
+      let parsedSegments;
+
+      // 異步任務模式：需要輪詢任務狀態
+      if (transcribeData.taskId) {
+        console.log('📋 獲得任務 ID:', transcribeData.taskId);
+        const taskResult = await pollTaskStatus(transcribeData.taskId, (progress) => {
+          updateProject(projectId, { progress: Math.round(progress * 50) }); // 0-50%
+        });
+
+        if (!taskResult.srtContent) {
+          console.error('❌ 任務完成但無 SRT 內容:', taskResult);
+          throw new Error('字幕識別失敗：無返回內容');
+        }
+
+        console.log('✅ 字幕識別完成，SRT 長度:', taskResult.srtContent.length);
+        parsedSegments = parseSrt(taskResult.srtContent);
+        updateProject(projectId, { progress: 50 });
+      } else {
+        // 向後兼容：同步模式
+        const srtContent = transcribeData.srtContent || transcribeData.srt || transcribeData.content;
+
+        if (!srtContent) {
+          console.error('❌ API 返回數據無 srtContent:', transcribeData);
+          throw new Error('字幕識別返回數據格式錯誤');
+        }
+
+        console.log('📝 SRT 內容長度:', srtContent.length);
+        parsedSegments = parseSrt(srtContent);
+        updateProject(projectId, { progress: 50 });
       }
       
-      const { translations } = await translateRes.json();
-      
-      // 合併字幕資料 (translations 是物件陣列,需要提取 translatedText 欄位)
-      const segments = parsedSegments.map((seg, i) => ({
-        ...seg,
-        translatedText: translations[i]?.translatedText || seg.text,
-      }));
+      // Step 2: DeepL 批量翻譯（優先），失敗時回退到 Google Translate
+      updateProject(projectId, { status: 'translating', progress: 50 });
+
+      let segments;
+      let translationMethod = 'DeepL';
+
+      try {
+        // 嘗試使用 DeepL 批量翻譯（一次請求翻譯所有字幕）
+        console.log('🚀 開始 DeepL 批量翻譯:', parsedSegments.length, '條字幕');
+        const startTime = performance.now();
+
+        const deeplRes = await fetch('/api/deepl-translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            texts: parsedSegments.map(s => s.text), // 批量發送所有文本
+          }),
+        });
+
+        if (!deeplRes.ok) {
+          throw new Error('DeepL API 請求失敗');
+        }
+
+        const deeplData = await deeplRes.json();
+
+        if (!deeplData.success || !deeplData.translatedTexts) {
+          throw new Error('DeepL API 返回無效數據');
+        }
+
+        const endTime = performance.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(2);
+        console.log(`✅ DeepL 批量翻譯成功: ${parsedSegments.length} 條字幕，耗時 ${duration} 秒`);
+
+        // 合併字幕資料
+        segments = parsedSegments.map((seg, i) => ({
+          ...seg,
+          translatedText: deeplData.translatedTexts[i] || seg.text,
+        }));
+
+      } catch (deeplError) {
+        // DeepL 失敗，回退到 Google Translate
+        console.warn('⚠️ DeepL 翻譯失敗，回退到 Google Translate:', deeplError);
+        translationMethod = 'Google Translate (fallback)';
+
+        const startTime = performance.now();
+
+        const translateRes = await fetch('/api/translate', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            texts: parsedSegments.map(s => s.text),
+            targetLang: 'zh-TW',
+          }),
+        });
+
+        if (!translateRes.ok) {
+          const errorData = await translateRes.json().catch(() => ({ error: 'Unknown error' }));
+          throw new Error(errorData.error || '翻譯失敗');
+        }
+
+        const { translations } = await translateRes.json();
+
+        const endTime = performance.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(2);
+        console.log(`✅ Google Translate 翻譯完成: ${parsedSegments.length} 條字幕，耗時 ${duration} 秒`);
+
+        // 合併字幕資料 (translations 是物件陣列,需要提取 translatedText 欄位)
+        segments = parsedSegments.map((seg, i) => ({
+          ...seg,
+          translatedText: translations[i]?.translatedText || seg.text,
+        }));
+      }
+
+      console.log(`📊 翻譯方法: ${translationMethod}`);
       
       console.log('🔍 處理後的字幕時間格式:', segments.slice(0, 3).map(s => ({
         startTime: s.startTime,
@@ -432,8 +686,8 @@ export default function ProjectsPage() {
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
-              <BulkSubtitleEditor 
-                isOpen={showBulkEditor} 
+              <BulkSubtitleEditor
+                isOpen={showBulkEditor}
                 onClose={closeBulkEditor}
                 videoUrl={currentEditingProjectId ? projects.find(p => p.id === currentEditingProjectId)?.videoUrl || undefined : undefined}
               />
@@ -441,7 +695,149 @@ export default function ProjectsPage() {
           </div>
         </div>
       )}
-      
+
+      {/* Whisper 設定對話框 */}
+      {showWhisperSettings && currentEditingProjectId && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            setShowWhisperSettings(false);
+            setCurrentEditingProjectId(null);
+          }}
+        >
+          <div
+            className="bg-gray-800 border border-gray-700 rounded-lg p-6 max-w-md w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <Settings className="w-6 h-6 text-blue-400" />
+              <h3 className="text-xl font-bold">Whisper 字幕識別設定</h3>
+            </div>
+
+            {/* 模型選擇 */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                識別模型
+              </label>
+              <div className="space-y-2">
+                {[
+                  { value: 'tiny' as WhisperModel, label: '極速模式', desc: '最快速度，適合快速測試（3-10倍速）', icon: Zap },
+                  { value: 'base' as WhisperModel, label: '標準模式', desc: '平衡速度與準確度（推薦）', icon: null },
+                  { value: 'small' as WhisperModel, label: '高質量模式', desc: '更高準確度，處理較慢', icon: null },
+                  { value: 'medium' as WhisperModel, label: '專業模式', desc: '最高品質，處理最慢', icon: null },
+                ].map((option) => {
+                  const isRecommended = option.value === recommendedModel;
+                  const Icon = option.icon;
+                  return (
+                    <label
+                      key={option.value}
+                      className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                        selectedWhisperModel === option.value
+                          ? 'border-blue-500 bg-blue-500/10'
+                          : 'border-gray-600 hover:border-gray-500'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="whisperModel"
+                        value={option.value}
+                        checked={selectedWhisperModel === option.value}
+                        onChange={(e) => {
+                          const newModel = e.target.value as WhisperModel;
+                          setSelectedWhisperModel(newModel);
+                          const project = projects.find(p => p.id === currentEditingProjectId);
+                          if (project?.videoDuration) {
+                            setEstimatedTime(calculateEstimatedTime(project.videoDuration, newModel));
+                          }
+                        }}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{option.label}</span>
+                          {Icon && <Icon className="w-4 h-4 text-yellow-400" />}
+                          {isRecommended && (
+                            <span className="px-2 py-0.5 text-xs bg-green-600 text-white rounded-full">
+                              推薦
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-400 mt-1">{option.desc}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 語言選擇 */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                字幕語言
+              </label>
+              <select
+                value={selectedWhisperLanguage}
+                onChange={(e) => setSelectedWhisperLanguage(e.target.value as WhisperLanguage)}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="auto">自動檢測（推薦）</option>
+                <option value="zh">中文</option>
+                <option value="en">English</option>
+                <option value="ja">日本語</option>
+                <option value="ko">한국어</option>
+                <option value="fr">Français</option>
+                <option value="de">Deutsch</option>
+                <option value="es">Español</option>
+              </select>
+            </div>
+
+            {/* 預估處理時間 */}
+            {estimatedTime && (
+              <div className="mb-6 p-3 bg-gray-700/50 rounded-lg border border-gray-600">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-300">預估處理時間</span>
+                  <span className="text-sm font-medium text-blue-400">{estimatedTime}</span>
+                </div>
+              </div>
+            )}
+
+            {/* 按鈕 */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowWhisperSettings(false);
+                  setCurrentEditingProjectId(null);
+                  setPendingVideoFile(null); // 清除臨時檔案
+                }}
+                className="flex-1 px-4 py-2 border border-gray-600 rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  console.log('🎬 點擊開始處理按鈕');
+                  console.log('currentEditingProjectId:', currentEditingProjectId);
+                  console.log('pendingVideoFile:', pendingVideoFile);
+
+                  if (pendingVideoFile && currentEditingProjectId) {
+                    console.log('✅ 條件通過，開始處理');
+                    confirmWhisperSettings(pendingVideoFile, currentEditingProjectId);
+                  } else {
+                    console.error('❌ 條件不通過:', {
+                      hasPendingFile: !!pendingVideoFile,
+                      hasProjectId: !!currentEditingProjectId
+                    });
+                  }
+                }}
+                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors font-medium"
+              >
+                開始處理
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="pt-6 px-6 flex items-center justify-between w-full h-16">
         <Link

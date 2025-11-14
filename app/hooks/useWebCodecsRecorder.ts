@@ -314,7 +314,7 @@ export function useWebCodecsRecorder() {
       const bgY = y - totalHeight / 2 - padding / 2;
 
       ctx.fillStyle = backgroundColor;
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = opacity; // 使用統一的透明度
       ctx.fillRect(bgX, bgY, bgWidth, bgHeight);
     }
 
