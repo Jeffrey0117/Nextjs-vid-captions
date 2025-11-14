@@ -392,6 +392,138 @@ function PinnedSubtitleEditor({
                 </button>
               </div>
             </div>
+
+            {/* 描邊設置 */}
+            <div className="pt-3 border-t border-gray-700/50">
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs text-gray-400">描邊</label>
+                <input
+                  type="checkbox"
+                  checked={pinned.style.enableStroke}
+                  onChange={(e) => onUpdate(pinned.id, {
+                    style: { ...pinned.style, enableStroke: e.target.checked }
+                  })}
+                  className="w-4 h-4 accent-purple-600"
+                />
+              </div>
+
+              {pinned.style.enableStroke && (
+                <div className="space-y-3 mt-2">
+                  {/* 描邊顏色 */}
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-2">描邊顏色</label>
+                    <input
+                      type="color"
+                      value={pinned.style.strokeColor}
+                      onChange={(e) => onUpdate(pinned.id, {
+                        style: { ...pinned.style, strokeColor: e.target.value }
+                      })}
+                      className="w-full h-10 rounded cursor-pointer"
+                    />
+                  </div>
+
+                  {/* 描邊寬度 */}
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-2">
+                      描邊寬度: {pinned.style.strokeWidth}px
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="10"
+                      value={pinned.style.strokeWidth}
+                      onChange={(e) => onUpdate(pinned.id, {
+                        style: { ...pinned.style, strokeWidth: parseInt(e.target.value) }
+                      })}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 陰影設置 */}
+            <div className="pt-3 border-t border-gray-700/50">
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs text-gray-400">陰影</label>
+                <input
+                  type="checkbox"
+                  checked={pinned.style.enableShadow}
+                  onChange={(e) => onUpdate(pinned.id, {
+                    style: { ...pinned.style, enableShadow: e.target.checked }
+                  })}
+                  className="w-4 h-4 accent-purple-600"
+                />
+              </div>
+
+              {pinned.style.enableShadow && (
+                <div className="space-y-3 mt-2">
+                  {/* 陰影顏色 */}
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-2">陰影顏色</label>
+                    <input
+                      type="color"
+                      value={pinned.style.shadowColor}
+                      onChange={(e) => onUpdate(pinned.id, {
+                        style: { ...pinned.style, shadowColor: e.target.value }
+                      })}
+                      className="w-full h-10 rounded cursor-pointer"
+                    />
+                  </div>
+
+                  {/* 陰影 X 偏移 */}
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-2">
+                      陰影 X 偏移: {pinned.style.shadowOffsetX}px
+                    </label>
+                    <input
+                      type="range"
+                      min="-50"
+                      max="50"
+                      value={pinned.style.shadowOffsetX}
+                      onChange={(e) => onUpdate(pinned.id, {
+                        style: { ...pinned.style, shadowOffsetX: parseInt(e.target.value) }
+                      })}
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* 陰影 Y 偏移 */}
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-2">
+                      陰影 Y 偏移: {pinned.style.shadowOffsetY}px
+                    </label>
+                    <input
+                      type="range"
+                      min="-50"
+                      max="50"
+                      value={pinned.style.shadowOffsetY}
+                      onChange={(e) => onUpdate(pinned.id, {
+                        style: { ...pinned.style, shadowOffsetY: parseInt(e.target.value) }
+                      })}
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* 陰影模糊 */}
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-2">
+                      陰影模糊: {pinned.style.shadowBlur}px
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="50"
+                      value={pinned.style.shadowBlur}
+                      onChange={(e) => onUpdate(pinned.id, {
+                        style: { ...pinned.style, shadowBlur: parseInt(e.target.value) }
+                      })}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </>
       )}

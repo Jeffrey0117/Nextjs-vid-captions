@@ -306,6 +306,36 @@ export default function EditorProPage() {
             loadPinnedSubtitles(latestProject.pinnedSubtitles);
           }
 
+          // 自動生成並套用 AI 標題
+          setTimeout(async () => {
+            const state = useSubtitleStore.getState();
+            const topPinned = state.pinnedSubtitles.find(p => p.position === 'top');
+            if (topPinned && processedSegments.length > 0) {
+              if (topPinned.text === '影片標題' || topPinned.text === '新標題') {
+                console.log('🎬 自動生成 AI 標題...');
+                try {
+                  const response = await fetch('/api/generate-title', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ subtitles: processedSegments }),
+                  });
+
+                  if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.titles) {
+                      const titleToApply = data.titles.viral || data.titles.funny || data.titles.mystery;
+                      state.updatePinnedSubtitle(topPinned.id, { text: titleToApply });
+                      console.log('✨ AI 標題已自動套用:', titleToApply);
+                      toast.success(`AI 標題已生成：${titleToApply}`);
+                    }
+                  }
+                } catch (error) {
+                  console.error('❌ 自動生成標題失敗:', error);
+                }
+              }
+            }
+          }, 100);
+
           console.log('✅ 使用最新專案的字幕載入完成');
           return;
         }
@@ -411,8 +441,8 @@ export default function EditorProPage() {
           loadPinnedSubtitles(project.pinnedSubtitles);
         }
 
-        // 確認載入成功
-        setTimeout(() => {
+        // 確認載入成功並自動生成標題
+        setTimeout(async () => {
           const state = useSubtitleStore.getState();
           console.log('✅ Zustand store 載入後狀態:', {
             tracksCount: state.tracks.length,
@@ -425,6 +455,38 @@ export default function EditorProPage() {
               translatedText: state.tracks[0].segments[0].translatedText
             } : null
           });
+
+          // 自動生成並套用 AI 標題
+          const topPinned = state.pinnedSubtitles.find(p => p.position === 'top');
+          if (topPinned && processedSegments.length > 0) {
+            // 只在標題是預設值時才自動生成（避免覆蓋用戶已修改的標題）
+            if (topPinned.text === '影片標題' || topPinned.text === '新標題') {
+              console.log('🎬 自動生成 AI 標題...');
+              try {
+                const response = await fetch('/api/generate-title', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ subtitles: processedSegments }),
+                });
+
+                if (response.ok) {
+                  const data = await response.json();
+                  if (data.success && data.titles) {
+                    // 優先使用 viral 標題，如果不存在則使用 funny
+                    const titleToApply = data.titles.viral || data.titles.funny || data.titles.mystery;
+                    state.updatePinnedSubtitle(topPinned.id, { text: titleToApply });
+                    console.log('✨ AI 標題已自動套用:', titleToApply);
+                    toast.success(`AI 標題已生成：${titleToApply}`);
+                  }
+                }
+              } catch (error) {
+                console.error('❌ 自動生成標題失敗:', error);
+                // 失敗時不顯示錯誤，靜默處理
+              }
+            } else {
+              console.log('⏭️ 標題已自訂，跳過自動生成');
+            }
+          }
         }, 100);
       } else {
         console.warn('⚠️ 專案沒有字幕資料');

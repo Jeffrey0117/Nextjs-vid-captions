@@ -749,7 +749,7 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
         // 步驟2: 智能分組
         const sentences: string[] = [];
         let currentSentence = '';
-        const MAX_LENGTH = 25; // 每句最大字數
+        const MAX_LENGTH = 15; // 每句最大字數（降低以支持更頻繁的分句）
 
         for (const part of parts) {
           const trimmedPart = part.trim();
