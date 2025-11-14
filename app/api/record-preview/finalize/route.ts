@@ -3,6 +3,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
 import path from "path";
+import { buildFFmpegFilterChain, FFmpegFiltersConfig } from "@/app/types/video-quality";
 
 const execAsync = promisify(exec);
 
@@ -16,7 +17,7 @@ const execAsync = promisify(exec);
  */
 export async function POST(request: Request) {
   try {
-    const { sessionId } = await request.json();
+    const { sessionId, filters } = await request.json();
 
     console.log(`🎥 開始合成會話: ${sessionId}`);
 
@@ -26,6 +27,9 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    // 解析滤镜配置
+    const filterConfig: FFmpegFiltersConfig | undefined = filters;
 
     // 檢查會話目錄
     const tempDir = path.join(process.cwd(), "public", "temp");
@@ -90,14 +94,76 @@ export async function POST(request: Request) {
 
     console.log("🎥 開始FFmpeg合成...");
 
+    // 构建滤镜链
+    let filterChain = '';
+    if (filterConfig && filterConfig.enabled) {
+      filterChain = buildFFmpegFilterChain(filterConfig);
+      console.log(`🎨 应用滤镜链: ${filterChain}`);
+    }
+
+    // 构建FFmpeg编码参数（基于filterConfig的质量级别）
+    // 默认使用balanced质量，如果有filterConfig则从中推断质量级别
+    let encodingParams = {
+      preset: 'medium',
+      crf: 18,
+      pixFmt: 'yuv420p',
+      extraArgs: [] as string[]
+    };
+
+    // 根据滤镜配置推断质量级别并应用对应参数
+    if (filterConfig && filterConfig.enabled) {
+      // 检测ultra模式特征：scale with lanczos + sharpen强度较高
+      if (filterConfig.scale?.algorithm === 'lanczos' &&
+          filterConfig.scale?.flags?.includes('full_chroma_int')) {
+        // Ultra模式 - Near-Lossless极致画质
+        encodingParams = {
+          preset: 'veryslow',
+          crf: 15,
+          pixFmt: 'yuv444p',
+          extraArgs: [
+            '-tune', 'film',
+            '-profile:v', 'high444',
+            '-g', '10',
+            '-bf', '8',
+            '-refs', '6',
+            '-me_method', 'umh',
+            '-subme', '10',
+            '-trellis', '2',
+            '-aq-mode', '3',
+            '-psy-rd', '1.0:0.15'
+          ]
+        };
+      } else if (filterConfig.sharpen?.enabled) {
+        // High模式 - 高质量
+        encodingParams = {
+          preset: 'slow',
+          crf: 16,
+          pixFmt: 'yuv420p',
+          extraArgs: [
+            '-tune', 'film',
+            '-g', '15',
+            '-bf', '5',
+            '-refs', '4',
+            '-me_method', 'umh',
+            '-subme', '8'
+          ]
+        };
+      }
+    }
+
     // 使用FFmpeg將PNG序列和原始音頻合成
     let ffmpegCommand: string;
+    const videoFilterArg = filterChain ? `-vf "${filterChain}"` : '';
+    const extraArgsStr = encodingParams.extraArgs.length > 0
+      ? encodingParams.extraArgs.join(' ') + ' '
+      : '';
+
     if (originalVideoPath) {
       // 包含音軌
-      ffmpegCommand = `ffmpeg -framerate ${meta.fps} -i "${framesDir}\\frame_%08d.png" -i "${originalVideoPath}" -map 0:v -map 1:a? -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -c:a copy "${outputPath}"`;
+      ffmpegCommand = `ffmpeg -framerate ${meta.fps} -i "${framesDir}\\frame_%08d.png" -i "${originalVideoPath}" -map 0:v -map 1:a? ${videoFilterArg} -c:v libx264 -preset ${encodingParams.preset} -crf ${encodingParams.crf} -pix_fmt ${encodingParams.pixFmt} ${extraArgsStr}-c:a copy "${outputPath}"`;
     } else {
       // 不包含音軌
-      ffmpegCommand = `ffmpeg -framerate ${meta.fps} -i "${framesDir}\\frame_%08d.png" -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p "${outputPath}"`;
+      ffmpegCommand = `ffmpeg -framerate ${meta.fps} -i "${framesDir}\\frame_%08d.png" ${videoFilterArg} -c:v libx264 -preset ${encodingParams.preset} -crf ${encodingParams.crf} -pix_fmt ${encodingParams.pixFmt} ${extraArgsStr}"${outputPath}"`;
     }
 
     console.log("FFmpeg命令:", ffmpegCommand);

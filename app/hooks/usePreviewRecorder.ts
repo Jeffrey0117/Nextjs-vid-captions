@@ -1,11 +1,15 @@
 import { useState, useRef, useCallback } from 'react';
 import { SubtitleSegment, PinnedSubtitle } from '../stores/subtitle-store';
 import { VideoQualityConfig, CanvasRenderingConfig, getQualityConfig, QualityLevel } from '../types/video-quality';
+import { ColorManagementConfig, ColorQualityLevel, getColorConfig, getRecommendedColorConfig } from '../types/color-management';
+import { VideoFrameExtractor, createOptimizedCanvas, applyCanvasRenderingQuality, exportCanvasToBlob } from '../utils/video-frame-extractor';
 
 interface RecorderOptions {
   fps?: number;
   qualityLevel?: QualityLevel;
   customQuality?: Partial<VideoQualityConfig>;
+  colorQuality?: ColorQualityLevel;
+  customColorConfig?: Partial<ColorManagementConfig>;
   onProgress?: (progress: number) => void;
   onComplete?: () => void;
   onError?: (error: Error) => void;
@@ -34,6 +38,8 @@ export function usePreviewRecorder() {
       fps = 30,
       qualityLevel = 'balanced',
       customQuality,
+      colorQuality = 'standard',
+      customColorConfig,
       onProgress,
       onComplete,
       onError
@@ -43,11 +49,30 @@ export function usePreviewRecorder() {
     const qualityConfig = getQualityConfig(qualityLevel, customQuality);
     const renderConfig = qualityConfig.rendering;
 
+    // 获取色彩管理配置
+    let colorConfig: ColorManagementConfig;
+    if (qualityConfig.colorManagement) {
+      // 如果质量配置中已包含色彩配置，使用它
+      colorConfig = qualityConfig.colorManagement;
+    } else if (colorQuality) {
+      // 否则根据色彩质量级别获取
+      colorConfig = getColorConfig(colorQuality, customColorConfig);
+    } else {
+      // 或使用推荐配置
+      colorConfig = getRecommendedColorConfig();
+    }
+
     console.log(`📊 质量配置: ${qualityConfig.name || qualityLevel}`, {
       crf: qualityConfig.encoding.crf,
       preset: qualityConfig.encoding.preset,
       exportFormat: renderConfig.exportFormat,
       exportQuality: renderConfig.exportQuality,
+    });
+
+    console.log(`🎨 色彩配置: ${colorConfig.name || colorQuality}`, {
+      colorSpace: colorConfig.canvas.colorSpace,
+      extractionMode: colorConfig.frameExtraction.mode,
+      colorSpaceConversion: colorConfig.frameExtraction.colorSpaceConversion,
     });
 
     setIsRecording(true);
@@ -82,10 +107,23 @@ export function usePreviewRecorder() {
       console.log(`📦 批次配置: ${totalBatches}批, 每批${BATCH_SIZE}幀, SessionID: ${sessionId}`);
       console.log(`💾 預計內存峰值: ~${Math.ceil(BATCH_SIZE * 0.5)}MB (批次) vs ~${Math.ceil(totalFrames * 0.5)}MB (原方案)`);
 
-      // 創建離屏Canvas用於渲染（优化：配置高质量渲染选项）
+      // 計算超采样尺寸
+      const ssConfig = renderConfig.supersampling;
+      const ssMultiplier = ssConfig.mode === '4x' ? 4 : ssConfig.mode === '2x' ? 2 : 1;
+      const targetWidth = videoElement.videoWidth;
+      const targetHeight = videoElement.videoHeight;
+
+      console.log(`🎨 超采样配置: ${ssConfig.mode} (${ssMultiplier}x), 仅字幕: ${ssConfig.subtitlesOnly}, 算法: ${ssConfig.downscaleAlgorithm}`);
+
+      // 創建主Canvas（用於視频+字幕合成）
       const canvas = document.createElement('canvas');
-      canvas.width = videoElement.videoWidth;
-      canvas.height = videoElement.videoHeight;
+
+      // 根据超采样模式设置canvas尺寸
+      const renderWidth = ssConfig.mode !== 'none' && !ssConfig.subtitlesOnly ? targetWidth * ssMultiplier : targetWidth;
+      const renderHeight = ssConfig.mode !== 'none' && !ssConfig.subtitlesOnly ? targetHeight * ssMultiplier : targetHeight;
+
+      canvas.width = renderWidth;
+      canvas.height = renderHeight;
 
       // 使用高质量渲染设置
       const ctx = canvas.getContext('2d', {
@@ -108,6 +146,52 @@ export function usePreviewRecorder() {
       }
       if ((ctx as any).fontSmooth) {
         (ctx as any).fontSmooth = renderConfig.textRendering.fontSmoothing ? 'always' : 'never';
+      }
+
+      // 创建独立的字幕超采样canvas（如果启用）
+      let subtitleCanvas: HTMLCanvasElement | null = null;
+      let subtitleCtx: CanvasRenderingContext2D | null = null;
+      let downscaleCanvas: HTMLCanvasElement | null = null;
+      let downscaleCtx: CanvasRenderingContext2D | null = null;
+
+      if (ssConfig.mode !== 'none' && ssConfig.subtitlesOnly && ssConfig.useSeperateCanvas) {
+        // 创建超采样字幕canvas
+        subtitleCanvas = document.createElement('canvas');
+        subtitleCanvas.width = targetWidth * ssMultiplier;
+        subtitleCanvas.height = targetHeight * ssMultiplier;
+        subtitleCtx = subtitleCanvas.getContext('2d', {
+          alpha: true,  // 需要alpha通道用于透明度
+          desynchronized: false,
+          willReadFrequently: true,
+        })!;
+
+        // 应用高质量渲染设置
+        if (subtitleCtx.imageSmoothingEnabled !== undefined) {
+          subtitleCtx.imageSmoothingEnabled = renderConfig.imageSmoothingEnabled;
+        }
+        if (subtitleCtx.imageSmoothingQuality) {
+          subtitleCtx.imageSmoothingQuality = renderConfig.imageSmoothingQuality;
+        }
+
+        // 创建downscale canvas（用于高质量缩放）
+        downscaleCanvas = document.createElement('canvas');
+        downscaleCanvas.width = targetWidth;
+        downscaleCanvas.height = targetHeight;
+        downscaleCtx = downscaleCanvas.getContext('2d', {
+          alpha: true,
+          desynchronized: false,
+          willReadFrequently: true,
+        })!;
+
+        // 设置高质量downscale
+        if (downscaleCtx.imageSmoothingEnabled !== undefined) {
+          downscaleCtx.imageSmoothingEnabled = true;
+        }
+        if (downscaleCtx.imageSmoothingQuality) {
+          downscaleCtx.imageSmoothingQuality = 'high';
+        }
+
+        console.log(`🎨 创建独立字幕超采样canvas: ${subtitleCanvas.width}x${subtitleCanvas.height} -> ${downscaleCanvas.width}x${downscaleCanvas.height}`);
       }
 
       // 暫存當前批次的幀（內存優化關鍵：只保留當前批次，不保留所有幀）
@@ -196,31 +280,106 @@ export function usePreviewRecorder() {
         // 再等一幀確保渲染完成
         await new Promise(resolve => requestAnimationFrame(resolve as any));
 
-        // === 繪製影片幀 ===
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        // === 方案A：全画面超采样 ===
+        if (ssConfig.mode !== 'none' && !ssConfig.subtitlesOnly) {
+          // 以超采样分辨率渲染整个画面
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
 
-        // === 繪製字幕 ===
-        await drawSubtitles(
-          ctx,
-          currentTime,
-          subtitles,
-          pinnedSubtitles,
-          canvas.width,
-          canvas.height,
-          videoDisplaySize
-        );
-
-        // 導出幀為Blob（性能優化：避免Base64編碼）
-        const frameBlob = await new Promise<Blob>((resolve) => {
-          canvas.toBlob(
-            (b) => resolve(b!),
-            renderConfig.exportFormat,
-            renderConfig.exportQuality
+          // 在超采样分辨率下绘制字幕
+          await drawSubtitles(
+            ctx,
+            currentTime,
+            subtitles,
+            pinnedSubtitles,
+            canvas.width,
+            canvas.height,
+            { width: videoDisplaySize.width * ssMultiplier, height: videoDisplaySize.height * ssMultiplier }
           );
-        });
-        currentBatchFrames.push(frameBlob);
+
+          // 创建临时的downscale canvas
+          const finalCanvas = document.createElement('canvas');
+          finalCanvas.width = targetWidth;
+          finalCanvas.height = targetHeight;
+          const finalCtx = finalCanvas.getContext('2d')!;
+          finalCtx.imageSmoothingEnabled = true;
+          finalCtx.imageSmoothingQuality = 'high';
+
+          // Downscale到目标分辨率（使用高质量算法）
+          finalCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, targetWidth, targetHeight);
+
+          // 导出downscale后的帧
+          const frameBlob = await new Promise<Blob>((resolve) => {
+            finalCanvas.toBlob(
+              (b) => resolve(b!),
+              renderConfig.exportFormat,
+              renderConfig.exportQuality
+            );
+          });
+          currentBatchFrames.push(frameBlob);
+
+        // === 方案B：仅字幕层超采样 ===
+        } else if (ssConfig.mode !== 'none' && ssConfig.subtitlesOnly && subtitleCanvas && subtitleCtx && downscaleCanvas && downscaleCtx) {
+          // 1. 主canvas绘制视频（原分辨率）
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+          // 2. 在超采样canvas上绘制字幕
+          subtitleCtx.clearRect(0, 0, subtitleCanvas.width, subtitleCanvas.height);
+          await drawSubtitles(
+            subtitleCtx,
+            currentTime,
+            subtitles,
+            pinnedSubtitles,
+            subtitleCanvas.width,
+            subtitleCanvas.height,
+            { width: videoDisplaySize.width * ssMultiplier, height: videoDisplaySize.height * ssMultiplier }
+          );
+
+          // 3. Downscale字幕层
+          downscaleCtx.clearRect(0, 0, downscaleCanvas.width, downscaleCanvas.height);
+          downscaleCtx.drawImage(subtitleCanvas, 0, 0, subtitleCanvas.width, subtitleCanvas.height, 0, 0, targetWidth, targetHeight);
+
+          // 4. 合成：视频 + downscaled字幕
+          ctx.drawImage(downscaleCanvas, 0, 0);
+
+          // 导出合成后的帧
+          const frameBlob = await new Promise<Blob>((resolve) => {
+            canvas.toBlob(
+              (b) => resolve(b!),
+              renderConfig.exportFormat,
+              renderConfig.exportQuality
+            );
+          });
+          currentBatchFrames.push(frameBlob);
+
+        // === 默认：无超采样 ===
+        } else {
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+          await drawSubtitles(
+            ctx,
+            currentTime,
+            subtitles,
+            pinnedSubtitles,
+            canvas.width,
+            canvas.height,
+            videoDisplaySize
+          );
+
+          const frameBlob = await new Promise<Blob>((resolve) => {
+            canvas.toBlob(
+              (b) => resolve(b!),
+              renderConfig.exportFormat,
+              renderConfig.exportQuality
+            );
+          });
+          currentBatchFrames.push(frameBlob);
+        }
 
         // 當批次滿了或是最後一幀，發送批次
         const isBatchFull = currentBatchFrames.length >= BATCH_SIZE;
@@ -268,7 +427,10 @@ export function usePreviewRecorder() {
       const finalizeResponse = await fetch('/api/record-preview/finalize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId }),
+        body: JSON.stringify({
+          sessionId,
+          filters: qualityConfig.filters, // 传递滤镜配置
+        }),
       });
 
       if (!finalizeResponse.ok) {

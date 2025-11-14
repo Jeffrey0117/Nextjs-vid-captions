@@ -10,6 +10,12 @@ import {
   buildFFmpegArgs,
   validateQualityConfig,
 } from "../../types/video-quality";
+import {
+  ProFFmpegEncodingConfig,
+  buildProFFmpegArgs,
+  getProPreset,
+  PRO_QUALITY_PRESETS,
+} from "../../types/video-quality-pro";
 
 const execAsync = promisify(exec);
 
@@ -30,11 +36,22 @@ export async function POST(request: Request) {
     // 获取质量配置
     const qualityLevel = (formData.get("qualityLevel") as QualityLevel) || "balanced";
     const qualityConfigJson = formData.get("qualityConfig") as string;
+    const useProConfig = formData.get("useProConfig") === "true";
+    const proPresetName = formData.get("proPreset") as keyof typeof PRO_QUALITY_PRESETS;
 
-    let encodingConfig: FFmpegEncodingConfig;
-    if (qualityConfigJson) {
+    let encodingConfig: FFmpegEncodingConfig | ProFFmpegEncodingConfig;
+    let isProConfig = false;
+
+    if (useProConfig && proPresetName && PRO_QUALITY_PRESETS[proPresetName]) {
+      // 使用专业级配置
+      encodingConfig = getProPreset(proPresetName);
+      isProConfig = true;
+      console.log(`🎬 使用专业级配置: ${proPresetName}`);
+    } else if (qualityConfigJson) {
       try {
         encodingConfig = JSON.parse(qualityConfigJson);
+        // 检测是否为Pro配置（通过codec字段）
+        isProConfig = 'codec' in encodingConfig;
       } catch (e) {
         console.warn("解析质量配置失败，使用默认配置", e);
         encodingConfig = getQualityConfig(qualityLevel).encoding;
@@ -44,22 +61,34 @@ export async function POST(request: Request) {
     }
 
     console.log(`🎬 收到錄製請求: ${totalFrames} 幀, ${fps} FPS`);
-    console.log(`📊 质量配置: ${qualityLevel}`, {
+    console.log(`📊 质量配置: ${isProConfig ? 'Pro' : qualityLevel}`, {
+      codec: isProConfig ? (encodingConfig as ProFFmpegEncodingConfig).codec : 'libx264',
       crf: encodingConfig.crf,
       preset: encodingConfig.preset,
       pixelFormat: encodingConfig.pixelFormat,
     });
 
-    // 验证质量配置
-    const qualityConfig = getQualityConfig(qualityLevel);
-    qualityConfig.encoding = encodingConfig;
-    const validation = validateQualityConfig(qualityConfig);
-    if (!validation.valid) {
-      console.error("❌ 质量配置验证失败:", validation.errors);
-      return NextResponse.json(
-        { error: `质量配置无效: ${validation.errors.join(", ")}` },
-        { status: 400 }
-      );
+    // 验证质量配置（仅对非Pro配置进行标准验证）
+    if (!isProConfig) {
+      const qualityConfig = getQualityConfig(qualityLevel);
+      qualityConfig.encoding = encodingConfig as FFmpegEncodingConfig;
+      const validation = validateQualityConfig(qualityConfig);
+      if (!validation.valid) {
+        console.error("❌ 质量配置验证失败:", validation.errors);
+        return NextResponse.json(
+          { error: `质量配置无效: ${validation.errors.join(", ")}` },
+          { status: 400 }
+        );
+      }
+    } else {
+      // Pro配置的基本验证
+      const proConfig = encodingConfig as ProFFmpegEncodingConfig;
+      if (proConfig.crf < 0 || proConfig.crf > 63) {
+        return NextResponse.json(
+          { error: `CRF值必须在0-63之间，当前值: ${proConfig.crf}` },
+          { status: 400 }
+        );
+      }
     }
 
     if (!totalFrames || totalFrames <= 0) {
@@ -123,13 +152,21 @@ export async function POST(request: Request) {
 
     // 使用优化的质量配置构建FFmpeg命令
     const inputFramesPattern = `${framesDir}/frame_%08d.png`;
-    const ffmpegArgs = buildFFmpegArgs(
-      encodingConfig,
-      inputFramesPattern,
-      originalVideoPath,
-      outputPath,
-      fps
-    );
+    const ffmpegArgs = isProConfig
+      ? buildProFFmpegArgs(
+          encodingConfig as ProFFmpegEncodingConfig,
+          inputFramesPattern,
+          originalVideoPath,
+          outputPath,
+          fps
+        )
+      : buildFFmpegArgs(
+          encodingConfig as FFmpegEncodingConfig,
+          inputFramesPattern,
+          originalVideoPath,
+          outputPath,
+          fps
+        );
 
     // 构建完整命令
     const ffmpegCommand = `ffmpeg ${ffmpegArgs.map(arg => {
@@ -160,9 +197,11 @@ export async function POST(request: Request) {
 
     console.log("✅ 合成完成！", {
       fileSize: `${fileSizeMB.toFixed(2)} MB`,
-      quality: qualityLevel,
+      quality: isProConfig ? `Pro-${proPresetName || 'Custom'}` : qualityLevel,
+      codec: isProConfig ? (encodingConfig as ProFFmpegEncodingConfig).codec : 'libx264',
       crf: encodingConfig.crf,
       preset: encodingConfig.preset,
+      pixelFormat: encodingConfig.pixelFormat,
     });
 
     // 质量检查：文件太小可能表示编码出错
