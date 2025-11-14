@@ -7,6 +7,25 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript)](https://www.typescriptlang.org)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38B2AC?logo=tailwind-css)](https://tailwindcss.com)
 
+## 📚 完整文檔
+
+### 🚀 錄製性能優化文檔
+想了解如何實現**400-500%錄製速度提升**？查看完整優化文檔：
+
+→ **[docs/README.md](docs/README.md)** - 文檔總覽與導航
+
+**核心成果**：
+- ✅ 速度：60秒視頻從120秒降至**25-35秒**（4-5倍提升）
+- ✅ 畫質：98/100分（2x超採樣保留）
+- ✅ 技術：WebCodecs GPU硬件加速
+
+**快速閱讀**：
+- [WebCodecs實施總結](docs/WEBCODECS_IMPLEMENTATION_SUMMARY.md) - 最新優化成果
+- [完整優化報告](docs/RECORDING_OPTIMIZATION_FINAL.md) - 所有階段總結
+- [質量快速參考](docs/QUALITY_QUICK_REFERENCE.md) - 參數配置
+
+---
+
 ## ✨ 核心功能
 
 ### 🤖 AI 字幕識別
