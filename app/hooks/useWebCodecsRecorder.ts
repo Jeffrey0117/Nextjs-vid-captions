@@ -43,6 +43,7 @@ export function useWebCodecsRecorder() {
   const cancelledRef = useRef(false);
   const encoderRef = useRef<VideoEncoder | null>(null);
   const muxerRef = useRef<Muxer<ArrayBufferTarget> | null>(null);
+  const targetRef = useRef<ArrayBufferTarget | null>(null);
 
   /**
    * 檢查WebCodecs支持
@@ -181,7 +182,7 @@ export function useWebCodecsRecorder() {
     width: number,
     height: number,
     fps: number
-  ): Muxer<ArrayBufferTarget> => {
+  ): { muxer: Muxer<ArrayBufferTarget>, target: ArrayBufferTarget } => {
     const target = new ArrayBufferTarget();
 
     const muxer = new Muxer({
@@ -198,7 +199,7 @@ export function useWebCodecsRecorder() {
 
     console.log('✅ Muxer初始化完成（H.264無音軌）');
 
-    return muxer;
+    return { muxer, target };
   }, []);
 
   /**
@@ -444,12 +445,13 @@ export function useWebCodecsRecorder() {
       const encoder = await initializeEncoder(targetWidth, targetHeight, fps, qualityConfig);
       encoderRef.current = encoder;
 
-      const muxer = initializeMuxer(
+      const { muxer, target } = initializeMuxer(
         targetWidth,
         targetHeight,
         fps
       );
       muxerRef.current = muxer;
+      targetRef.current = target;
 
       // 暫停視頻
       const wasPlaying = !videoElement.paused;
@@ -535,8 +537,9 @@ export function useWebCodecsRecorder() {
       setProgress(0.95);
       onProgress?.(0.95);
 
-      const finalBuffer = muxer.finalize();
-      const videoBlob = new Blob([finalBuffer.buffer], { type: 'video/mp4' });
+      muxer.finalize(); // finalize() 返回 void
+      const finalBuffer = targetRef.current!.buffer; // 從 target 獲取 buffer
+      const videoBlob = new Blob([finalBuffer], { type: 'video/mp4' });
 
       console.log(`🎉 WebCodecs錄製完成！`, {
         fileSize: `${(videoBlob.size / 1024 / 1024).toFixed(2)}MB`,
@@ -557,6 +560,7 @@ export function useWebCodecsRecorder() {
       // 清理
       encoderRef.current = null;
       muxerRef.current = null;
+      targetRef.current = null;
 
       // 返回無音軌的視頻Blob（稍後需要合併音軌）
       return {
@@ -577,6 +581,7 @@ export function useWebCodecsRecorder() {
         encoderRef.current = null;
       }
       muxerRef.current = null;
+      targetRef.current = null;
 
       setStatus('錄製失敗');
       onError?.(error as Error);
