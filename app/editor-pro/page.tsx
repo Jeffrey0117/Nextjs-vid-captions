@@ -12,6 +12,99 @@ import TimelineAdjustDialog from '../components/TimelineAdjustDialog';
 import { parseSrt } from '@/lib/parseSrt';
 import { useToast } from '../hooks/useToast';
 import { useSmartRecorder } from '../hooks/useSmartRecorder';
+import { wrapTextByActualWidth, buildFontString, joinWrappedLines } from '../utils/text-wrapping';
+
+/**
+ * 智能換行：根據實際渲染寬度進行精確換行
+ * 使用通用的文本換行工具，確保與導出一致
+ *
+ * @param text 原始文本
+ * @param maxWidth 最大寬度（像素）
+ * @param fontSize 字體大小（像素）
+ * @param fontFamily 字體族
+ * @param fontWeight 字體粗細
+ * @param fontStyle 字體樣式
+ * @returns 換行後的文本（用 \n 分隔）
+ */
+function wrapSubtitleTextByWidth(
+  text: string,
+  maxWidth: number,
+  fontSize: number,
+  fontFamily: string = 'Arial',
+  fontWeight: string = 'normal',
+  fontStyle: string = 'normal'
+): string {
+  if (!text || maxWidth <= 0) return text;
+
+  // 構建字體字符串
+  const font = buildFontString({
+    fontSize,
+    fontFamily,
+    fontWeight,
+    fontStyle,
+  });
+
+  // 使用通用換行工具
+  const lines = wrapTextByActualWidth(text, {
+    maxWidth,
+    font,
+    allowForcedBreak: true,
+  });
+
+  // 轉換為換行符分隔的字符串
+  return joinWrappedLines(lines);
+}
+
+/**
+ * 舊版基於字符數的換行函數（已棄用，保留作為回退方案）
+ * @deprecated 請使用 wrapSubtitleTextByWidth 進行精確的寬度測量換行
+ */
+function wrapSubtitleText(text: string, maxCharsPerLine: number = 20): string {
+  if (!text) return text;
+
+  const paragraphs = text.split('\n');
+  const wrappedLines: string[] = [];
+
+  paragraphs.forEach(paragraph => {
+    if (paragraph.length <= maxCharsPerLine) {
+      wrappedLines.push(paragraph);
+      return;
+    }
+
+    let currentLine = '';
+    const chars = paragraph.split('');
+    const breakPoints = ['。', '！', '？', '、', '，', ',', ' '];
+
+    for (let i = 0; i < chars.length; i++) {
+      const testLine = currentLine + chars[i];
+
+      if (testLine.length > maxCharsPerLine && currentLine.length > 0) {
+        let breakIndex = -1;
+
+        for (const breakChar of breakPoints) {
+          breakIndex = currentLine.lastIndexOf(breakChar);
+          if (breakIndex > 0) break;
+        }
+
+        if (breakIndex > 0) {
+          wrappedLines.push(currentLine.substring(0, breakIndex + 1));
+          currentLine = currentLine.substring(breakIndex + 1).trim() + chars[i];
+        } else {
+          wrappedLines.push(currentLine);
+          currentLine = chars[i];
+        }
+      } else {
+        currentLine = testLine;
+      }
+    }
+
+    if (currentLine.length > 0) {
+      wrappedLines.push(currentLine);
+    }
+  });
+
+  return wrappedLines.join('\n');
+}
 
 export default function EditorProPage() {
   const toast = useToast();
@@ -1714,6 +1807,7 @@ export default function EditorProPage() {
                                   fontStyle: currentSubtitle.style.fontStyle,
                                   textDecoration: currentSubtitle.style.textDecoration,
                                   color: currentSubtitle.style.color,
+                                  whiteSpace: 'pre-wrap',
                                   textShadow: (() => {
                                     const shadows: string[] = [];
 
@@ -1742,7 +1836,27 @@ export default function EditorProPage() {
                                   })(),
                                 }}
                               >
-                                {currentSubtitle.translatedText || currentSubtitle.text}
+                                {(() => {
+                                  // 計算實際的最大寬度（像素）
+                                  // maxWidth 是相對於影片寬度的百分比
+                                  const containerWidthPx = (currentSubtitle.style.maxWidth / 100) * videoDisplaySize.width;
+                                  // 減去 padding（左右各 16px * 縮放係數）
+                                  const paddingPx = (16 / 1080) * videoDisplaySize.height * 2;
+                                  const actualMaxWidth = containerWidthPx - paddingPx;
+
+                                  // 計算實際字體大小
+                                  const actualFontSize = (currentSubtitle.style.fontSize * currentSubtitle.style.scale / 1080) * videoDisplaySize.height;
+
+                                  // 使用基於寬度的智能換行
+                                  return wrapSubtitleTextByWidth(
+                                    currentSubtitle.translatedText || currentSubtitle.text,
+                                    actualMaxWidth,
+                                    actualFontSize,
+                                    currentSubtitle.style.fontFamily,
+                                    currentSubtitle.style.fontWeight,
+                                    currentSubtitle.style.fontStyle
+                                  );
+                                })()}
                               </p>
                             </div>
 
@@ -1812,6 +1926,7 @@ export default function EditorProPage() {
                               fontWeight: pinned.style.fontWeight,
                               fontStyle: pinned.style.fontStyle,
                               color: pinned.style.color,
+                              whiteSpace: 'pre-wrap',
                               textShadow: (() => {
                                 const shadows: string[] = [];
 
@@ -1837,7 +1952,27 @@ export default function EditorProPage() {
                               })(),
                             }}
                           >
-                            {pinned.text}
+                            {(() => {
+                              // 計算固定字幕的實際最大寬度
+                              // width: '90%' 表示父容器的 90%
+                              const containerWidthPx = window.innerWidth * 0.9;
+                              // 減去 padding（左右各 16px，對應 px-4）
+                              const paddingPx = 16 * 2;
+                              const actualMaxWidth = containerWidthPx - paddingPx;
+
+                              // 計算實際字體大小
+                              const actualFontSize = (pinned.style.fontSize / 1080) * videoDisplaySize.height;
+
+                              // 使用基於寬度的智能換行
+                              return wrapSubtitleTextByWidth(
+                                pinned.text,
+                                actualMaxWidth,
+                                actualFontSize,
+                                pinned.style.fontFamily,
+                                pinned.style.fontWeight,
+                                pinned.style.fontStyle
+                              );
+                            })()}
                           </p>
                         </div>
                       </div>

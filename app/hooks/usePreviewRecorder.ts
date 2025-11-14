@@ -3,6 +3,7 @@ import { SubtitleSegment, PinnedSubtitle } from '../stores/subtitle-store';
 import { VideoQualityConfig, CanvasRenderingConfig, getQualityConfig, QualityLevel } from '../types/video-quality';
 import { ColorManagementConfig, ColorQualityLevel, getColorConfig, getRecommendedColorConfig } from '../types/color-management';
 import { VideoFrameExtractor, createOptimizedCanvas, applyCanvasRenderingQuality, exportCanvasToBlob } from '../utils/video-frame-extractor';
+import { wrapTextByActualWidth, buildFontString } from '../utils/text-wrapping';
 
 interface RecorderOptions {
   fps?: number;
@@ -619,6 +620,23 @@ interface DrawTextOptions {
 }
 
 /**
+ * 智能換行：將長文本分割成多行
+ * 使用通用的換行工具，確保與WebCodecs錄製一致
+ */
+function wrapText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number
+): string[] {
+  // 使用通用換行工具（基於實際渲染寬度）
+  return wrapTextByActualWidth(text, {
+    maxWidth,
+    font: ctx.font, // 使用當前Canvas的字體設置
+    allowForcedBreak: true,
+  });
+}
+
+/**
  * 在Canvas上繪製文字（完全匹配CSS效果）
  */
 function drawText(ctx: CanvasRenderingContext2D, options: DrawTextOptions) {
@@ -653,8 +671,8 @@ function drawText(ctx: CanvasRenderingContext2D, options: DrawTextOptions) {
   ctx.textAlign = textAlign;
   ctx.textBaseline = 'middle';
 
-  // 處理多行文字
-  const lines = text.split('\n');
+  // 智能換行處理
+  const lines = wrapText(ctx, text, maxWidth);
   const lineHeight = fontSize * 1.2;
   const totalHeight = lines.length * lineHeight;
   const startY = y - totalHeight / 2 + lineHeight / 2;

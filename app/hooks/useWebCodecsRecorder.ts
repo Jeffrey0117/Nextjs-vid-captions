@@ -3,6 +3,7 @@ import { SubtitleSegment, PinnedSubtitle } from '../stores/subtitle-store';
 import { VideoQualityConfig, QualityLevel, getQualityConfig } from '../types/video-quality';
 import { ColorManagementConfig, ColorQualityLevel, getColorConfig } from '../types/color-management';
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
+import { wrapTextByActualWidth, buildFontString } from '../utils/text-wrapping';
 
 /**
  * WebCodecs Recorder - 極限性能優化版本
@@ -242,6 +243,23 @@ export function useWebCodecsRecorder() {
   }, []);
 
   /**
+   * 智能換行：將長文本分割成多行
+   * 使用通用的換行工具，確保與預覽一致
+   */
+  const wrapText = useCallback((
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    maxWidth: number
+  ): string[] => {
+    // 使用通用換行工具（基於實際渲染寬度）
+    return wrapTextByActualWidth(text, {
+      maxWidth,
+      font: ctx.font, // 使用當前Canvas的字體設置
+      allowForcedBreak: true,
+    });
+  }, []);
+
+  /**
    * 在Canvas上繪製文字（完全匹配CSS效果）
    */
   const drawText = useCallback((ctx: CanvasRenderingContext2D, options: {
@@ -298,8 +316,8 @@ export function useWebCodecsRecorder() {
     ctx.textAlign = textAlign;
     ctx.textBaseline = 'middle';
 
-    // 處理多行文字
-    const lines = text.split('\n');
+    // 智能換行處理
+    const lines = wrapText(ctx, text, maxWidth);
     const lineHeight = fontSize * 1.2;
     const totalHeight = lines.length * lineHeight;
     const startY = y - totalHeight / 2 + lineHeight / 2;
