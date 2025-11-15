@@ -3672,6 +3672,13 @@ export default function EditorProPage() {
               updateSegment(adjustingSegmentId, { startTime, endTime });
               toast.success('字幕時間已更新！');
             }}
+            onDelete={() => {
+              console.log('🗑️ 刪除字幕:', adjustingSegmentId);
+              setShowTimelineAdjust(false);
+              setAdjustingSegmentId(null);
+              setSelectedSegmentId(null);
+              toast.success('字幕已刪除');
+            }}
           />
         );
       })()}

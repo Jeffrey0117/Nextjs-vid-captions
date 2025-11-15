@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { X, ZoomIn, ZoomOut, Play, Pause, SkipBack, SkipForward } from 'lucide-react';
-import { SubtitleSegment } from '../stores/subtitle-store';
+import { X, ZoomIn, ZoomOut, Play, Pause, SkipBack, SkipForward, Trash2 } from 'lucide-react';
+import { SubtitleSegment, useSubtitleStore } from '../stores/subtitle-store';
 
 interface TimelineAdjustDialogProps {
   segment: SubtitleSegment;
@@ -12,6 +12,7 @@ interface TimelineAdjustDialogProps {
   mainVideoRef?: React.RefObject<HTMLVideoElement | null>; // 主頁面的視頻ref
   onClose: () => void;
   onConfirm: (startTime: number, endTime: number) => void;
+  onDelete?: () => void;
 }
 
 export default function TimelineAdjustDialog({
@@ -22,7 +23,9 @@ export default function TimelineAdjustDialog({
   mainVideoRef,
   onClose,
   onConfirm,
+  onDelete,
 }: TimelineAdjustDialogProps) {
+  const { deleteSegment } = useSubtitleStore();
   const [tempStartTime, setTempStartTime] = useState(segment.startTime);
   const [tempEndTime, setTempEndTime] = useState(segment.endTime);
   const [zoomLevel, setZoomLevel] = useState(2); // 彈窗時間軸預設放大2倍
@@ -501,22 +504,40 @@ export default function TimelineAdjustDialog({
         </div> {/* 左右布局結束 */}
 
         {/* 底部按鈕 */}
-        <div className="h-16 border-t border-gray-700 flex items-center justify-end gap-3 px-6 flex-shrink-0">
-          <button
-            onClick={onClose}
-            className="px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded transition"
-          >
-            取消
-          </button>
+        <div className="h-16 border-t border-gray-700 flex items-center justify-between px-6 flex-shrink-0">
+          {/* 左側刪除按鈕 */}
           <button
             onClick={() => {
-              onConfirm(tempStartTime, tempEndTime);
-              onClose();
+              if (confirm(`確定要刪除字幕「${segment.text}」嗎？`)) {
+                deleteSegment(segment.id);
+                onDelete?.();
+                onClose();
+              }
             }}
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded transition font-medium"
+            className="px-6 py-2 bg-red-600/20 hover:bg-red-600/30 border border-red-600/50 rounded transition flex items-center gap-2 group"
           >
-            確定
+            <Trash2 size={16} className="text-red-400 group-hover:text-red-300" />
+            <span className="text-red-400 group-hover:text-red-300">刪除字幕</span>
           </button>
+
+          {/* 右側確定取消按鈕 */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onClose}
+              className="px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded transition"
+            >
+              取消
+            </button>
+            <button
+              onClick={() => {
+                onConfirm(tempStartTime, tempEndTime);
+                onClose();
+              }}
+              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded transition font-medium"
+            >
+              確定
+            </button>
+          </div>
         </div>
       </div>
     </div>
