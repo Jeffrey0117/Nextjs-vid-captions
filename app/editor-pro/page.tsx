@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useSubtitleStore, SubtitleSegment } from '../stores/subtitle-store';
-import { Upload, FileText, Download, Languages, Trash2, Scissors, Film, Edit3, ArrowLeftToLine, ArrowRightToLine, SplitSquareHorizontal, Copy, Snowflake, Video, Music, Type, CaptionsIcon, Blend, Settings, Plus, ChevronDown, Check } from 'lucide-react';
+import { Upload, FileText, Download, Languages, Trash2, Scissors, Film, Edit3, Edit, ArrowLeftToLine, ArrowRightToLine, SplitSquareHorizontal, Copy, Snowflake, Video, Music, Type, CaptionsIcon, Blend, Settings, Plus, ChevronDown, Check } from 'lucide-react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import SubtitlePropertiesPanel from '../components/SubtitlePropertiesPanel';
 import PinnedSubtitlePanel from '../components/PinnedSubtitlePanel';
@@ -848,7 +848,7 @@ export default function EditorProPage() {
     const params = new URLSearchParams(window.location.search);
     const projectId = params.get('projectId');
 
-    if (!projectId || tracks.length === 0 || tracks[0]?.segments.length === 0) {
+    if (!projectId || tracks.length === 0) {
       return;
     }
 
@@ -862,8 +862,8 @@ export default function EditorProPage() {
 
       if (projectIndex === -1) return;
 
-      // 獲取完整的字幕資料（包含所有樣式屬性）
-      const allSegments = tracks[0].segments;
+      // 【修復】獲取所有軌道的字幕資料（不只是第一軌道）
+      const allSegments = tracks.flatMap(track => track.segments);
 
       // 更新專案的字幕資料和固定字幕
       projects[projectIndex] = {
@@ -3728,6 +3728,9 @@ export default function EditorProPage() {
             onConfirm={(startTime, endTime) => {
               console.log('✅ 確認更新時間:', { startTime, endTime });
               updateSegment(adjustingSegmentId, { startTime, endTime });
+              // 【修復】編輯完成後選中該字幕，讓右邊面板顯示
+              setSelectedSegmentId(adjustingSegmentId);
+              selectSegment(adjustingSegmentId);
               toast.success('字幕時間已更新！');
             }}
             onDelete={() => {
@@ -3774,6 +3777,28 @@ export default function EditorProPage() {
 
           {/* 分隔線 */}
           <div className="my-1 border-t border-gray-700" />
+
+          {/* 編輯字幕 */}
+          <button
+            className="w-full px-4 py-2 text-sm text-left hover:bg-gray-700 flex items-center gap-2 transition"
+            onClick={() => {
+              if (contextMenu.segmentId && contextMenu.trackId) {
+                // 選中該字幕，讓右邊面板顯示
+                const track = tracks.find(t => t.id === contextMenu.trackId);
+                const segment = track?.segments.find(s => s.id === contextMenu.segmentId);
+                if (segment) {
+                  selectTrack(contextMenu.trackId);
+                  setSelectedSegmentId(contextMenu.segmentId);
+                  selectSegment(contextMenu.segmentId);
+                  seekTo(segment.startTime);
+                }
+              }
+              closeContextMenu();
+            }}
+          >
+            <Edit className="w-4 h-4" />
+            編輯字幕
+          </button>
 
           {/* 複製字幕 */}
           <button
