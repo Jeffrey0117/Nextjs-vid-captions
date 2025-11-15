@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useSubtitleStore, SubtitleSegment } from '../stores/subtitle-store';
-import { Upload, FileText, Download, Languages, Trash2, Scissors, Film, Edit3, ArrowLeftToLine, ArrowRightToLine, SplitSquareHorizontal, Copy, Snowflake, Video, Music, Type, CaptionsIcon, Blend, Settings, Plus } from 'lucide-react';
+import { Upload, FileText, Download, Languages, Trash2, Scissors, Film, Edit3, ArrowLeftToLine, ArrowRightToLine, SplitSquareHorizontal, Copy, Snowflake, Video, Music, Type, CaptionsIcon, Blend, Settings, Plus, ChevronDown, Check } from 'lucide-react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import SubtitlePropertiesPanel from '../components/SubtitlePropertiesPanel';
 import PinnedSubtitlePanel from '../components/PinnedSubtitlePanel';
@@ -133,15 +133,23 @@ export default function EditorProPage() {
     dragType: 'left' | 'right' | 'move' | null;
     segmentId: string | null;
     startMouseX: number;
+    startMouseY: number;
     startTime: { start: number; end: number };
     clickOffsetTime: number;
+    sourceTrackId: string | null;
+    targetTrackId: string | null;
+    dragDirection: 'horizontal' | 'vertical' | null;
   }>({
     isDragging: false,
     dragType: null,
     segmentId: null,
     startMouseX: 0,
+    startMouseY: 0,
     startTime: { start: 0, end: 0 },
     clickOffsetTime: 0,
+    sourceTrackId: null,
+    targetTrackId: null,
+    dragDirection: null,
   });
   const [resizeDragType, setResizeDragType] = useState<'tl' | 'tr' | 'bl' | 'br' | 'left' | 'right' | null>(null);
   const [resizeDragStart, setResizeDragStart] = useState({ x: 0, y: 0, scale: 1, maxWidth: 80 });
@@ -160,6 +168,25 @@ export default function EditorProPage() {
 
   // 拖動閾值：移動超過5px視為拖動
   const DRAG_THRESHOLD = 5;
+
+  // 右鍵菜單狀態
+  const [contextMenu, setContextMenu] = useState<{
+    show: boolean;
+    x: number;
+    y: number;
+    segmentId: string | null;
+    trackId: string | null;
+  }>({
+    show: false,
+    x: 0,
+    y: 0,
+    segmentId: null,
+    trackId: null,
+  });
+
+  // 添加字幕下拉菜单状态
+  const [showAddSubtitleMenu, setShowAddSubtitleMenu] = useState(false);
+  const addSubtitleMenuRef = useRef<HTMLDivElement>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null); // 預覽容器，用於錄製
@@ -191,7 +218,8 @@ export default function EditorProPage() {
     selectTrack,
     getAllSegments,
     loadProjectSegments,
-    loadPinnedSubtitles
+    loadPinnedSubtitles,
+    moveSegmentToTrack
   } = useSubtitleStore();
 
   // 取得當前播放的字幕 - 支持多轨道
@@ -1186,19 +1214,122 @@ export default function EditorProPage() {
     seekTo(startTime);
   };
 
-  // 新增字幕
-  const handleAddSubtitle = () => {
+  // 處理右鍵菜單
+  const handleContextMenu = (e: React.MouseEvent, segmentId: string, trackId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // 計算菜單位置，確保不超出視口
+    const menuWidth = 200;
+    const menuHeight = 300; // 預估菜單高度
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth);
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight);
+
+    setContextMenu({
+      show: true,
+      x,
+      y,
+      segmentId,
+      trackId,
+    });
+  };
+
+  // 關閉右鍵菜單
+  const closeContextMenu = () => {
+    setContextMenu({
+      show: false,
+      x: 0,
+      y: 0,
+      segmentId: null,
+      trackId: null,
+    });
+  };
+
+  // 處理移動字幕到其他軌道
+  const handleMoveToTrack = (toTrackId: string) => {
+    if (contextMenu.segmentId && contextMenu.trackId) {
+      moveSegmentToTrack(contextMenu.trackId, toTrackId, contextMenu.segmentId);
+      toast.success('字幕已移動到新軌道');
+    }
+    closeContextMenu();
+  };
+
+  // 處理刪除字幕
+  const handleDeleteFromMenu = () => {
+    if (contextMenu.segmentId) {
+      deleteSegment(contextMenu.segmentId);
+      toast.success('字幕已刪除');
+    }
+    closeContextMenu();
+  };
+
+  // 處理複製字幕
+  const handleDuplicateSegment = () => {
+    if (!contextMenu.segmentId || !contextMenu.trackId) return;
+
+    const track = tracks.find(t => t.id === contextMenu.trackId);
+    const segment = track?.segments.find(s => s.id === contextMenu.segmentId);
+
+    if (segment) {
+      // 創建副本，時間稍微偏移
+      addSegment({
+        startTime: segment.startTime + 0.5,
+        endTime: segment.endTime + 0.5,
+        text: segment.text,
+        style: { ...segment.style },
+      }, contextMenu.trackId);
+      toast.success('字幕已複製');
+    }
+    closeContextMenu();
+  };
+
+  // 點擊外部關閉菜單
+  useEffect(() => {
+    if (contextMenu.show) {
+      const handleClick = () => closeContextMenu();
+      document.addEventListener('click', handleClick);
+      return () => document.removeEventListener('click', handleClick);
+    }
+  }, [contextMenu.show]);
+
+  // 點擊外部關閉添加字幕菜單
+  useEffect(() => {
+    if (showAddSubtitleMenu) {
+      const handleClickOutside = (e: MouseEvent) => {
+        if (addSubtitleMenuRef.current && !addSubtitleMenuRef.current.contains(e.target as Node)) {
+          setShowAddSubtitleMenu(false);
+        }
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showAddSubtitleMenu]);
+
+  // 新增字幕（可指定轨道）
+  const handleAddSubtitle = (targetTrackId?: string) => {
     // 確保有軌道
     if (tracks.length === 0) {
       addTrack('字幕軌道 1');
     }
 
-    const trackId = tracks[0]?.id || selectedTrackId;
+    // 如果指定了轨道ID，使用指定的；否则使用当前选中的轨道
+    const trackId = targetTrackId || selectedTrackId || tracks[0]?.id;
+
+    // 获取目标轨道信息
+    const targetTrack = tracks.find(t => t.id === trackId);
+    const trackName = targetTrack?.name || '轨道 1';
+
+    // 检查轨道是否被锁定
+    if (targetTrack?.locked) {
+      toast.error(`無法添加：${trackName} 已被鎖定`);
+      return;
+    }
+
     const startTime = currentTime;
     const endTime = currentTime + 2; // 默認2秒
 
-    // 創建新字幕
-    const newSegment = addSegment({
+    // 創建新字幕（addSegment 返回 void，所以我们需要在添加后查找新创建的字幕）
+    addSegment({
       startTime,
       endTime,
       text: '新字幕',
@@ -1227,12 +1358,26 @@ export default function EditorProPage() {
       }
     }, trackId);
 
-    // 選中新創建的字幕
-    if (newSegment) {
-      setSelectedSegmentId(newSegment.id);
-      selectSegment(newSegment.id);
-      toast.success('已創建新字幕');
-    }
+    // 选中新创建的字幕（通过时间找到刚创建的字幕）
+    // 使用 setTimeout 确保状态已更新
+    setTimeout(() => {
+      const targetTrackObj = tracks.find(t => t.id === trackId);
+      const newSegment = targetTrackObj?.segments.find(
+        s => Math.abs(s.startTime - startTime) < 0.01 && s.text === '新字幕'
+      );
+
+      if (newSegment) {
+        setSelectedSegmentId(newSegment.id);
+        selectSegment(newSegment.id);
+      }
+
+      // 如果添加到非当前选中的轨道，自动切换选中该轨道
+      if (targetTrackId && targetTrackId !== selectedTrackId) {
+        selectTrack(targetTrackId);
+      }
+
+      toast.success(`已在 ${trackName} 創建新字幕`);
+    }, 10);
   };
 
   const handleSubtitleDragStart = (e: React.MouseEvent) => {
@@ -1461,13 +1606,14 @@ export default function EditorProPage() {
   const handleTimelineDragStart = (
     e: React.MouseEvent,
     segmentId: string,
-    dragType: 'left' | 'right' | 'move'
+    dragType: 'left' | 'right' | 'move',
+    trackId: string
   ) => {
     e.stopPropagation();
     const segment = segments.find(s => s.id === segmentId);
     if (!segment || !timelineRef.current) return;
 
-    console.log('🎯 拖拽開始:', { segmentId, dragType, startTime: segment.startTime, endTime: segment.endTime });
+    console.log('🎯 拖拽開始:', { segmentId, dragType, trackId, startTime: segment.startTime, endTime: segment.endTime });
 
     // 記錄鼠標按下位置
     setMouseDownPos({ x: e.clientX, y: e.clientY });
@@ -1488,8 +1634,12 @@ export default function EditorProPage() {
       dragType,
       segmentId,
       startMouseX: e.clientX,
+      startMouseY: e.clientY,
       startTime: { start: segment.startTime, end: segment.endTime },
       clickOffsetTime,
+      sourceTrackId: trackId,
+      targetTrackId: trackId,
+      dragDirection: null,
     });
   };
 
@@ -1499,8 +1649,12 @@ export default function EditorProPage() {
       dragType: null,
       segmentId: null,
       startMouseX: 0,
+      startMouseY: 0,
       startTime: { start: 0, end: 0 },
       clickOffsetTime: 0,
+      sourceTrackId: null,
+      targetTrackId: null,
+      dragDirection: null,
     });
   };
 
@@ -1523,6 +1677,7 @@ export default function EditorProPage() {
 
       const pixelsPerSecond = 100 * zoomLevel;
       const deltaX = e.clientX - timelineDragState.startMouseX;
+      const deltaY = e.clientY - timelineDragState.startMouseY;
       const deltaTime = deltaX / pixelsPerSecond;
 
       const segment = segments.find(s => s.id === timelineDragState.segmentId);
@@ -1534,6 +1689,72 @@ export default function EditorProPage() {
         return Math.round(time * fps) / fps;
       };
 
+      // 只在 'move' 模式下檢測拖拽方向
+      if (timelineDragState.dragType === 'move') {
+        // 檢測拖拽方向（只在首次確定方向時）
+        if (!timelineDragState.dragDirection && (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 30)) {
+          const newDirection = Math.abs(deltaY) > 30 && Math.abs(deltaY) > Math.abs(deltaX) * 2
+            ? 'vertical'
+            : 'horizontal';
+
+          console.log('🎯 拖拽方向確定:', newDirection, { deltaX, deltaY });
+
+          setTimelineDragState(prev => ({
+            ...prev,
+            dragDirection: newDirection,
+          }));
+        }
+
+        // 垂直拖拽：切換軌道
+        if (timelineDragState.dragDirection === 'vertical') {
+          // 計算當前鼠標所在的軌道
+          const tracksContainer = timelineRef.current.parentElement;
+          if (!tracksContainer) return;
+
+          const tracksRect = tracksContainer.getBoundingClientRect();
+          const relativeY = e.clientY - tracksRect.top;
+
+          // 計算軌道索引（考慮滾動）
+          const scrollTop = tracksScrollRef.current?.scrollTop || 0;
+          const adjustedY = relativeY + scrollTop;
+
+          // 找到目標軌道
+          let targetTrackIndex = -1;
+          let accumulatedHeight = 0;
+
+          for (let i = 0; i < tracks.length; i++) {
+            const trackHeight = tracks[i].height || 60;
+            if (adjustedY >= accumulatedHeight && adjustedY < accumulatedHeight + trackHeight) {
+              targetTrackIndex = i;
+              break;
+            }
+            accumulatedHeight += trackHeight;
+          }
+
+          if (targetTrackIndex >= 0 && targetTrackIndex < tracks.length) {
+            const targetTrack = tracks[targetTrackIndex];
+
+            // 更新目標軌道
+            if (timelineDragState.targetTrackId !== targetTrack.id) {
+              console.log('🔀 切換目標軌道:', {
+                from: timelineDragState.sourceTrackId,
+                to: targetTrack.id,
+                trackName: targetTrack.name
+              });
+
+              setTimelineDragState(prev => ({
+                ...prev,
+                targetTrackId: targetTrack.id,
+              }));
+            }
+          }
+
+          // 垂直拖拽時不更新時間
+          return;
+        }
+      }
+
+      // 水平拖拽：調整時間
       if (timelineDragState.dragType === 'left') {
         // 拖曳左邊緣,調整 startTime
         let newStartTime = snapTimeToFrame(Math.max(0, timelineDragState.startTime.start + deltaTime));
@@ -1548,7 +1769,7 @@ export default function EditorProPage() {
           console.log('➡️ 更新右邊緣:', { oldEnd: segment.endTime, newEnd: newEndTime });
           updateSegment(timelineDragState.segmentId!, { endTime: newEndTime });
         }
-      } else if (timelineDragState.dragType === 'move') {
+      } else if (timelineDragState.dragType === 'move' && timelineDragState.dragDirection === 'horizontal') {
         // 整體移動 (使用 clickOffsetTime 避免跳動)
         const timelineRect = timelineRef.current.getBoundingClientRect();
         const tracksScroll = tracksScrollRef.current;
@@ -1588,6 +1809,28 @@ export default function EditorProPage() {
 
     const handleMouseUp = () => {
       console.log('✋ 拖拽結束');
+
+      // 如果是垂直拖拽且切換了軌道，執行軌道切換
+      if (
+        timelineDragState.dragDirection === 'vertical' &&
+        timelineDragState.sourceTrackId &&
+        timelineDragState.targetTrackId &&
+        timelineDragState.sourceTrackId !== timelineDragState.targetTrackId &&
+        timelineDragState.segmentId
+      ) {
+        console.log('🔀 執行軌道切換:', {
+          segmentId: timelineDragState.segmentId,
+          from: timelineDragState.sourceTrackId,
+          to: timelineDragState.targetTrackId,
+        });
+
+        moveSegmentToTrack(
+          timelineDragState.sourceTrackId,
+          timelineDragState.targetTrackId,
+          timelineDragState.segmentId
+        );
+      }
+
       handleTimelineDragEnd();
     };
 
@@ -1598,7 +1841,7 @@ export default function EditorProPage() {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [timelineDragState, segments, duration, zoomLevel, updateSegment, mouseDownPos, hasMoved]);
+  }, [timelineDragState, segments, duration, zoomLevel, updateSegment, mouseDownPos, hasMoved, tracks, moveSegmentToTrack]);
 
   return (
     <>
@@ -1635,15 +1878,79 @@ export default function EditorProPage() {
           匯入 SRT
         </button>
 
-        <button
-          onClick={handleAddSubtitle}
-          disabled={!videoUrl || duration === 0}
-          className="flex items-center gap-1 px-2 py-1 bg-cyan-600 hover:bg-cyan-700 rounded transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-          title="在當前時間創建新字幕 (Ctrl+N)"
-        >
-          <Plus size={12} />
-          新增字幕
-        </button>
+        {/* 新增字幕按钮组（带下拉菜单） */}
+        <div className="relative" ref={addSubtitleMenuRef}>
+          <div className="flex items-center">
+            {/* 主按钮 - 快速添加到当前选中轨道 */}
+            <button
+              onClick={() => handleAddSubtitle()}
+              disabled={!videoUrl || duration === 0}
+              className="flex items-center gap-1 pl-2 pr-1.5 py-1 bg-cyan-600 hover:bg-cyan-700 rounded-l transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+              title={`在當前時間創建新字幕 (Ctrl+N)\n將添加到: ${tracks.find(t => t.id === selectedTrackId)?.name || tracks[0]?.name || '轨道 1'}`}
+            >
+              <Plus size={12} />
+              新增字幕
+            </button>
+
+            {/* 下拉箭头按钮 - 选择目标轨道 */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowAddSubtitleMenu(!showAddSubtitleMenu);
+              }}
+              disabled={!videoUrl || duration === 0}
+              className="px-1 py-1 bg-cyan-600 hover:bg-cyan-700 rounded-r border-l border-cyan-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+              title="選擇目標軌道"
+            >
+              <ChevronDown size={10} />
+            </button>
+          </div>
+
+          {/* 下拉菜单 */}
+          {showAddSubtitleMenu && tracks.length > 0 && (
+            <div className="absolute top-full left-0 mt-1 min-w-[180px] bg-gray-800 border border-gray-700 rounded shadow-lg z-50 py-1">
+              <div className="px-3 py-1.5 text-[0.65rem] text-gray-400 font-medium border-b border-gray-700">
+                選擇目標軌道
+              </div>
+              {tracks.map((track, index) => {
+                const isSelected = track.id === selectedTrackId;
+                const isVisible = track.visible !== false;
+                const isLocked = track.locked;
+                return (
+                  <button
+                    key={track.id}
+                    onClick={() => {
+                      if (!isLocked) {
+                        handleAddSubtitle(track.id);
+                        setShowAddSubtitleMenu(false);
+                      }
+                    }}
+                    disabled={isLocked}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 text-xs transition ${
+                      isLocked
+                        ? 'opacity-50 cursor-not-allowed'
+                        : 'hover:bg-gray-700 cursor-pointer'
+                    } ${isSelected && !isLocked ? 'bg-gray-700/50' : ''}`}
+                    title={isLocked ? `${track.name} 已被鎖定，無法添加字幕` : ''}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`${isSelected && !isLocked ? 'text-cyan-400' : isLocked ? 'text-gray-500' : 'text-gray-300'}`}>
+                        {track.name || `軌道 ${index + 1}`}
+                      </span>
+                      {!isVisible && (
+                        <span className="text-[0.6rem] text-gray-500">(隱藏)</span>
+                      )}
+                      {isLocked && (
+                        <span className="text-[0.6rem] text-yellow-500">(鎖定)</span>
+                      )}
+                    </div>
+                    {isSelected && !isLocked && <Check size={12} className="text-cyan-400" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         <button
           onClick={handleWhisperTranscribe}
@@ -1848,7 +2155,7 @@ export default function EditorProPage() {
                               <div
                                 className="bg-panel-accent relative overflow-hidden rounded-md cursor-pointer hover:bg-panel-accent/80 transition-colors"
                                 style={{ position: 'absolute', inset: '0px' }}
-                                onClick={handleAddSubtitle}
+                                onClick={() => handleAddSubtitle()}
                                 title="點擊新增字幕"
                               >
                                 <div className="flex items-center justify-center w-full h-full bg-panel-accent rounded">
@@ -2707,8 +3014,13 @@ export default function EditorProPage() {
                                 style={{ height: `${track.height}px` }}
                               >
                                 <div
-                                  className={`w-full h-full hover:bg-gray-800/20 relative ${
+                                  className={`w-full h-full hover:bg-gray-800/20 relative transition-all ${
                                     selectedTrackId === track.id ? 'bg-gray-800/10' : ''
+                                  } ${
+                                    timelineDragState.dragDirection === 'vertical' &&
+                                    timelineDragState.targetTrackId === track.id
+                                      ? 'bg-blue-500/20 border-2 border-dashed border-blue-400'
+                                      : ''
                                   }`}
                                   onClick={() => selectTrack(track.id)}
                                 >
@@ -2737,7 +3049,7 @@ export default function EditorProPage() {
                                           {/* 左邊緣拖曳手柄 - OpenCut 風格 */}
                                           <div
                                             className="absolute left-0 top-0 bottom-0 w-[0.6rem] cursor-w-resize bg-primary z-50 flex items-center justify-center hover:bg-primary/80 transition"
-                                            onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'left')}
+                                            onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'left', track.id)}
                                             onClick={(e) => e.stopPropagation()}
                                           >
                                             {isSelected && (
@@ -2745,10 +3057,14 @@ export default function EditorProPage() {
                                             )}
                                           </div>
 
-                                          {/* 中間區域:點擊選中,拖曳移動,雙擊打開調整面板 */}
+                                          {/* 中間區域:點擊選中,拖曳移動,雙擊打開調整面板,右鍵菜單 */}
                                           <div
-                                            className="h-full flex items-center px-2 cursor-move"
-                                            onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'move')}
+                                            className={`h-full flex items-center px-2 ${
+                                              timelineDragState.dragDirection === 'vertical' && timelineDragState.segmentId === segment.id
+                                                ? 'cursor-grabbing opacity-50'
+                                                : 'cursor-move'
+                                            }`}
+                                            onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'move', track.id)}
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               // 只有沒有拖拽才觸發點擊
@@ -2766,6 +3082,7 @@ export default function EditorProPage() {
                                                 setShowTimelineAdjust(true);
                                               }
                                             }}
+                                            onContextMenu={(e) => handleContextMenu(e, segment.id, track.id)}
                                           >
                                             <span className="text-[0.65rem] text-white truncate flex-1" title={segment.text}>
                                               {segment.text}
@@ -2775,7 +3092,7 @@ export default function EditorProPage() {
                                           {/* 右邊緣拖曳手柄 - OpenCut 風格 */}
                                           <div
                                             className="absolute right-0 top-0 bottom-0 w-[0.6rem] cursor-e-resize bg-primary z-50 flex items-center justify-center hover:bg-primary/80 transition"
-                                            onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'right')}
+                                            onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'right', track.id)}
                                             onClick={(e) => e.stopPropagation()}
                                           >
                                             {isSelected && (
@@ -2904,6 +3221,60 @@ export default function EditorProPage() {
           />
         );
       })()}
+
+      {/* 右鍵菜單 */}
+      {contextMenu.show && (
+        <div
+          className="fixed z-[9999] bg-gray-800 border border-gray-700 rounded-lg shadow-xl py-1 min-w-[180px]"
+          style={{
+            left: `${contextMenu.x}px`,
+            top: `${contextMenu.y}px`,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* 移動到軌道選項 */}
+          <div className="px-2 py-1.5 text-xs text-gray-400 font-semibold">移動到軌道</div>
+          {tracks.map((track) => (
+            <button
+              key={track.id}
+              className="w-full px-4 py-2 text-sm text-left hover:bg-gray-700 flex items-center justify-between transition"
+              onClick={() => handleMoveToTrack(track.id)}
+            >
+              <span className="flex items-center gap-2">
+                <div
+                  className="w-3 h-3 rounded-sm"
+                  style={{ backgroundColor: track.color }}
+                />
+                {track.name}
+              </span>
+              {contextMenu.trackId === track.id && (
+                <span className="text-blue-500">✓</span>
+              )}
+            </button>
+          ))}
+
+          {/* 分隔線 */}
+          <div className="my-1 border-t border-gray-700" />
+
+          {/* 複製字幕 */}
+          <button
+            className="w-full px-4 py-2 text-sm text-left hover:bg-gray-700 flex items-center gap-2 transition"
+            onClick={handleDuplicateSegment}
+          >
+            <Copy className="w-4 h-4" />
+            複製字幕
+          </button>
+
+          {/* 刪除字幕 */}
+          <button
+            className="w-full px-4 py-2 text-sm text-left hover:bg-red-900/30 text-red-400 flex items-center gap-2 transition"
+            onClick={handleDeleteFromMenu}
+          >
+            <Trash2 className="w-4 h-4" />
+            刪除字幕
+          </button>
+        </div>
+      )}
     </div>
     </>
   );
