@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { useSubtitleStore } from '../stores/subtitle-store';
+import { useSubtitleStore, SubtitleSegment } from '../stores/subtitle-store';
 import { Upload, FileText, Download, Languages, Trash2, Scissors, Film, Edit3, ArrowLeftToLine, ArrowRightToLine, SplitSquareHorizontal, Copy, Snowflake, Video, Music, Type, CaptionsIcon, Blend, Settings, Plus } from 'lucide-react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import SubtitlePropertiesPanel from '../components/SubtitlePropertiesPanel';
@@ -187,32 +187,38 @@ export default function EditorProPage() {
     deleteSegment,
     addTrack,
     deleteTrack,
+    updateTrack,
     selectTrack,
     getAllSegments,
     loadProjectSegments,
     loadPinnedSubtitles
   } = useSubtitleStore();
 
-  // 取得當前播放的字幕 (使用 useMemo 確保響應 currentTime 和 tracks 變化)
-  const currentSubtitle = useMemo(() => {
-    const allVisibleSegments = tracks[0]?.segments || [];
-    console.log('🔍 字幕檢查:', {
-      currentTime: currentTime.toFixed(2),
-      segmentsCount: allVisibleSegments.length,
-      firstSegment: allVisibleSegments[0] ? {
-        startTime: allVisibleSegments[0].startTime,
-        endTime: allVisibleSegments[0].endTime,
-        text: allVisibleSegments[0].text
-      } : null
+  // 取得當前播放的字幕 - 支持多轨道
+  const currentSubtitles = useMemo(() => {
+    const result: { [trackId: string]: SubtitleSegment } = {};
+
+    tracks.forEach(track => {
+      if (!track.visible || track.muted) return;
+
+      const found = track.segments.find(
+        seg => currentTime >= seg.startTime && currentTime <= seg.endTime
+      );
+
+      if (found) {
+        result[track.id] = found;
+      }
     });
-    const found = allVisibleSegments.find(
-      seg => currentTime >= seg.startTime && currentTime <= seg.endTime
-    );
-    if (found) {
-      console.log('✅ 找到當前字幕:', found.text);
-    }
-    return found;
+
+    return result;
   }, [currentTime, tracks]);
+
+  // 向后兼容：获取第一条轨道的当前字幕
+  const currentSubtitle = useMemo(() => {
+    const track0 = tracks[0];
+    if (!track0) return undefined;
+    return currentSubtitles[track0.id];
+  }, [currentSubtitles, tracks]);
 
   // 自動選中當前播放的字幕
   useEffect(() => {
@@ -1904,147 +1910,147 @@ export default function EditorProPage() {
                       </div>
                     )}
 
-                    {/* 字幕疊加層 */}
-                    {currentSubtitle && (
-                      <div
-                        className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                      >
+                    {/* 字幕疊加層 - 支持多轨道 */}
+                    {Object.entries(currentSubtitles).map(([trackId, subtitle]) => {
+                      const track = tracks.find(t => t.id === trackId);
+                      if (!track || !track.visible || track.muted) return null;
+
+                      // 只有选中的字幕才显示拖拽手柄
+                      const isCurrentSubtitleSelected = selectedSegmentId === subtitle.id;
+
+                      return (
                         <div
-                          className="absolute pointer-events-auto"
-                          style={{
-                            top: `${currentSubtitle.style.positionY}%`,
-                            left: `${currentSubtitle.style.positionX}%`,
-                            transform: 'translate(-50%, -50%)',
-                          }}
+                          key={trackId}
+                          className="absolute inset-0 flex items-center justify-center pointer-events-none"
                         >
-                          {/* 可拖曳縮放的容器 */}
                           <div
-                            className="relative inline-block"
+                            className="absolute pointer-events-auto"
                             style={{
-                              maxWidth: `${currentSubtitle.style.maxWidth}vw`,
-                              pointerEvents: 'auto',
+                              top: `${subtitle.style.positionY}%`,
+                              left: `${subtitle.style.positionX}%`,
+                              transform: 'translate(-50%, -50%)',
                             }}
                           >
-                            {/* 字幕內容 */}
+                            {/* 可拖曳縮放的容器 */}
                             <div
-                              className="rounded"
+                              className="relative inline-block"
                               style={{
-                                backgroundColor: currentSubtitle.style.backgroundColor,
-                                opacity: currentSubtitle.style.opacity,
-                                transform: `scale(${currentSubtitle.style.scale})`,
-                                transformOrigin: 'center',
-                                cursor: isDragging ? 'grabbing' : 'grab',
-                                wordWrap: 'break-word',
-                                whiteSpace: 'pre-wrap',
-                                // padding 和 borderRadius 也需要相對縮放
-                                padding: `${(8 / 1080) * videoDisplaySize.height}px ${(16 / 1080) * videoDisplaySize.height}px`,
-                                borderRadius: `${(4 / 1080) * videoDisplaySize.height}px`,
+                                maxWidth: `${subtitle.style.maxWidth}vw`,
+                                pointerEvents: 'auto',
                               }}
-                              onMouseDown={handleSubtitleDragStart}
                             >
-                              <p
-                                className="text-center"
+                              {/* 字幕內容 */}
+                              <div
+                                className="rounded"
                                 style={{
-                                  // 字幕大小 = (fontSize * scale / 1080) * 實際影片高度
-                                  // 包含 scale 的效果,確保與 ASS 輸出完全一致
-                                  fontSize: `${(currentSubtitle.style.fontSize * currentSubtitle.style.scale / 1080) * videoDisplaySize.height}px`,
-                                  fontFamily: currentSubtitle.style.fontFamily,
-                                  fontWeight: currentSubtitle.style.fontWeight,
-                                  fontStyle: currentSubtitle.style.fontStyle,
-                                  textDecoration: currentSubtitle.style.textDecoration,
-                                  color: currentSubtitle.style.color,
+                                  backgroundColor: subtitle.style.backgroundColor,
+                                  opacity: subtitle.style.opacity,
+                                  transform: `scale(${subtitle.style.scale})`,
+                                  transformOrigin: 'center',
+                                  cursor: isDragging ? 'grabbing' : 'grab',
+                                  wordWrap: 'break-word',
                                   whiteSpace: 'pre-wrap',
-                                  textShadow: (() => {
-                                    const shadows: string[] = [];
-
-                                    // Add stroke effect using multiple shadows
-                                    if (currentSubtitle.style.enableStroke) {
-                                      const strokeWidth = (currentSubtitle.style.strokeWidth / 1080) * videoDisplaySize.height;
-                                      const steps = 16;
-
-                                      for (let i = 0; i < steps; i++) {
-                                        const angle = (i * 2 * Math.PI) / steps;
-                                        const x = Math.cos(angle) * strokeWidth;
-                                        const y = Math.sin(angle) * strokeWidth;
-                                        shadows.push(`${x}px ${y}px 0 ${currentSubtitle.style.strokeColor}`);
-                                      }
-                                    }
-
-                                    // Add drop shadow
-                                    if (currentSubtitle.style.enableShadow) {
-                                      const shadowX = (currentSubtitle.style.shadowOffsetX / 1080) * videoDisplaySize.height;
-                                      const shadowY = (currentSubtitle.style.shadowOffsetY / 1080) * videoDisplaySize.height;
-                                      const shadowBlur = (currentSubtitle.style.shadowBlur / 1080) * videoDisplaySize.height;
-                                      shadows.push(`${shadowX}px ${shadowY}px ${shadowBlur}px ${currentSubtitle.style.shadowColor}`);
-                                    }
-
-                                    return shadows.length > 0 ? shadows.join(', ') : 'none';
-                                  })(),
+                                  padding: `${(8 / 1080) * videoDisplaySize.height}px ${(16 / 1080) * videoDisplaySize.height}px`,
+                                  borderRadius: `${(4 / 1080) * videoDisplaySize.height}px`,
                                 }}
+                                onMouseDown={isCurrentSubtitleSelected ? handleSubtitleDragStart : undefined}
                               >
-                                {(() => {
-                                  // 計算實際的最大寬度（像素）
-                                  // maxWidth 是相對於影片寬度的百分比
-                                  const containerWidthPx = (currentSubtitle.style.maxWidth / 100) * videoDisplaySize.width;
-                                  // 減去 padding（左右各 16px * 縮放係數）
-                                  const paddingPx = (16 / 1080) * videoDisplaySize.height * 2;
-                                  const actualMaxWidth = containerWidthPx - paddingPx;
+                                <p
+                                  className="text-center"
+                                  style={{
+                                    fontSize: `${(subtitle.style.fontSize * subtitle.style.scale / 1080) * videoDisplaySize.height}px`,
+                                    fontFamily: subtitle.style.fontFamily,
+                                    fontWeight: subtitle.style.fontWeight,
+                                    fontStyle: subtitle.style.fontStyle,
+                                    textDecoration: subtitle.style.textDecoration,
+                                    color: subtitle.style.color,
+                                    whiteSpace: 'pre-wrap',
+                                    textShadow: (() => {
+                                      const shadows: string[] = [];
 
-                                  // 計算實際字體大小
-                                  const actualFontSize = (currentSubtitle.style.fontSize * currentSubtitle.style.scale / 1080) * videoDisplaySize.height;
+                                      if (subtitle.style.enableStroke) {
+                                        const strokeWidth = (subtitle.style.strokeWidth / 1080) * videoDisplaySize.height;
+                                        const steps = 16;
 
-                                  // 使用基於寬度的智能換行
-                                  return wrapSubtitleTextByWidth(
-                                    currentSubtitle.translatedText || currentSubtitle.text,
-                                    actualMaxWidth,
-                                    actualFontSize,
-                                    currentSubtitle.style.fontFamily,
-                                    currentSubtitle.style.fontWeight,
-                                    currentSubtitle.style.fontStyle
-                                  );
-                                })()}
-                              </p>
-                            </div>
+                                        for (let i = 0; i < steps; i++) {
+                                          const angle = (i * 2 * Math.PI) / steps;
+                                          const x = Math.cos(angle) * strokeWidth;
+                                          const y = Math.sin(angle) * strokeWidth;
+                                          shadows.push(`${x}px ${y}px 0 ${subtitle.style.strokeColor}`);
+                                        }
+                                      }
 
-                            {/* 邊框和手柄容器 - 不受 scale 影響 */}
-                            <div className="absolute inset-0 pointer-events-none">
-                              {/* 虛線邊框 */}
-                              <div className="absolute inset-0 border-2 border-dashed border-white/40" />
+                                      if (subtitle.style.enableShadow) {
+                                        const shadowX = (subtitle.style.shadowOffsetX / 1080) * videoDisplaySize.height;
+                                        const shadowY = (subtitle.style.shadowOffsetY / 1080) * videoDisplaySize.height;
+                                        const shadowBlur = (subtitle.style.shadowBlur / 1080) * videoDisplaySize.height;
+                                        shadows.push(`${shadowX}px ${shadowY}px ${shadowBlur}px ${subtitle.style.shadowColor}`);
+                                      }
 
-                              {/* 四個角的縮放手柄 - 固定大小 */}
-                              <div
-                                className="absolute -top-2 -left-2 w-4 h-4 bg-white rounded-full cursor-nwse-resize z-20 pointer-events-auto hover:scale-125 transition-transform"
-                                onMouseDown={(e) => handleResizeDragStart(e, 'tl')}
-                              />
-                              <div
-                                className="absolute -top-2 -right-2 w-4 h-4 bg-white rounded-full cursor-nesw-resize z-20 pointer-events-auto hover:scale-125 transition-transform"
-                                onMouseDown={(e) => handleResizeDragStart(e, 'tr')}
-                              />
-                              <div
-                                className="absolute -bottom-2 -left-2 w-4 h-4 bg-white rounded-full cursor-nesw-resize z-20 pointer-events-auto hover:scale-125 transition-transform"
-                                onMouseDown={(e) => handleResizeDragStart(e, 'bl')}
-                              />
-                              <div
-                                className="absolute -bottom-2 -right-2 w-4 h-4 bg-white rounded-full cursor-nwse-resize z-20 pointer-events-auto hover:scale-125 transition-transform"
-                                onMouseDown={(e) => handleResizeDragStart(e, 'br')}
-                              />
+                                      return shadows.length > 0 ? shadows.join(', ') : 'none';
+                                    })(),
+                                  }}
+                                >
+                                  {(() => {
+                                    const containerWidthPx = (subtitle.style.maxWidth / 100) * videoDisplaySize.width;
+                                    const paddingPx = (16 / 1080) * videoDisplaySize.height * 2;
+                                    const actualMaxWidth = containerWidthPx - paddingPx;
+                                    const actualFontSize = (subtitle.style.fontSize * subtitle.style.scale / 1080) * videoDisplaySize.height;
 
-                              {/* 左右兩側的寬度調整手柄 - 固定大小 */}
-                              <div
-                                className="absolute top-1/2 -left-2 w-4 h-10 bg-blue-500 rounded cursor-ew-resize z-20 pointer-events-auto hover:bg-blue-400 transition-colors"
-                                style={{ transform: 'translateY(-50%)' }}
-                                onMouseDown={(e) => handleResizeDragStart(e, 'left')}
-                              />
-                              <div
-                                className="absolute top-1/2 -right-2 w-4 h-10 bg-blue-500 rounded cursor-ew-resize z-20 pointer-events-auto hover:bg-blue-400 transition-colors"
-                                style={{ transform: 'translateY(-50%)' }}
-                                onMouseDown={(e) => handleResizeDragStart(e, 'right')}
-                              />
+                                    return wrapSubtitleTextByWidth(
+                                      subtitle.translatedText || subtitle.text,
+                                      actualMaxWidth,
+                                      actualFontSize,
+                                      subtitle.style.fontFamily,
+                                      subtitle.style.fontWeight,
+                                      subtitle.style.fontStyle
+                                    );
+                                  })()}
+                                </p>
+                              </div>
+
+                              {/* 邊框和手柄容器 - 只在选中时显示 */}
+                              {isCurrentSubtitleSelected && (
+                                <div className="absolute inset-0 pointer-events-none">
+                                  {/* 虛線邊框 */}
+                                  <div className="absolute inset-0 border-2 border-dashed border-white/40" />
+
+                                  {/* 四個角的縮放手柄 - 固定大小 */}
+                                  <div
+                                    className="absolute -top-2 -left-2 w-4 h-4 bg-white rounded-full cursor-nwse-resize z-20 pointer-events-auto hover:scale-125 transition-transform"
+                                    onMouseDown={(e) => handleResizeDragStart(e, 'tl')}
+                                  />
+                                  <div
+                                    className="absolute -top-2 -right-2 w-4 h-4 bg-white rounded-full cursor-nesw-resize z-20 pointer-events-auto hover:scale-125 transition-transform"
+                                    onMouseDown={(e) => handleResizeDragStart(e, 'tr')}
+                                  />
+                                  <div
+                                    className="absolute -bottom-2 -left-2 w-4 h-4 bg-white rounded-full cursor-nesw-resize z-20 pointer-events-auto hover:scale-125 transition-transform"
+                                    onMouseDown={(e) => handleResizeDragStart(e, 'bl')}
+                                  />
+                                  <div
+                                    className="absolute -bottom-2 -right-2 w-4 h-4 bg-white rounded-full cursor-nwse-resize z-20 pointer-events-auto hover:scale-125 transition-transform"
+                                    onMouseDown={(e) => handleResizeDragStart(e, 'br')}
+                                  />
+
+                                  {/* 左右兩側的寬度調整手柄 - 固定大小 */}
+                                  <div
+                                    className="absolute top-1/2 -left-2 w-4 h-10 bg-blue-500 rounded cursor-ew-resize z-20 pointer-events-auto hover:bg-blue-400 transition-colors"
+                                    style={{ transform: 'translateY(-50%)' }}
+                                    onMouseDown={(e) => handleResizeDragStart(e, 'left')}
+                                  />
+                                  <div
+                                    className="absolute top-1/2 -right-2 w-4 h-10 bg-blue-500 rounded cursor-ew-resize z-20 pointer-events-auto hover:bg-blue-400 transition-colors"
+                                    style={{ transform: 'translateY(-50%)' }}
+                                    onMouseDown={(e) => handleResizeDragStart(e, 'right')}
+                                  />
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })}
 
                     {/* 固定字幕渲染 */}
                     {pinnedSubtitles.filter(p => p.enabled).map(pinned => (
@@ -2296,11 +2302,16 @@ export default function EditorProPage() {
                             return;
                           }
 
-                          // 從第一個軌道獲取字幕（修復 segments 為空的問題）
-                          const allSegments = tracks[0]?.segments || [];
-                          console.log('所有字幕:', allSegments);
+                          // 从所有轨道中查找要删除的字幕
+                          let segmentToDelete = null;
+                          for (const track of tracks) {
+                            const segment = track.segments.find(s => s.id === selectedSegmentId);
+                            if (segment) {
+                              segmentToDelete = segment;
+                              break;
+                            }
+                          }
 
-                          const segmentToDelete = allSegments.find(s => s.id === selectedSegmentId);
                           console.log('要删除的字幕:', segmentToDelete);
 
                           if (segmentToDelete && window.confirm(`確定要刪除字幕「${segmentToDelete.text}」嗎?`)) {
@@ -2502,13 +2513,66 @@ export default function EditorProPage() {
                       >
                         <div className="overflow-auto scrollbar-thin w-full h-full" id="track-labels-scroll">
                           <div className="flex flex-col gap-1">
-                            {/* 字幕軌道標籤 */}
+                            {/* 渲染所有轨道标签 */}
+                            {tracks.map((track, index) => (
+                              <div
+                                key={track.id}
+                                className={`flex items-center px-2 group cursor-pointer border-l-2 transition ${
+                                  selectedTrackId === track.id
+                                    ? 'border-blue-500 bg-gray-800/50'
+                                    : 'border-transparent hover:bg-gray-800/30'
+                                }`}
+                                style={{ height: `${track.height}px` }}
+                                onClick={() => selectTrack(track.id)}
+                                title={`点击选择轨道: ${track.name}`}
+                              >
+                                <div className="flex items-center justify-between flex-1 min-w-0 gap-1">
+                                  <span className="text-[0.65rem] text-gray-400 truncate" title={track.name}>
+                                    {track.name}
+                                  </span>
+                                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
+                                    {/* 显示/隐藏按钮 */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        updateTrack(track.id, { visible: !track.visible });
+                                      }}
+                                      className="w-4 h-4 flex items-center justify-center rounded hover:bg-gray-700"
+                                      title={track.visible ? '隐藏轨道' : '显示轨道'}
+                                    >
+                                      {track.visible ? (
+                                        <svg className="w-3 h-3 text-gray-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                                          <circle cx="12" cy="12" r="3" />
+                                        </svg>
+                                      ) : (
+                                        <svg className="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                          <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+                                          <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+                                          <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+                                          <line x1="2" x2="22" y1="2" y2="22" />
+                                        </svg>
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+
+                            {/* 添加新轨道按钮 */}
                             <div
-                              className="flex items-center px-2 group"
-                              style={{ height: '60px' }}
+                              className="flex items-center px-2 cursor-pointer hover:bg-gray-800/30 transition"
+                              style={{ height: '40px' }}
+                              onClick={() => {
+                                const trackCount = tracks.length;
+                                addTrack(`字幕轨道 ${trackCount + 1}`);
+                                toast.success(`已添加轨道 ${trackCount + 1}`);
+                              }}
+                              title="添加新轨道"
                             >
-                              <div className="flex items-center justify-end flex-1 min-w-0 gap-1">
-                                <span className="text-[0.65rem] text-gray-400">字幕</span>
+                              <div className="flex items-center justify-center flex-1 gap-1">
+                                <Plus className="w-3 h-3 text-gray-500" />
+                                <span className="text-[0.65rem] text-gray-500">添加轨道</span>
                               </div>
                             </div>
                           </div>
@@ -2583,9 +2647,9 @@ export default function EditorProPage() {
                         >
                           <div
                             ref={timelineRef}
-                            className="relative flex-1 cursor-pointer"
+                            className="relative flex-1 cursor-pointer flex flex-col gap-1"
                             style={{
-                              height: '60px',
+                              height: `${tracks.reduce((sum, track) => sum + track.height, 0) + (tracks.length + 1) * 40}px`,
                               width: `${Math.max(duration * 100 * zoomLevel, 1500)}px`,
                             }}
                             onMouseDown={(e) => {
@@ -2634,91 +2698,101 @@ export default function EditorProPage() {
                                 timelineRef={timelineContentRef}
                               />
                             )}
-                            
-                            {/* 字幕軌道 - 整個區域填滿並可點擊 */}
-                            <div
-                              className="absolute left-0 right-0 top-0 bottom-0"
-                            >
+
+                            {/* 渲染所有轨道 */}
+                            {tracks.map((track, trackIndex) => (
                               <div
-                                className="w-full h-full hover:bg-gray-800/20 relative"
+                                key={track.id}
+                                className={`relative ${track.visible ? '' : 'opacity-30'}`}
+                                style={{ height: `${track.height}px` }}
                               >
-                                {/* 字幕片段 */}
-                                {tracks.length > 0 && tracks[0].segments.map((segment) => {
-                                    const left = segment.startTime * 100 * zoomLevel;
-                                    const width = (segment.endTime - segment.startTime) * 100 * zoomLevel;
-                                    const isSelected = selectedSegmentId === segment.id;
-                                    
-                                    return (
-                                      <div
-                                        key={segment.id}
-                                        data-segment-id={segment.id}
-                                        className={`absolute top-4 h-8 rounded border-2 transition-all duration-200 group ${
-                                          isSelected
-                                            ? 'bg-[#5DBAA0] border-blue-500 shadow-lg shadow-blue-500/30'
-                                            : 'bg-[#5DBAA0] hover:bg-[#4da890] border-[#5DBAA0] hover:border-[#4da890]'
-                                        }`}
-                                        style={{
-                                          left: `${left}px`,
-                                          width: `${Math.max(width, 80)}px`,
-                                        }}
-                                      >
-                                        {/* 左邊緣拖曳手柄 - OpenCut 風格 */}
+                                <div
+                                  className={`w-full h-full hover:bg-gray-800/20 relative ${
+                                    selectedTrackId === track.id ? 'bg-gray-800/10' : ''
+                                  }`}
+                                  onClick={() => selectTrack(track.id)}
+                                >
+                                  {/* 字幕片段 */}
+                                  {track.segments.map((segment) => {
+                                      const left = segment.startTime * 100 * zoomLevel;
+                                      const width = (segment.endTime - segment.startTime) * 100 * zoomLevel;
+                                      const isSelected = selectedSegmentId === segment.id;
+
+                                      return (
                                         <div
-                                          className="absolute left-0 top-0 bottom-0 w-[0.6rem] cursor-w-resize bg-primary z-50 flex items-center justify-center hover:bg-primary/80 transition"
-                                          onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'left')}
-                                          onClick={(e) => e.stopPropagation()}
-                                        >
-                                          {isSelected && (
-                                            <div className="w-[0.2rem] h-[1.5rem] bg-foreground/75 rounded-full" />
-                                          )}
-                                        </div>
-                                        
-                                        {/* 中間區域:點擊選中,拖曳移動,雙擊打開調整面板 */}
-                                        <div
-                                          className="h-full flex items-center px-2 cursor-move"
-                                          onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'move')}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            // 只有沒有拖拽才觸發點擊
-                                            if (!hasMoved) {
-                                              handleSegmentClick(segment.id, segment.startTime);
-                                            }
-                                          }}
-                                          onDoubleClick={(e) => {
-                                            e.stopPropagation();
-                                            // 只有沒有拖拽才觸發雙擊
-                                            if (!hasMoved) {
-                                              console.log('🖱️ 雙擊字幕條（中間區域），打開調整面板');
-                                              setAdjustingSegmentId(segment.id);
-                                              setShowTimelineAdjust(true);
-                                            }
+                                          key={segment.id}
+                                          data-segment-id={segment.id}
+                                          className={`absolute top-4 h-8 rounded border-2 transition-all duration-200 group ${
+                                            isSelected
+                                              ? 'border-blue-500 shadow-lg shadow-blue-500/30'
+                                              : 'hover:border-opacity-80 border-opacity-60'
+                                          }`}
+                                          style={{
+                                            left: `${left}px`,
+                                            width: `${Math.max(width, 80)}px`,
+                                            backgroundColor: track.color,
+                                            borderColor: isSelected ? '#3b82f6' : track.color,
                                           }}
                                         >
-                                          <span className="text-[0.65rem] text-white truncate flex-1" title={segment.text}>
-                                            {segment.text}
-                                          </span>
+                                          {/* 左邊緣拖曳手柄 - OpenCut 風格 */}
+                                          <div
+                                            className="absolute left-0 top-0 bottom-0 w-[0.6rem] cursor-w-resize bg-primary z-50 flex items-center justify-center hover:bg-primary/80 transition"
+                                            onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'left')}
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            {isSelected && (
+                                              <div className="w-[0.2rem] h-[1.5rem] bg-foreground/75 rounded-full" />
+                                            )}
+                                          </div>
+
+                                          {/* 中間區域:點擊選中,拖曳移動,雙擊打開調整面板 */}
+                                          <div
+                                            className="h-full flex items-center px-2 cursor-move"
+                                            onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'move')}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              // 只有沒有拖拽才觸發點擊
+                                              if (!hasMoved) {
+                                                handleSegmentClick(segment.id, segment.startTime);
+                                                selectTrack(track.id);
+                                              }
+                                            }}
+                                            onDoubleClick={(e) => {
+                                              e.stopPropagation();
+                                              // 只有沒有拖拽才觸發雙擊
+                                              if (!hasMoved) {
+                                                console.log('🖱️ 雙擊字幕條（中間區域），打開調整面板');
+                                                setAdjustingSegmentId(segment.id);
+                                                setShowTimelineAdjust(true);
+                                              }
+                                            }}
+                                          >
+                                            <span className="text-[0.65rem] text-white truncate flex-1" title={segment.text}>
+                                              {segment.text}
+                                            </span>
+                                          </div>
+
+                                          {/* 右邊緣拖曳手柄 - OpenCut 風格 */}
+                                          <div
+                                            className="absolute right-0 top-0 bottom-0 w-[0.6rem] cursor-e-resize bg-primary z-50 flex items-center justify-center hover:bg-primary/80 transition"
+                                            onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'right')}
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            {isSelected && (
+                                              <div className="w-[0.2rem] h-[1.5rem] bg-foreground/75 rounded-full" />
+                                            )}
+                                          </div>
+
+                                          {/* 時間提示 */}
+                                          <div className="absolute -top-5 left-0 bg-gray-800 text-[0.65rem] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
+                                            {formatTime(segment.startTime)} - {formatTime(segment.endTime)}
+                                          </div>
                                         </div>
-                                        
-                                        {/* 右邊緣拖曳手柄 - OpenCut 風格 */}
-                                        <div
-                                          className="absolute right-0 top-0 bottom-0 w-[0.6rem] cursor-e-resize bg-primary z-50 flex items-center justify-center hover:bg-primary/80 transition"
-                                          onMouseDown={(e) => handleTimelineDragStart(e, segment.id, 'right')}
-                                          onClick={(e) => e.stopPropagation()}
-                                        >
-                                          {isSelected && (
-                                            <div className="w-[0.2rem] h-[1.5rem] bg-foreground/75 rounded-full" />
-                                          )}
-                                        </div>
-                                        
-                                        {/* 時間提示 */}
-                                        <div className="absolute -top-5 left-0 bg-gray-800 text-[0.65rem] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
-                                          {formatTime(segment.startTime)} - {formatTime(segment.endTime)}
-                                        </div>
-                                      </div>
-                                  );
-                                })}
+                                    );
+                                  })}
+                                </div>
                               </div>
-                            </div>
+                            ))}
                           </div>
                         </div>
                       </div>

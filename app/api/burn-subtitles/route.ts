@@ -16,6 +16,10 @@ export async function POST(request: Request) {
     const pinnedSubtitlesJson = formData.get("pinnedSubtitles") as string; // 新增：固定字幕
     const renderMethod = formData.get("renderMethod") as string || "ass"; // 新增：渲染方法選擇
 
+    // 新增：支持双字幕轨道
+    const primarySubtitlesJson = formData.get("primarySubtitles") as string; // 主字幕（原文）
+    const secondarySubtitlesJson = formData.get("secondarySubtitles") as string; // 次字幕（翻译）
+
     if ((!videoFile && !videoPath) || !subtitlesJson) {
       return NextResponse.json(
         { error: "Missing video or subtitles" },
@@ -27,6 +31,23 @@ export async function POST(request: Request) {
 
     const subtitles = JSON.parse(subtitlesJson);
     const pinnedSubtitles = pinnedSubtitlesJson ? JSON.parse(pinnedSubtitlesJson) : [];
+
+    // 解析双字幕轨道（如果提供）
+    const primarySubtitles = primarySubtitlesJson ? JSON.parse(primarySubtitlesJson) : null;
+    const secondarySubtitles = secondarySubtitlesJson ? JSON.parse(secondarySubtitlesJson) : null;
+
+    // 日志输出
+    if (primarySubtitles && secondarySubtitles) {
+      console.log("📽️ Dual subtitle mode enabled");
+      console.log("  Primary subtitles:", primarySubtitles.length, "segments");
+      console.log("  Secondary subtitles:", secondarySubtitles.length, "segments");
+    } else {
+      console.log("📽️ Single subtitle mode");
+      console.log("  Subtitles:", subtitles.length, "segments");
+    }
+    if (pinnedSubtitles.length > 0) {
+      console.log("  Pinned subtitles:", pinnedSubtitles.length);
+    }
 
     // 創建臨時目錄
     const tempDir = path.join(process.cwd(), "public", "temp");
@@ -54,7 +75,10 @@ export async function POST(request: Request) {
     }
 
     // 生成 ASS 字幕檔（包含固定字幕）
-    const assContent = generateAssSubtitle(subtitles, pinnedSubtitles);
+    // 如果提供了双字幕轨道，使用双轨道模式；否则使用传统单轨道模式
+    const assContent = (primarySubtitles && secondarySubtitles)
+      ? generateAssSubtitle(primarySubtitles, pinnedSubtitles, secondarySubtitles)
+      : generateAssSubtitle(subtitles, pinnedSubtitles);
     const assFileName = `subtitle_${Date.now()}.ass`;
     const assPath = path.join(tempDir, assFileName);
     await fs.promises.writeFile(assPath, assContent, "utf-8");
