@@ -3568,8 +3568,10 @@ export default function EditorProPage() {
                                                   wasAlreadySelected: selectedSegmentId === segment.id,
                                                 });
 
-                                                handleSegmentClick(segment.id, segment.startTime);
+                                                // 【修復】先選軌道，確保後續選字幕時在正確的軌道上下文
                                                 selectTrack(finalTrackId);
+                                                // 然後選中字幕並跳轉時間
+                                                handleSegmentClick(segment.id, segment.startTime);
                                               }
                                             }}
                                             onDoubleClick={(e) => {
