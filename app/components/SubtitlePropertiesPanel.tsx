@@ -3,7 +3,7 @@
 import { useSubtitleStore, SubtitleSegment, SubtitleTrack } from '../stores/subtitle-store';
 import { HexColorPicker } from 'react-colorful';
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Type, Bold, Italic, Underline, Strikethrough, Palette, Eye, Square, Save, X, Plus, ArrowUp, ArrowRight, ArrowDown, ArrowLeft, ChevronDown, ChevronRight, Scissors, Layers } from 'lucide-react';
+import { Type, Bold, Italic, Underline, Strikethrough, Palette, Eye, Square, Save, X, Plus, ArrowUp, ArrowRight, ArrowDown, ArrowLeft, ChevronDown, ChevronRight, Scissors, Layers, Trash2 } from 'lucide-react';
 import { useClickOutside } from '../hooks/useClickOutside';
 
 interface SubtitlePropertiesPanelProps {
@@ -12,6 +12,7 @@ interface SubtitlePropertiesPanelProps {
   setApplyToAll: (value: boolean) => void;
   currentTrack?: SubtitleTrack | null;
   segmentIndex?: number;
+  onDelete?: () => void;
 }
 
 export default function SubtitlePropertiesPanel({
@@ -19,9 +20,10 @@ export default function SubtitlePropertiesPanel({
   applyToAll,
   setApplyToAll,
   currentTrack,
-  segmentIndex
+  segmentIndex,
+  onDelete
 }: SubtitlePropertiesPanelProps) {
-  const { tracks, updateSegment, splitSegment } = useSubtitleStore();
+  const { tracks, updateSegment, splitSegment, deleteSegment } = useSubtitleStore();
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showBgColorPicker, setShowBgColorPicker] = useState(false);
   const [showShadowColorPicker, setShowShadowColorPicker] = useState(false);
@@ -128,6 +130,19 @@ export default function SubtitlePropertiesPanel({
                 已锁定
               </div>
             )}
+            {/* 删除按钮 */}
+            <button
+              onClick={() => {
+                if (selectedSegment && confirm(`確定要刪除字幕「${selectedSegment.text}」嗎？`)) {
+                  deleteSegment(selectedSegment.id);
+                  onDelete?.();
+                }
+              }}
+              className="p-2 hover:bg-red-500/20 rounded-lg transition-colors group"
+              title="刪除字幕"
+            >
+              <Trash2 size={18} className="text-gray-400 group-hover:text-red-400" />
+            </button>
           </div>
           <div className="text-xs text-gray-400">
             共 {currentTrack.segments.length} 个字幕片段

@@ -3609,6 +3609,10 @@ export default function EditorProPage() {
                  setApplyToAll={setApplyToAll}
                  currentTrack={currentTrackInfo.track}
                  segmentIndex={currentTrackInfo.segmentIndex}
+                 onDelete={() => {
+                   setSelectedSegmentId(null);
+                   toast.success('字幕已刪除');
+                 }}
                />
              ) : (
                <PinnedSubtitlePanel />
