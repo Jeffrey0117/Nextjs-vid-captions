@@ -767,17 +767,7 @@ export default function EditorProPage() {
         // 確認載入成功並自動生成標題
         setTimeout(async () => {
           const state = useSubtitleStore.getState();
-          console.log('✅ Zustand store 載入後狀態:', {
-            tracksCount: state.tracks.length,
-            segmentsCount: state.tracks[0]?.segments.length || 0,
-            pinnedSubtitlesCount: state.pinnedSubtitles.length,
-            firstSegmentTime: state.tracks[0]?.segments[0] ? {
-              startTime: state.tracks[0].segments[0].startTime,
-              endTime: state.tracks[0].segments[0].endTime,
-              text: state.tracks[0].segments[0].text,
-              translatedText: state.tracks[0].segments[0].translatedText
-            } : null
-          });
+          // Store loaded successfully
 
           // 自動生成並套用 AI 標題
           const topPinned = state.pinnedSubtitles.find(p => p.position === 'top');
@@ -1131,14 +1121,6 @@ export default function EditorProPage() {
       if (data.srtContent) {
         console.log('🔍 API 回傳的 SRT 內容:', data.srtContent.substring(0, 500));
         importFromSrt(data.srtContent);
-        
-        // Debug: 檢查 store 狀態
-        setTimeout(() => {
-          const state = useSubtitleStore.getState();
-          console.log('🔍 Store 狀態 - tracks:', state.tracks);
-          console.log('🔍 Store 狀態 - selectedTrackId:', state.selectedTrackId);
-          console.log('🔍 Store 狀態 - segments:', state.tracks[0]?.segments);
-        }, 100);
         
         toast.success('字幕識別完成!');
       } else {
@@ -1853,6 +1835,55 @@ export default function EditorProPage() {
   const [mouseDownPos, setMouseDownPos] = useState<{ x: number; y: number } | null>(null);
   const [hasMoved, setHasMoved] = useState(false);
 
+  /**
+   * 根據鼠標 Y 軸位置判斷點擊的軌道
+   * 修復問題: 確保點擊第二軌道時不會誤判為第一軌道
+   *
+   * @param mouseY - 鼠標的 clientY 座標
+   * @returns 點擊位置對應的軌道 ID，如果無法確定則返回 null
+   */
+  const getTrackFromMouseY = (mouseY: number): string | null => {
+    if (!timelineRef.current || !tracksScrollRef.current) {
+      console.warn('⚠️ getTrackFromMouseY: timelineRef 或 tracksScrollRef 不可用');
+      return null;
+    }
+
+    // 獲取軌道容器的位置信息
+    const tracksContainer = tracksScrollRef.current;
+    const tracksRect = tracksContainer.getBoundingClientRect();
+
+    // 計算相對於軌道容器頂部的 Y 座標
+    const relativeY = mouseY - tracksRect.top;
+
+    // 考慮滾動偏移
+    const scrollTop = tracksContainer.scrollTop;
+    const adjustedY = relativeY + scrollTop;
+
+    // 遍歷所有軌道，找到包含該 Y 座標的軌道
+    let accumulatedHeight = 0;
+    for (let i = 0; i < tracks.length; i++) {
+      const track = tracks[i];
+      const trackHeight = track.height || 60;
+
+      // 檢查點擊位置是否在當前軌道範圍內
+      if (adjustedY >= accumulatedHeight && adjustedY < accumulatedHeight + trackHeight) {
+        return track.id;
+      }
+
+      accumulatedHeight += trackHeight;
+    }
+
+    console.warn('⚠️ getTrackFromMouseY: 未找到匹配的軌道', {
+      adjustedY,
+      totalHeight: accumulatedHeight,
+      tracksCount: tracks.length
+    });
+
+    // 如果沒有找到匹配的軌道，返回 null
+    // 這可能發生在點擊軌道間隙或軌道區域之外時
+    return null;
+  };
+
   // 時間軸字幕區塊拖曳處理 - OpenCut 風格 (document-level listeners)
   const handleTimelineDragStart = (
     e: React.MouseEvent,
@@ -1864,13 +1895,28 @@ export default function EditorProPage() {
     const segment = segments.find(s => s.id === segmentId);
     if (!segment || !timelineRef.current) return;
 
+    // 【修復】使用鼠標 Y 軸位置驗證拖曳開始時的軌道
+    // 確保拖曳操作從正確的軌道開始
+    const detectedTrackId = getTrackFromMouseY(e.clientY);
+    const finalTrackId = detectedTrackId || trackId;
+
+    // 如果檢測到的軌道與預期不符，記錄警告
+    if (detectedTrackId && detectedTrackId !== trackId) {
+      console.warn('⚠️ 拖曳起始軌道不匹配！使用 Y 軸檢測結果', {
+        expectedTrackId: trackId,
+        detectedTrackId,
+        mouseY: e.clientY,
+        dragType
+      });
+    }
+
     // 获取轨道名称
-    const track = tracks.find(t => t.id === trackId);
+    const track = tracks.find(t => t.id === finalTrackId);
     const trackName = track?.name || '未知轨道';
 
     // 使用调试日志工具
     TimelineDebugLogger.mouseDown({
-      trackId,
+      trackId: finalTrackId,
       trackName,
       segmentId,
       segmentText: segment.text,
@@ -1902,8 +1948,8 @@ export default function EditorProPage() {
       startMouseY: e.clientY,
       startTime: { start: segment.startTime, end: segment.endTime },
       clickOffsetTime,
-      sourceTrackId: trackId,
-      targetTrackId: trackId,
+      sourceTrackId: finalTrackId,  // 【修復】使用驗證後的軌道 ID
+      targetTrackId: finalTrackId,  // 【修復】使用驗證後的軌道 ID
       dragDirection: null,
     });
   };
@@ -3507,10 +3553,15 @@ export default function EditorProPage() {
                                               e.stopPropagation();
                                               // 只有沒有拖拽才觸發點擊
                                               if (!hasMoved) {
+                                                // 【修復】使用鼠標 Y 軸位置驗證點擊的軌道
+                                                // 這確保即使在複雜情況下也能正確識別軌道
+                                                const detectedTrackId = getTrackFromMouseY(e.clientY);
+                                                const finalTrackId = detectedTrackId || track.id;
+
                                                 // 使用调试日志工具
                                                 TimelineDebugLogger.click({
-                                                  trackId: track.id,
-                                                  trackName: track.name,
+                                                  trackId: finalTrackId,
+                                                  trackName: tracks.find(t => t.id === finalTrackId)?.name || track.name,
                                                   segmentId: segment.id,
                                                   segmentText: segment.text,
                                                   startTime: segment.startTime,
@@ -3518,14 +3569,19 @@ export default function EditorProPage() {
                                                 });
 
                                                 handleSegmentClick(segment.id, segment.startTime);
-                                                selectTrack(track.id);
+                                                selectTrack(finalTrackId);
                                               }
                                             }}
                                             onDoubleClick={(e) => {
                                               e.stopPropagation();
                                               // 只有沒有拖拽才觸發雙擊
                                               if (!hasMoved) {
-                                                console.log('🖱️ 雙擊字幕條（中間區域），打開調整面板');
+                                                // 【修復】雙擊時也使用 Y 軸位置驗證軌道
+                                                const detectedTrackId = getTrackFromMouseY(e.clientY);
+                                                const finalTrackId = detectedTrackId || track.id;
+
+                                                // 確保選中正確的軌道
+                                                selectTrack(finalTrackId);
                                                 setAdjustingSegmentId(segment.id);
                                                 setShowTimelineAdjust(true);
                                               }
