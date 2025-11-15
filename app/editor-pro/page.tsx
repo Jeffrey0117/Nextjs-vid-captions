@@ -772,8 +772,16 @@ export default function EditorProPage() {
       // Delete/Backspace: 刪除選中的字幕
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedSegmentId) {
         e.preventDefault();
-        const segment = segments.find(s => s.id === selectedSegmentId);
+        console.log('⌨️ 键盘删除快捷键被触发');
+        console.log('selectedSegmentId:', selectedSegmentId);
+
+        // 從第一個軌道獲取字幕（修復 segments 為空的問題）
+        const allSegments = tracks[0]?.segments || [];
+        const segment = allSegments.find(s => s.id === selectedSegmentId);
+        console.log('要删除的字幕:', segment);
+
         if (segment && confirm(`確定要刪除字幕「${segment.text}」嗎？`)) {
+          console.log('✅ 确认删除，调用 deleteSegment');
           deleteSegment(selectedSegmentId);
           setSelectedSegmentId(null);
           toast.success('字幕已刪除');
@@ -2280,12 +2288,26 @@ export default function EditorProPage() {
 
                       <button
                         onClick={() => {
-                          if (!selectedSegmentId) return;
-                          // 刪除選中的字幕
-                          const segmentToDelete = segments.find(s => s.id === selectedSegmentId);
+                          console.log('🗑️ 删除按钮被点击');
+                          console.log('selectedSegmentId:', selectedSegmentId);
+
+                          if (!selectedSegmentId) {
+                            console.log('❌ 没有选中的字幕');
+                            return;
+                          }
+
+                          // 從第一個軌道獲取字幕（修復 segments 為空的問題）
+                          const allSegments = tracks[0]?.segments || [];
+                          console.log('所有字幕:', allSegments);
+
+                          const segmentToDelete = allSegments.find(s => s.id === selectedSegmentId);
+                          console.log('要删除的字幕:', segmentToDelete);
+
                           if (segmentToDelete && window.confirm(`確定要刪除字幕「${segmentToDelete.text}」嗎?`)) {
-                            // TODO: 實現刪除功能 (需要在 subtitle-store 添加 deleteSegment 方法)
-                            console.log('Delete segment:', selectedSegmentId);
+                            console.log('✅ 确认删除，调用 deleteSegment');
+                            deleteSegment(selectedSegmentId);
+                            setSelectedSegmentId(null);
+                            toast.success('字幕已刪除');
                           }
                         }}
                         disabled={!selectedSegmentId}

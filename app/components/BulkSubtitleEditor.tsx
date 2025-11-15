@@ -1,7 +1,7 @@
 'use client';
 
 import { useSubtitleStore } from '../stores/subtitle-store';
-import { X, Replace, Eye, EyeOff, Monitor, Move, Languages } from 'lucide-react';
+import { X, Replace, Eye, EyeOff, Monitor, Move, Languages, Trash2 } from 'lucide-react';
 import TranslationSelectionModal from './TranslationSelectionModal';
 import { useState, useEffect, useRef } from 'react';
 
@@ -12,7 +12,7 @@ interface BulkSubtitleEditorProps {
 }
 
 export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSubtitleEditorProps) {
-  const { tracks, updateSegment } = useSubtitleStore();
+  const { tracks, updateSegment, deleteSegment } = useSubtitleStore();
   const [editedTexts, setEditedTexts] = useState<{ [key: string]: string }>({});
   const [findText, setFindText] = useState<string>('');
   const [replaceText, setReplaceText] = useState<string>('');
@@ -487,6 +487,23 @@ export default function BulkSubtitleEditor({ isOpen, onClose, videoUrl }: BulkSu
                     取代
                   </button>
                 )}
+
+                {/* 刪除按鈕 */}
+                <button
+                  onClick={() => {
+                    if (confirm('確定要刪除這條字幕嗎？')) {
+                      deleteSegment(segment.id);
+                      // 同時從編輯狀態中移除
+                      const newEditedTexts = { ...editedTexts };
+                      delete newEditedTexts[segment.id];
+                      setEditedTexts(newEditedTexts);
+                    }
+                  }}
+                  className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition"
+                  title="刪除字幕"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
               
               {/* 原文顯示區 */}

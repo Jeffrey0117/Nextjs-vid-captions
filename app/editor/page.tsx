@@ -1110,6 +1110,9 @@ function ProjectCard({
       // 點擊專案 = 觸發影片上傳 (只有 idle 狀態才能上傳)
       e.preventDefault();
       onProjectClick?.(project.id);
+    } else if (project.status === 'ready') {
+      // 點擊專案 = 跳轉到進階編輯
+      window.location.href = `/editor-pro?projectId=${project.id}`;
     }
   };
 
@@ -1351,8 +1354,9 @@ function ProjectCard({
         {cardContent}
       </div>
     );
-  } else if (project.status === 'idle') {
+  } else if (project.status === 'idle' || project.status === 'ready') {
     // idle 狀態 = 點擊上傳影片
+    // ready 狀態 = 點擊進入進階編輯
     return (
       <div
         onClick={handleCardClick}
@@ -1361,18 +1365,8 @@ function ProjectCard({
         {cardContent}
       </div>
     );
-  } else if (project.status === 'ready') {
-    // ready 狀態 = 點擊卡片進入進階編輯
-    return (
-      <Link
-        href={`/editor-pro?projectId=${project.id}`}
-        className="block group cursor-pointer w-full text-left"
-      >
-        {cardContent}
-      </Link>
-    );
   } else {
-    // 處理中或錯誤狀態 = 不可點擊
+    // 處理中/錯誤狀態 = 不可點擊
     return <div className="block group">{cardContent}</div>;
   }
 }
