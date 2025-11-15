@@ -3475,6 +3475,7 @@ export default function EditorProPage() {
                                               ? `0 0 20px ${track.color}80, 0 0 40px ${track.color}40, inset 0 0 10px ${track.color}30`
                                               : 'none',
                                             animation: isSelected ? 'pulse-subtle 2s ease-in-out infinite' : 'none',
+                                            zIndex: 50, // 确保字幕块在播放头上方，可以被点击
                                           }}
                                         >
                                           {/* 序号标记 - 左上角显示 */}
