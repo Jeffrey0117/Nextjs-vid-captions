@@ -679,7 +679,7 @@ interface ShadowControlsImprovedProps {
   updateStyle: (updates: Partial<SubtitleSegment['style']>) => void;
   showShadowColorPicker: boolean;
   setShowShadowColorPicker: (show: boolean) => void;
-  shadowColorPickerRef: React.RefObject<HTMLDivElement>;
+  shadowColorPickerRef: React.RefObject<HTMLDivElement | null>;
 }
 
 function ShadowControlsImproved({

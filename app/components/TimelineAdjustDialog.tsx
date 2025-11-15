@@ -9,7 +9,7 @@ interface TimelineAdjustDialogProps {
   videoDuration: number;
   currentTime: number;
   videoUrl: string | null;
-  mainVideoRef?: React.RefObject<HTMLVideoElement>; // 主頁面的視頻ref
+  mainVideoRef?: React.RefObject<HTMLVideoElement | null>; // 主頁面的視頻ref
   onClose: () => void;
   onConfirm: (startTime: number, endTime: number) => void;
 }

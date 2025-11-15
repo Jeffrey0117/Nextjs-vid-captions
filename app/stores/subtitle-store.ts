@@ -172,7 +172,7 @@ const formatSrtTime = (seconds: number): string => {
 };
 
 // 預設樣式常數
-const DEFAULT_STYLE: SubtitleSegment['style'] = {
+export const DEFAULT_STYLE: SubtitleSegment['style'] = {
   fontSize: 32,
   fontFamily: 'Noto Sans SC',
   fontWeight: 'normal',

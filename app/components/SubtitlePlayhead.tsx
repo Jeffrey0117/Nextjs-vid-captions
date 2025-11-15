@@ -8,13 +8,13 @@ interface SubtitlePlayheadProps {
   /** 時間軸縮放級別 (像素/秒) */
   pixelsPerSecond: number;
   /** 時間軸容器 ref */
-  containerRef: React.RefObject<HTMLDivElement>;
+  containerRef: React.RefObject<HTMLDivElement | null>;
   /** 當拖曳播放頭時的回調 */
   onSeek: (time: number) => void;
   /** 影片總長度 (秒) */
   duration: number;
   /** 時間軸總容器 ref (用於計算完整高度) */
-  timelineRef?: React.RefObject<HTMLDivElement>;
+  timelineRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 export default function SubtitlePlayhead({

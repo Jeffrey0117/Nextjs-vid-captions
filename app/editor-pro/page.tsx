@@ -13,6 +13,7 @@ import { parseSrt } from '@/lib/parseSrt';
 import { useToast } from '../hooks/useToast';
 import { useSmartRecorder } from '../hooks/useSmartRecorder';
 import { wrapTextByActualWidth, buildFontString, joinWrappedLines } from '../utils/text-wrapping';
+import { DEFAULT_STYLE } from '../stores/subtitle-store';
 
 // ==================== 调试日志工具 ====================
 /**
@@ -518,30 +519,33 @@ export default function EditorProPage() {
         console.error('❌ localStorage 中沒有專案資料');
         // 🧪 如果沒有 localStorage 資料，直接用測試資料
         console.log('🧪 使用測試資料代替');
-        const testSegments = [
+        const testSegments: SubtitleSegment[] = [
           {
             id: '1',
             startTime: 0,
             endTime: 0.84,
             text: "It's crazy.",
-            translatedText: "太瘋狂了。"
+            translatedText: "太瘋狂了。",
+            style: { ...DEFAULT_STYLE }
           },
           {
-            id: '2', 
+            id: '2',
             startTime: 0.84,
             endTime: 3.08,
             text: "I'm just gonna top this water off real quick.",
-            translatedText: "我只是要快速加點水。"
+            translatedText: "我只是要快速加點水。",
+            style: { ...DEFAULT_STYLE }
           },
           {
             id: '3',
             startTime: 3.08,
             endTime: 3.92,
             text: "No problem.",
-            translatedText: "沒問題。"
+            translatedText: "沒問題。",
+            style: { ...DEFAULT_STYLE }
           }
         ];
-        
+
         setVideoUrl('/temp/video_1761584936803.mp4');
         loadProjectSegments(testSegments);
         console.log('✅ 測試字幕載入完成');
@@ -659,7 +663,7 @@ export default function EditorProPage() {
       
       if (!project) {
         console.error('❌ 專案不存在:', projectId);
-        console.log('💡 可用的專案列表:', projects.map(p => ({ id: p.id, name: p.name })));
+        console.log('💡 可用的專案列表:', projects.map((p: any) => ({ id: p.id, name: p.name })));
         toast.error(`找不到專案 ${projectId},請返回 /editor 重新選擇專案`);
         // 自動跳轉回編輯器頁面
         window.location.href = '/editor';
