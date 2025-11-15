@@ -1,21 +1,25 @@
 'use client';
 
-import { useSubtitleStore, SubtitleSegment } from '../stores/subtitle-store';
+import { useSubtitleStore, SubtitleSegment, SubtitleTrack } from '../stores/subtitle-store';
 import { HexColorPicker } from 'react-colorful';
-import { useState, useRef, useEffect } from 'react';
-import { Type, Bold, Italic, Underline, Strikethrough, Palette, Eye, Square, Save, X, Plus, ArrowUp, ArrowRight, ArrowDown, ArrowLeft, ChevronDown, ChevronRight, Scissors } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { Type, Bold, Italic, Underline, Strikethrough, Palette, Eye, Square, Save, X, Plus, ArrowUp, ArrowRight, ArrowDown, ArrowLeft, ChevronDown, ChevronRight, Scissors, Layers } from 'lucide-react';
 import { useClickOutside } from '../hooks/useClickOutside';
 
 interface SubtitlePropertiesPanelProps {
   selectedSegmentId: string | null;
   applyToAll: boolean;
   setApplyToAll: (value: boolean) => void;
+  currentTrack?: SubtitleTrack | null;
+  segmentIndex?: number;
 }
 
 export default function SubtitlePropertiesPanel({
   selectedSegmentId,
   applyToAll,
-  setApplyToAll
+  setApplyToAll,
+  currentTrack,
+  segmentIndex
 }: SubtitlePropertiesPanelProps) {
   const { tracks, updateSegment, splitSegment } = useSubtitleStore();
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -43,9 +47,17 @@ export default function SubtitlePropertiesPanel({
   useClickOutside(shadowColorPickerRef, () => setShowShadowColorPicker(false), showShadowColorPicker);
   useClickOutside(strokeColorPickerRef, () => setShowStrokeColorPicker(false), showStrokeColorPicker);
 
-  // 從 tracks 計算 segments (reactive)
-  const segments = tracks.length > 0 ? tracks[0].segments : [];
-  const selectedSegment = segments.find(seg => seg.id === selectedSegmentId);
+  // 從所有 tracks 中查找選中的 segment
+  const selectedSegment = useMemo(() => {
+    if (!selectedSegmentId) return null;
+
+    for (const track of tracks) {
+      const segment = track.segments.find(seg => seg.id === selectedSegmentId);
+      if (segment) return segment;
+    }
+
+    return null;
+  }, [selectedSegmentId, tracks]);
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections(prev => ({
@@ -67,13 +79,15 @@ export default function SubtitlePropertiesPanel({
 
   const updateStyle = (updates: Partial<SubtitleSegment['style']>) => {
     if (applyToAll) {
-      // 套用到所有字幕
-      segments.forEach(seg => {
-        updateSegment(seg.id, {
-          style: { ...seg.style, ...updates },
+      // 套用到所有字幕 - 遍历所有轨道
+      tracks.forEach(track => {
+        track.segments.forEach(seg => {
+          updateSegment(seg.id, {
+            style: { ...seg.style, ...updates },
+          });
         });
       });
-    } else {
+    } else if (selectedSegment) {
       // 只更新選中的字幕
       updateSegment(selectedSegment.id, {
         style: { ...selectedSegment.style, ...updates },
@@ -83,6 +97,44 @@ export default function SubtitlePropertiesPanel({
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-3">
+      {/* 轨道信息头部 */}
+      {currentTrack && (
+        <div
+          className="px-4 py-3 rounded-lg border-2 bg-gradient-to-r from-gray-800/50 to-gray-900/50"
+          style={{
+            borderColor: currentTrack.color,
+            boxShadow: `0 0 10px ${currentTrack.color}40`
+          }}
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <Layers size={18} style={{ color: currentTrack.color }} />
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-white">正在编辑</h3>
+              <div className="flex items-center gap-2 mt-1">
+                <div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: currentTrack.color }}
+                />
+                <span className="text-sm text-gray-300">{currentTrack.name}</span>
+                {segmentIndex !== undefined && (
+                  <span className="text-xs text-gray-500">
+                    · 字幕 #{segmentIndex + 1}
+                  </span>
+                )}
+              </div>
+            </div>
+            {currentTrack.locked && (
+              <div className="px-2 py-1 bg-yellow-500/20 border border-yellow-500/50 rounded text-xs text-yellow-300">
+                已锁定
+              </div>
+            )}
+          </div>
+          <div className="text-xs text-gray-400">
+            共 {currentTrack.segments.length} 个字幕片段
+          </div>
+        </div>
+      )}
+
       {/* 套用到所有字幕 */}
       <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/30 rounded-lg">
         <input
@@ -95,12 +147,14 @@ export default function SubtitlePropertiesPanel({
 
             // 如果打勾，立即同步當前字幕樣式到所有其他字幕
             if (newValue && selectedSegment) {
-              segments.forEach(seg => {
-                if (seg.id !== selectedSegment.id) {
-                  updateSegment(seg.id, {
-                    style: { ...selectedSegment.style },
-                  });
-                }
+              tracks.forEach(track => {
+                track.segments.forEach(seg => {
+                  if (seg.id !== selectedSegment.id) {
+                    updateSegment(seg.id, {
+                      style: { ...selectedSegment.style },
+                    });
+                  }
+                });
               });
             }
           }}

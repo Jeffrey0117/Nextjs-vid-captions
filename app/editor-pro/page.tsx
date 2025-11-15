@@ -248,6 +248,20 @@ export default function EditorProPage() {
     return currentSubtitles[track0.id];
   }, [currentSubtitles, tracks]);
 
+  // 查找当前选中字幕所属的轨道和索引
+  const currentTrackInfo = useMemo(() => {
+    if (!selectedSegmentId) return { track: null, segmentIndex: -1 };
+
+    for (const track of tracks) {
+      const segmentIndex = track.segments.findIndex(seg => seg.id === selectedSegmentId);
+      if (segmentIndex !== -1) {
+        return { track, segmentIndex };
+      }
+    }
+
+    return { track: null, segmentIndex: -1 };
+  }, [selectedSegmentId, tracks]);
+
   // 自動選中當前播放的字幕
   useEffect(() => {
     if (currentSubtitle && currentSubtitle.id !== selectedSegmentId) {
@@ -1209,6 +1223,11 @@ export default function EditorProPage() {
   };
 
   const handleSegmentClick = (segmentId: string, startTime: number) => {
+    console.log('📌 handleSegmentClick 被调用', {
+      segmentId,
+      startTime,
+      previousSelectedId: selectedSegmentId
+    });
     setSelectedSegmentId(segmentId);
     selectSegment(segmentId);
     seekTo(startTime);
@@ -2228,7 +2247,10 @@ export default function EditorProPage() {
                       return (
                         <div
                           key={trackId}
-                          className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                          className="absolute inset-0 flex items-center justify-center pointer-events-none group/subtitle"
+                          style={{
+                            zIndex: isCurrentSubtitleSelected ? 50 : 10
+                          }}
                         >
                           <div
                             className="absolute pointer-events-auto"
@@ -2246,19 +2268,47 @@ export default function EditorProPage() {
                                 pointerEvents: 'auto',
                               }}
                             >
+                              {/* 悬停提示 - 显示轨道名称 */}
+                              {!isCurrentSubtitleSelected && (
+                                <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900/95 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover/subtitle:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 border border-gray-700">
+                                  {track.name} - 点击编辑
+                                </div>
+                              )}
+
                               {/* 字幕內容 */}
                               <div
-                                className="rounded"
+                                className="rounded relative transition-all duration-200"
                                 style={{
                                   backgroundColor: subtitle.style.backgroundColor,
                                   opacity: subtitle.style.opacity,
                                   transform: `scale(${subtitle.style.scale})`,
                                   transformOrigin: 'center',
-                                  cursor: isDragging ? 'grabbing' : 'grab',
+                                  cursor: isDragging ? 'grabbing' : (isCurrentSubtitleSelected ? 'grab' : 'pointer'),
                                   wordWrap: 'break-word',
                                   whiteSpace: 'pre-wrap',
                                   padding: `${(8 / 1080) * videoDisplaySize.height}px ${(16 / 1080) * videoDisplaySize.height}px`,
                                   borderRadius: `${(4 / 1080) * videoDisplaySize.height}px`,
+                                  // 添加彩色边框
+                                  outline: isCurrentSubtitleSelected
+                                    ? `3px solid ${track.color}`
+                                    : '2px solid transparent',
+                                  outlineOffset: '4px',
+                                  boxShadow: isCurrentSubtitleSelected
+                                    ? `0 0 20px ${track.color}80, 0 0 40px ${track.color}40`
+                                    : 'none',
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  console.log('🎯 点击视频预览区字幕', {
+                                    trackId,
+                                    segmentId: subtitle.id,
+                                    text: subtitle.text,
+                                    isAlreadySelected: isCurrentSubtitleSelected
+                                  });
+                                  if (!isCurrentSubtitleSelected) {
+                                    handleSegmentClick(subtitle.id, subtitle.startTime);
+                                    selectTrack(trackId);
+                                  }
                                 }}
                                 onMouseDown={isCurrentSubtitleSelected ? handleSubtitleDragStart : undefined}
                               >
@@ -2451,7 +2501,8 @@ export default function EditorProPage() {
                   {/* OpenCut TimelineToolbar - 播放控制 + 編輯工具 + 縮放控制 */}
                   <div className="flex items-center justify-between px-2 py-1 border-b bg-zinc-900 h-8">
                     {/* 左側: 播放控制 + 編輯工具 */}
-                    <div className="flex items-center gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-0.5">
                       <button
                         onClick={togglePlayPause}
                         className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors"
@@ -2659,6 +2710,45 @@ export default function EditorProPage() {
                           <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
                         </svg>
                       </button>
+                      </div>
+
+                      {/* 状态指示器 - 显示当前编辑信息 */}
+                      {selectedSegmentId && currentTrackInfo.track && (
+                        <div
+                          className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-800/50 rounded border border-gray-700 cursor-pointer hover:bg-gray-800/70 transition-colors"
+                          onClick={() => {
+                            if (selectedSegmentId) {
+                              const segment = currentTrackInfo.track?.segments.find(s => s.id === selectedSegmentId);
+                              if (segment) {
+                                seekTo(segment.startTime);
+                              }
+                            }
+                          }}
+                          title="点击跳转到当前字幕\n双击定位到时间轴"
+                        >
+                          {/* 轨道颜色指示器 */}
+                          <div
+                            className="w-2 h-2 rounded-full"
+                            style={{
+                              backgroundColor: currentTrackInfo.track.color,
+                              boxShadow: `0 0 8px ${currentTrackInfo.track.color}80`
+                            }}
+                          />
+                          <span className="text-[0.65rem] text-gray-300 font-medium">
+                            正在编辑:
+                          </span>
+                          <span className="text-[0.65rem] text-white font-semibold">
+                            {currentTrackInfo.track.name}
+                          </span>
+                          <span className="text-[0.65rem] text-gray-500">-</span>
+                          <span className="text-[0.65rem] text-blue-400 font-mono">
+                            #{currentTrackInfo.segmentIndex + 1}
+                          </span>
+                          <span className="text-[0.6rem] text-gray-500">
+                            / {currentTrackInfo.track.segments.length}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {/* 右側: 縮放控制 */}
@@ -2821,50 +2911,76 @@ export default function EditorProPage() {
                         <div className="overflow-auto scrollbar-thin w-full h-full" id="track-labels-scroll">
                           <div className="flex flex-col gap-1">
                             {/* 渲染所有轨道标签 */}
-                            {tracks.map((track, index) => (
-                              <div
-                                key={track.id}
-                                className={`flex items-center px-2 group cursor-pointer border-l-2 transition ${
-                                  selectedTrackId === track.id
-                                    ? 'border-blue-500 bg-gray-800/50'
-                                    : 'border-transparent hover:bg-gray-800/30'
-                                }`}
-                                style={{ height: `${track.height}px` }}
-                                onClick={() => selectTrack(track.id)}
-                                title={`点击选择轨道: ${track.name}`}
-                              >
-                                <div className="flex items-center justify-between flex-1 min-w-0 gap-1">
-                                  <span className="text-[0.65rem] text-gray-400 truncate" title={track.name}>
-                                    {track.name}
-                                  </span>
-                                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
-                                    {/* 显示/隐藏按钮 */}
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        updateTrack(track.id, { visible: !track.visible });
-                                      }}
-                                      className="w-4 h-4 flex items-center justify-center rounded hover:bg-gray-700"
-                                      title={track.visible ? '隐藏轨道' : '显示轨道'}
-                                    >
-                                      {track.visible ? (
-                                        <svg className="w-3 h-3 text-gray-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                                          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-                                          <circle cx="12" cy="12" r="3" />
-                                        </svg>
-                                      ) : (
-                                        <svg className="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                                          <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
-                                          <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
-                                          <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
-                                          <line x1="2" x2="22" y1="2" y2="22" />
-                                        </svg>
-                                      )}
-                                    </button>
+                            {tracks.map((track, index) => {
+                              // 检查当前选中的字幕是否属于这个轨道
+                              const hasSelectedSubtitle = selectedSegmentId && track.segments.some(seg => seg.id === selectedSegmentId);
+                              const selectedSegmentIndex = hasSelectedSubtitle
+                                ? track.segments.findIndex(seg => seg.id === selectedSegmentId)
+                                : -1;
+
+                              return (
+                                <div
+                                  key={track.id}
+                                  className={`flex flex-col px-2 py-1 group cursor-pointer border-l-4 transition-all ${
+                                    hasSelectedSubtitle
+                                      ? 'bg-gray-800/70 border-opacity-100'
+                                      : selectedTrackId === track.id
+                                        ? 'border-blue-500 bg-gray-800/50 border-opacity-60'
+                                        : 'border-transparent hover:bg-gray-800/30'
+                                  }`}
+                                  style={{
+                                    height: `${track.height}px`,
+                                    borderLeftColor: hasSelectedSubtitle ? track.color : (selectedTrackId === track.id ? '#3b82f6' : 'transparent'),
+                                  }}
+                                  onClick={() => selectTrack(track.id)}
+                                  title={`点击选择轨道: ${track.name}\n共 ${track.segments.length} 个字幕${hasSelectedSubtitle ? `\n当前编辑: #${selectedSegmentIndex + 1}` : ''}`}
+                                >
+                                  <div className="flex items-center justify-between flex-1 min-w-0 gap-1">
+                                    <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                                      <span className="text-[0.65rem] text-gray-300 truncate font-medium" title={track.name}>
+                                        {track.name}
+                                      </span>
+                                      {/* 统计信息 */}
+                                      <div className="flex items-center gap-1 text-[0.55rem]">
+                                        <span className="text-gray-500">
+                                          {track.segments.length} 个
+                                        </span>
+                                        {hasSelectedSubtitle && (
+                                          <span className="text-white bg-gray-700 px-1 rounded font-medium">
+                                            #{selectedSegmentIndex + 1}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
+                                      {/* 显示/隐藏按钮 */}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          updateTrack(track.id, { visible: !track.visible });
+                                        }}
+                                        className="w-4 h-4 flex items-center justify-center rounded hover:bg-gray-700"
+                                        title={track.visible ? '隐藏轨道' : '显示轨道'}
+                                      >
+                                        {track.visible ? (
+                                          <svg className="w-3 h-3 text-gray-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                                            <circle cx="12" cy="12" r="3" />
+                                          </svg>
+                                        ) : (
+                                          <svg className="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                            <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+                                            <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+                                            <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+                                            <line x1="2" x2="22" y1="2" y2="22" />
+                                          </svg>
+                                        )}
+                                      </button>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
 
                             {/* 添加新轨道按钮 */}
                             <div
@@ -3025,27 +3141,56 @@ export default function EditorProPage() {
                                   onClick={() => selectTrack(track.id)}
                                 >
                                   {/* 字幕片段 */}
-                                  {track.segments.map((segment) => {
+                                  {track.segments.map((segment, segmentIndex) => {
                                       const left = segment.startTime * 100 * zoomLevel;
                                       const width = (segment.endTime - segment.startTime) * 100 * zoomLevel;
                                       const isSelected = selectedSegmentId === segment.id;
+
+                                      // 计算轨道颜色的亮色版本（用于选中状态）
+                                      const getBrighterColor = (hexColor: string) => {
+                                        // 将 hex 转换为 rgb
+                                        const r = parseInt(hexColor.slice(1, 3), 16);
+                                        const g = parseInt(hexColor.slice(3, 5), 16);
+                                        const b = parseInt(hexColor.slice(5, 7), 16);
+
+                                        // 增加亮度（混合白色）
+                                        const factor = 0.4;
+                                        const newR = Math.min(255, r + (255 - r) * factor);
+                                        const newG = Math.min(255, g + (255 - g) * factor);
+                                        const newB = Math.min(255, b + (255 - b) * factor);
+
+                                        return `rgb(${Math.round(newR)}, ${Math.round(newG)}, ${Math.round(newB)})`;
+                                      };
 
                                       return (
                                         <div
                                           key={segment.id}
                                           data-segment-id={segment.id}
-                                          className={`absolute top-4 h-8 rounded border-2 transition-all duration-200 group ${
+                                          className={`absolute top-4 h-8 rounded transition-all duration-200 group ${
                                             isSelected
-                                              ? 'border-blue-500 shadow-lg shadow-blue-500/30'
+                                              ? 'border-opacity-100'
                                               : 'hover:border-opacity-80 border-opacity-60'
                                           }`}
                                           style={{
                                             left: `${left}px`,
                                             width: `${Math.max(width, 80)}px`,
                                             backgroundColor: track.color,
-                                            borderColor: isSelected ? '#3b82f6' : track.color,
+                                            borderColor: isSelected ? getBrighterColor(track.color) : track.color,
+                                            borderWidth: isSelected ? '3px' : '2px',
+                                            borderStyle: 'solid',
+                                            boxShadow: isSelected
+                                              ? `0 0 20px ${track.color}80, 0 0 40px ${track.color}40, inset 0 0 10px ${track.color}30`
+                                              : 'none',
+                                            animation: isSelected ? 'pulse-subtle 2s ease-in-out infinite' : 'none',
                                           }}
                                         >
+                                          {/* 序号标记 - 左上角显示 */}
+                                          {isSelected && (
+                                            <div className="absolute -top-4 left-0 bg-gray-900 text-white text-[0.6rem] px-1.5 py-0.5 rounded font-medium border border-gray-700 whitespace-nowrap z-10">
+                                              #{segmentIndex + 1}
+                                            </div>
+                                          )}
+
                                           {/* 左邊緣拖曳手柄 - OpenCut 風格 */}
                                           <div
                                             className="absolute left-0 top-0 bottom-0 w-[0.6rem] cursor-w-resize bg-primary z-50 flex items-center justify-center hover:bg-primary/80 transition"
@@ -3069,6 +3214,14 @@ export default function EditorProPage() {
                                               e.stopPropagation();
                                               // 只有沒有拖拽才觸發點擊
                                               if (!hasMoved) {
+                                                console.log('🎯 点击时间轴字幕块', {
+                                                  trackId: track.id,
+                                                  trackName: track.name,
+                                                  segmentId: segment.id,
+                                                  text: segment.text,
+                                                  startTime: segment.startTime,
+                                                  isAlreadySelected: selectedSegmentId === segment.id
+                                                });
                                                 handleSegmentClick(segment.id, segment.startTime);
                                                 selectTrack(track.id);
                                               }
@@ -3159,6 +3312,8 @@ export default function EditorProPage() {
                  selectedSegmentId={selectedSegmentId}
                  applyToAll={applyToAll}
                  setApplyToAll={setApplyToAll}
+                 currentTrack={currentTrackInfo.track}
+                 segmentIndex={currentTrackInfo.segmentIndex}
                />
              ) : (
                <PinnedSubtitlePanel />
