@@ -301,9 +301,12 @@ export default function EditorProPage() {
           
           loadProjectSegments(processedSegments);
 
-          // 載入固定字幕
-          if (latestProject.pinnedSubtitles && latestProject.pinnedSubtitles.length > 0) {
+          // 載入固定字幕（記錄是否為新專案）
+          const hasCustomPinnedSubtitles = latestProject.pinnedSubtitles && latestProject.pinnedSubtitles.length > 0;
+          if (hasCustomPinnedSubtitles) {
             loadPinnedSubtitles(latestProject.pinnedSubtitles);
+          } else {
+            console.log('⚠️ 最新專案沒有固定字幕，視為新專案');
           }
 
           // 自動生成並套用 AI 標題
@@ -311,8 +314,34 @@ export default function EditorProPage() {
             const state = useSubtitleStore.getState();
             const topPinned = state.pinnedSubtitles.find(p => p.position === 'top');
             if (topPinned && processedSegments.length > 0) {
-              if (topPinned.text === '影片標題' || topPinned.text === '新標題') {
-                console.log('🎬 自動生成 AI 標題...');
+              // 新專案（沒有保存固定字幕）或標題是預設值時，自動生成
+              const shouldGenerate = !hasCustomPinnedSubtitles ||
+                                     topPinned.text === '影片標題' ||
+                                     topPinned.text === '新標題';
+
+              if (shouldGenerate) {
+                console.log('🎬 自動生成 AI 標題並隨機背景色...', {
+                  isNewProject: !hasCustomPinnedSubtitles,
+                  currentTitle: topPinned.text
+                });
+
+                // 隨機選擇背景色（保持透明度 0.8）
+                const colors = [
+                  'rgba(37, 99, 235, 0.8)',   // 藍色
+                  'rgba(220, 38, 38, 0.8)',   // 紅色
+                  'rgba(234, 179, 8, 0.8)',   // 黃色
+                  'rgba(22, 163, 74, 0.8)',   // 綠色
+                  'rgba(147, 51, 234, 0.8)',  // 紫色
+                  'rgba(236, 72, 153, 0.8)',  // 粉色
+                ];
+                const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+                // 立即套用隨機背景色
+                state.updatePinnedSubtitle(topPinned.id, {
+                  style: { ...topPinned.style, backgroundColor: randomColor }
+                });
+                console.log('🎨 隨機背景色已套用:', randomColor);
+
                 try {
                   const response = await fetch('/api/generate-title', {
                     method: 'POST',
@@ -323,15 +352,26 @@ export default function EditorProPage() {
                   if (response.ok) {
                     const data = await response.json();
                     if (data.success && data.titles) {
+                      // 儲存所有 3 個標題並套用 viral 標題
                       const titleToApply = data.titles.viral || data.titles.funny || data.titles.mystery;
-                      state.updatePinnedSubtitle(topPinned.id, { text: titleToApply });
+                      state.updatePinnedSubtitle(topPinned.id, {
+                        text: titleToApply,
+                        generatedTitles: {
+                          viral: data.titles.viral,
+                          funny: data.titles.funny,
+                          mystery: data.titles.mystery,
+                        }
+                      });
                       console.log('✨ AI 標題已自動套用:', titleToApply);
+                      console.log('📋 3 個標題已儲存:', data.titles);
                       toast.success(`AI 標題已生成：${titleToApply}`);
                     }
                   }
                 } catch (error) {
                   console.error('❌ 自動生成標題失敗:', error);
                 }
+              } else {
+                console.log('⏭️ 標題已自訂，跳過自動生成');
               }
             }
           }, 100);
@@ -435,10 +475,13 @@ export default function EditorProPage() {
         
         loadProjectSegments(processedSegments);
 
-        // 載入固定字幕
-        if (project.pinnedSubtitles && project.pinnedSubtitles.length > 0) {
+        // 載入固定字幕（記錄是否為新專案）
+        const hasCustomPinnedSubtitles = project.pinnedSubtitles && project.pinnedSubtitles.length > 0;
+        if (hasCustomPinnedSubtitles) {
           console.log('🔍 準備載入固定字幕:', project.pinnedSubtitles.length, '個');
           loadPinnedSubtitles(project.pinnedSubtitles);
+        } else {
+          console.log('⚠️ 專案沒有固定字幕，視為新專案');
         }
 
         // 確認載入成功並自動生成標題
@@ -459,9 +502,34 @@ export default function EditorProPage() {
           // 自動生成並套用 AI 標題
           const topPinned = state.pinnedSubtitles.find(p => p.position === 'top');
           if (topPinned && processedSegments.length > 0) {
-            // 只在標題是預設值時才自動生成（避免覆蓋用戶已修改的標題）
-            if (topPinned.text === '影片標題' || topPinned.text === '新標題') {
-              console.log('🎬 自動生成 AI 標題...');
+            // 新專案（沒有保存固定字幕）或標題是預設值時，自動生成
+            const shouldGenerate = !hasCustomPinnedSubtitles ||
+                                   topPinned.text === '影片標題' ||
+                                   topPinned.text === '新標題';
+
+            if (shouldGenerate) {
+              console.log('🎬 自動生成 AI 標題並隨機背景色...', {
+                isNewProject: !hasCustomPinnedSubtitles,
+                currentTitle: topPinned.text
+              });
+
+              // 隨機選擇背景色（保持透明度 0.8）
+              const colors = [
+                'rgba(37, 99, 235, 0.8)',   // 藍色
+                'rgba(220, 38, 38, 0.8)',   // 紅色
+                'rgba(234, 179, 8, 0.8)',   // 黃色
+                'rgba(22, 163, 74, 0.8)',   // 綠色
+                'rgba(147, 51, 234, 0.8)',  // 紫色
+                'rgba(236, 72, 153, 0.8)',  // 粉色
+              ];
+              const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+              // 立即套用隨機背景色
+              state.updatePinnedSubtitle(topPinned.id, {
+                style: { ...topPinned.style, backgroundColor: randomColor }
+              });
+              console.log('🎨 隨機背景色已套用:', randomColor);
+
               try {
                 const response = await fetch('/api/generate-title', {
                   method: 'POST',
@@ -472,10 +540,18 @@ export default function EditorProPage() {
                 if (response.ok) {
                   const data = await response.json();
                   if (data.success && data.titles) {
-                    // 優先使用 viral 標題，如果不存在則使用 funny
+                    // 儲存所有 3 個標題並套用 viral 標題
                     const titleToApply = data.titles.viral || data.titles.funny || data.titles.mystery;
-                    state.updatePinnedSubtitle(topPinned.id, { text: titleToApply });
+                    state.updatePinnedSubtitle(topPinned.id, {
+                      text: titleToApply,
+                      generatedTitles: {
+                        viral: data.titles.viral,
+                        funny: data.titles.funny,
+                        mystery: data.titles.mystery,
+                      }
+                    });
                     console.log('✨ AI 標題已自動套用:', titleToApply);
+                    console.log('📋 3 個標題已儲存:', data.titles);
                     toast.success(`AI 標題已生成：${titleToApply}`);
                   }
                 }
@@ -1977,7 +2053,6 @@ export default function EditorProPage() {
                           className="rounded px-4 py-2"
                           style={{
                             backgroundColor: pinned.style.backgroundColor,
-                            opacity: pinned.style.opacity,
                             textAlign: 'center',
                           }}
                         >

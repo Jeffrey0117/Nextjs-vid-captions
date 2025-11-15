@@ -74,12 +74,10 @@ function PinnedSubtitleEditor({
   segments?: any[];
 }) {
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedTitles, setGeneratedTitles] = useState<{
-    viral: string;
-    funny: string;
-    mystery: string;
-  } | null>(null);
   const [showTitleDropdown, setShowTitleDropdown] = useState(false);
+
+  // 使用 pinned.generatedTitles 而不是本地 state
+  const generatedTitles = pinned.generatedTitles || null;
 
   const handleGenerateTitle = async () => {
     console.log('📝 handleGenerateTitle 被調用，segments:', segments?.length);
@@ -141,7 +139,14 @@ function PinnedSubtitleEditor({
         throw new Error(errorMsg);
       }
 
-      setGeneratedTitles(data.titles);
+      // 儲存生成的標題到 pinned 對象
+      onUpdate(pinned.id, {
+        generatedTitles: {
+          viral: data.titles.viral,
+          funny: data.titles.funny,
+          mystery: data.titles.mystery,
+        }
+      });
       setShowTitleDropdown(true);
       toast.success('AI 標題生成完成！');
       console.log('✅ 標題生成成功:', data.titles);
@@ -162,6 +167,39 @@ function PinnedSubtitleEditor({
       toast.success('標題已套用！');
     }
   };
+
+  // 從 RGBA/RGB 顏色中提取 alpha 值
+  const extractAlpha = (color: string): number => {
+    const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+    if (rgbaMatch && rgbaMatch[4] !== undefined) {
+      return parseFloat(rgbaMatch[4]);
+    }
+    return 1; // 默認完全不透明
+  };
+
+  // 更新 RGBA 顏色的 alpha 值
+  const updateAlpha = (color: string, alpha: number): string => {
+    const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+    if (rgbaMatch) {
+      const r = rgbaMatch[1];
+      const g = rgbaMatch[2];
+      const b = rgbaMatch[3];
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+    // 如果不是 rgba 格式，嘗試從十六進制轉換
+    const hexMatch = color.match(/^#([0-9a-f]{6})$/i);
+    if (hexMatch) {
+      const r = parseInt(hexMatch[1].substr(0, 2), 16);
+      const g = parseInt(hexMatch[1].substr(2, 2), 16);
+      const b = parseInt(hexMatch[1].substr(4, 2), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+    return color;
+  };
+
+  // 獲取當前背景色的透明度
+  const currentAlpha = extractAlpha(pinned.style.backgroundColor);
+
   return (
     <div className="p-4 bg-gray-800/30 border border-gray-700/50 rounded-lg">
       {/* 標題欄 + 啟用開關 */}
@@ -226,6 +264,17 @@ function PinnedSubtitleEditor({
               rows={2}
               placeholder="輸入字幕文字..."
             />
+
+            {/* 顯示已生成標題的按鈕 */}
+            {generatedTitles && !showTitleDropdown && (
+              <button
+                onClick={() => setShowTitleDropdown(true)}
+                className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 text-xs bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/50 rounded-lg transition-all"
+              >
+                <Sparkles size={12} className="text-purple-400" />
+                <span className="text-purple-300">查看 AI 生成的 3 個標題</span>
+              </button>
+            )}
 
             {/* AI 生成的標題選項 */}
             {showTitleDropdown && generatedTitles && (
@@ -292,19 +341,23 @@ function PinnedSubtitleEditor({
               />
             </div>
 
-            {/* 透明度 */}
+            {/* 背景透明度 */}
             <div>
               <label className="block text-xs text-gray-400 mb-2">
-                透明度: {Math.round(pinned.style.opacity * 100)}%
+                背景透明度: {Math.round(currentAlpha * 100)}%
               </label>
               <input
                 type="range"
                 min="0"
                 max="100"
-                value={pinned.style.opacity * 100}
-                onChange={(e) => onUpdate(pinned.id, {
-                  style: { ...pinned.style, opacity: parseInt(e.target.value) / 100 }
-                })}
+                value={currentAlpha * 100}
+                onChange={(e) => {
+                  const newAlpha = parseInt(e.target.value) / 100;
+                  const newBackgroundColor = updateAlpha(pinned.style.backgroundColor, newAlpha);
+                  onUpdate(pinned.id, {
+                    style: { ...pinned.style, backgroundColor: newBackgroundColor }
+                  });
+                }}
                 className="w-full"
               />
             </div>

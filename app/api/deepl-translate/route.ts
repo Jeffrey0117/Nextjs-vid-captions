@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     const isTextArray = texts && Array.isArray(texts);
     const textToTranslate = isTextArray ? texts : [text];
 
-    console.log('收到翻譯請求:', isTextArray ? `批量 ${texts.length} 條` : '單條', textToTranslate);
+    console.log('收到翻譯請求:', isTextArray ? `批量 ${texts.length} 條` : '單條');
 
     if (!textToTranslate || textToTranslate.length === 0 || textToTranslate.every((t: string) => !t)) {
       console.log('錯誤: 沒有提供要翻譯的文字');
@@ -25,33 +25,57 @@ export async function POST(request: Request) {
 
     console.log('開始翻譯...');
 
-    // DeepL API 支援批量翻譯，一次傳送多個文字
-    const result = await deeplClient.translateText(textToTranslate, null, 'ZH-HANT' as any);
+    // DeepL API 限制：每次請求最多 50 條文本
+    // 如果超過 50 條，需要分批處理
+    const BATCH_SIZE = 50;
+    const allTranslatedTexts: string[] = [];
 
-    console.log('DeepL API 結果:', result);
+    if (textToTranslate.length > BATCH_SIZE) {
+      console.log(`📦 文本數量 ${textToTranslate.length} 超過限制，分批處理（每批 ${BATCH_SIZE} 條）`);
 
-    // 處理結果 - DeepL 批量翻譯會返回陣列
-    const translatedTexts = Array.isArray(result) 
-      ? result.map((r: any) => r.text) 
-      : [(result as any).text];
+      // 分批處理
+      for (let i = 0; i < textToTranslate.length; i += BATCH_SIZE) {
+        const batch = textToTranslate.slice(i, i + BATCH_SIZE);
+        const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+        const totalBatches = Math.ceil(textToTranslate.length / BATCH_SIZE);
+
+        console.log(`🔄 處理第 ${batchNumber}/${totalBatches} 批 (${batch.length} 條)`);
+
+        const result = await deeplClient.translateText(batch, null, 'ZH-HANT' as any);
+        const batchTranslated = Array.isArray(result)
+          ? result.map((r: any) => r.text)
+          : [(result as any).text];
+
+        allTranslatedTexts.push(...batchTranslated);
+        console.log(`✅ 第 ${batchNumber}/${totalBatches} 批完成`);
+      }
+
+    } else {
+      // 一次性翻譯（不超過 50 條）
+      const result = await deeplClient.translateText(textToTranslate, null, 'ZH-HANT' as any);
+      const translatedTexts = Array.isArray(result)
+        ? result.map((r: any) => r.text)
+        : [(result as any).text];
+
+      allTranslatedTexts.push(...translatedTexts);
+    }
 
     console.log('翻譯完成:', {
       原文數量: textToTranslate.length,
-      翻譯結果數量: translatedTexts.length,
-      結果: translatedTexts
+      翻譯結果數量: allTranslatedTexts.length,
     });
 
     // 根據請求類型返回不同格式
     if (isTextArray) {
       return NextResponse.json({
         success: true,
-        translatedTexts: translatedTexts,
+        translatedTexts: allTranslatedTexts,
         originalTexts: textToTranslate
       });
     } else {
       return NextResponse.json({
         success: true,
-        translatedText: translatedTexts[0],
+        translatedText: allTranslatedTexts[0],
         originalText: textToTranslate[0]
       });
     }

@@ -454,7 +454,39 @@ export default function ProjectsPage() {
         parsedSegments = parseSrt(srtContent);
         updateProject(projectId, { progress: 50 });
       }
-      
+
+      // Step 1.5: 自動生成 AI 標題（在翻譯之前）
+      console.log('🎨 開始生成 AI 標題...');
+      try {
+        const titleRes = await fetch('/api/generate-title', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subtitles: parsedSegments.map(seg => ({
+              id: seg.id,
+              startTime: seg.startTime,
+              endTime: seg.endTime,
+              text: seg.text
+            }))
+          })
+        });
+
+        if (titleRes.ok) {
+          const titleData = await titleRes.json();
+          if (titleData.success && titleData.titles) {
+            console.log('✅ AI 標題生成成功:', titleData.titles);
+            // 保存標題到專案（可選）
+            updateProject(projectId, {
+              aiGeneratedTitles: titleData.titles
+            });
+          }
+        } else {
+          console.warn('⚠️ AI 標題生成失敗，繼續翻譯流程');
+        }
+      } catch (titleError) {
+        console.warn('⚠️ AI 標題生成錯誤，繼續翻譯流程:', titleError);
+      }
+
       // Step 2: DeepL 批量翻譯（優先），失敗時回退到 Google Translate
       updateProject(projectId, { status: 'translating', progress: 50 });
 
@@ -1330,11 +1362,14 @@ function ProjectCard({
       </div>
     );
   } else if (project.status === 'ready') {
-    // ready 狀態 = 顯示批量編輯和輸出按鈕 (不跳轉頁面)
+    // ready 狀態 = 點擊卡片進入進階編輯
     return (
-      <div className="block group">
+      <Link
+        href={`/editor-pro?projectId=${project.id}`}
+        className="block group cursor-pointer w-full text-left"
+      >
         {cardContent}
-      </div>
+      </Link>
     );
   } else {
     // 處理中或錯誤狀態 = 不可點擊

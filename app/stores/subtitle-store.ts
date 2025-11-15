@@ -46,6 +46,11 @@ export interface PinnedSubtitle {
   text: string;
   position: 'top' | 'bottom';
   enabled: boolean; // 是否启用
+  generatedTitles?: { // AI 生成的 3 個標題選項
+    viral: string;
+    funny: string;
+    mystery: string;
+  };
   style: {
     fontSize: number;
     fontFamily: string;
@@ -211,6 +216,37 @@ const loadSavedPinnedSubtitles = (): PinnedSubtitle[] => {
   return getDefaultPinnedSubtitles();
 };
 
+// 從 localStorage 載入樣式模板（如果存在）
+const loadSavedStyleTemplates = (): StyleTemplate[] => {
+  if (typeof window === 'undefined') {
+    return getDefaultStyleTemplates();
+  }
+
+  try {
+    const saved = localStorage.getItem('subtitle-style-templates');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      console.log('✅ 從 localStorage 載入樣式模板:', parsed.length, '個');
+      return parsed;
+    }
+  } catch (error) {
+    console.error('❌ 載入樣式模板失敗:', error);
+  }
+
+  return getDefaultStyleTemplates();
+};
+
+// 預設樣式模板
+const getDefaultStyleTemplates = (): StyleTemplate[] => [
+  {
+    id: 'default',
+    name: '預設樣式',
+    style: DEFAULT_STYLE,
+    isDefault: true,
+    createdAt: Date.now(),
+  },
+];
+
 // 預設固定字幕
 const getDefaultPinnedSubtitles = (): PinnedSubtitle[] => [
   {
@@ -272,190 +308,8 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
   // 固定字幕初始化 - 從 localStorage 載入或使用預設值
   pinnedSubtitles: loadSavedPinnedSubtitles(),
 
-  // 樣式模板初始化 - 包含預設模板
-  styleTemplates: [
-    {
-      id: 'default',
-      name: '預設樣式',
-      style: DEFAULT_STYLE,
-      isDefault: true,
-      createdAt: Date.now(),
-    },
-    {
-      id: 'netflix',
-      name: 'Netflix 風格',
-      style: {
-        fontSize: 32,
-        fontFamily: 'Noto Sans SC',
-        fontWeight: 'normal',
-        fontStyle: 'normal',
-        textDecoration: 'none',
-        color: '#FFFFFF',
-        opacity: 1,
-        backgroundColor: 'rgba(0,0,0,0.8)',
-        position: 'bottom',
-        enableShadow: true,
-        shadowColor: '#000000',
-        shadowOffsetX: 2,
-        shadowOffsetY: 2,
-        shadowBlur: 4,
-        enableStroke: false,
-        strokeColor: '#000000',
-        strokeWidth: 0,
-        positionX: 50,
-        positionY: 90,
-        maxWidth: 80,
-        scale: 1.0,
-      },
-      isDefault: false,
-      createdAt: Date.now(),
-    },
-    {
-      id: 'youtube',
-      name: 'YouTube 風格',
-      style: {
-        fontSize: 32,
-        fontFamily: 'Roboto',
-        fontWeight: 'bold',
-        fontStyle: 'normal',
-        textDecoration: 'none',
-        color: '#FFFFFF',
-        opacity: 1,
-        backgroundColor: 'rgba(8,8,8,0.75)',
-        position: 'bottom',
-        enableShadow: false,
-        shadowColor: '#000000',
-        shadowOffsetX: 0,
-        shadowOffsetY: 0,
-        shadowBlur: 0,
-        enableStroke: false,
-        strokeColor: '#000000',
-        strokeWidth: 0,
-        positionX: 50,
-        positionY: 90,
-        maxWidth: 80,
-        scale: 1.0,
-      },
-      isDefault: false,
-      createdAt: Date.now(),
-    },
-    {
-      id: 'bold-stroke',
-      name: '粗體描邊',
-      style: {
-        fontSize: 36,
-        fontFamily: 'Noto Sans SC',
-        fontWeight: 'bold',
-        fontStyle: 'normal',
-        textDecoration: 'none',
-        color: '#FFFFFF',
-        opacity: 1,
-        backgroundColor: 'transparent',
-        position: 'bottom',
-        enableShadow: true,
-        shadowColor: '#000000',
-        shadowOffsetX: 3,
-        shadowOffsetY: 3,
-        shadowBlur: 6,
-        enableStroke: true,
-        strokeColor: '#000000',
-        strokeWidth: 4,
-        positionX: 50,
-        positionY: 90,
-        maxWidth: 80,
-        scale: 1.0,
-      },
-      isDefault: false,
-      createdAt: Date.now(),
-    },
-    {
-      id: 'elegant-serif',
-      name: '優雅襯線',
-      style: {
-        fontSize: 34,
-        fontFamily: 'Noto Serif SC',
-        fontWeight: 'normal',
-        fontStyle: 'italic',
-        textDecoration: 'none',
-        color: '#F5F5DC',
-        opacity: 1,
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        position: 'bottom',
-        enableShadow: true,
-        shadowColor: '#000000',
-        shadowOffsetX: 2,
-        shadowOffsetY: 2,
-        shadowBlur: 5,
-        enableStroke: false,
-        strokeColor: '#000000',
-        strokeWidth: 0,
-        positionX: 50,
-        positionY: 90,
-        maxWidth: 80,
-        scale: 1.0,
-      },
-      isDefault: false,
-      createdAt: Date.now(),
-    },
-    {
-      id: 'neon-glow',
-      name: '霓虹發光',
-      style: {
-        fontSize: 38,
-        fontFamily: 'Orbitron',
-        fontWeight: 'bold',
-        fontStyle: 'normal',
-        textDecoration: 'none',
-        color: '#00FFFF',
-        opacity: 1,
-        backgroundColor: 'transparent',
-        position: 'bottom',
-        enableShadow: true,
-        shadowColor: '#00FFFF',
-        shadowOffsetX: 0,
-        shadowOffsetY: 0,
-        shadowBlur: 20,
-        enableStroke: true,
-        strokeColor: '#00FFFF',
-        strokeWidth: 2,
-        positionX: 50,
-        positionY: 90,
-        maxWidth: 80,
-        scale: 1.0,
-      },
-      isDefault: false,
-      createdAt: Date.now(),
-    },
-    {
-      id: 'comic-style',
-      name: '漫畫風格',
-      style: {
-        fontSize: 40,
-        fontFamily: 'Bangers',
-        fontWeight: 'bold',
-        fontStyle: 'normal',
-        textDecoration: 'none',
-        color: '#FFFF00',
-        opacity: 1,
-        backgroundColor: 'transparent',
-        position: 'bottom',
-        enableShadow: true,
-        shadowColor: '#000000',
-        shadowOffsetX: 4,
-        shadowOffsetY: 4,
-        shadowBlur: 0,
-        enableStroke: true,
-        strokeColor: '#000000',
-        strokeWidth: 5,
-        positionX: 50,
-        positionY: 90,
-        maxWidth: 80,
-        scale: 1.0,
-      },
-      isDefault: false,
-      createdAt: Date.now(),
-    },
-  ],
+  // 樣式模板初始化 - 從 localStorage 載入或使用預設模板
+  styleTemplates: loadSavedStyleTemplates(),
 
   // 軌道管理方法
   addTrack: (name, defaultStyle) => {
@@ -1124,17 +978,35 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
   },
 
   deleteStyleTemplate: (templateId) => {
-    set((state) => ({
-      styleTemplates: state.styleTemplates.filter(t => t.id !== templateId),
-    }));
+    set((state) => {
+      const newTemplates = state.styleTemplates.filter(t => t.id !== templateId);
+
+      // 持久化到 localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('subtitle-style-templates', JSON.stringify(newTemplates));
+      }
+
+      return {
+        styleTemplates: newTemplates,
+      };
+    });
   },
 
   updateStyleTemplate: (templateId, updates) => {
-    set((state) => ({
-      styleTemplates: state.styleTemplates.map(t =>
+    set((state) => {
+      const newTemplates = state.styleTemplates.map(t =>
         t.id === templateId ? { ...t, ...updates } : t
-      ),
-    }));
+      );
+
+      // 持久化到 localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('subtitle-style-templates', JSON.stringify(newTemplates));
+      }
+
+      return {
+        styleTemplates: newTemplates,
+      };
+    });
   },
 
   getDefaultTemplate: () => {
@@ -1143,12 +1015,21 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
   },
 
   setDefaultTemplate: (templateId) => {
-    set((state) => ({
-      styleTemplates: state.styleTemplates.map(t => ({
+    set((state) => {
+      const newTemplates = state.styleTemplates.map(t => ({
         ...t,
         isDefault: t.id === templateId,
-      })),
-    }));
+      }));
+
+      // 持久化到 localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('subtitle-style-templates', JSON.stringify(newTemplates));
+      }
+
+      return {
+        styleTemplates: newTemplates,
+      };
+    });
   },
   
   // 批量載入專案字幕
