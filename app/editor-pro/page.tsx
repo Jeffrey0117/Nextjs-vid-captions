@@ -14,6 +14,234 @@ import { useToast } from '../hooks/useToast';
 import { useSmartRecorder } from '../hooks/useSmartRecorder';
 import { wrapTextByActualWidth, buildFontString, joinWrappedLines } from '../utils/text-wrapping';
 
+// ==================== 调试日志工具 ====================
+/**
+ * 时间轴交互调试日志工具
+ * 提供格式化、颜色标记的日志输出，便于追踪鼠标事件和拖拽行为
+ */
+class TimelineDebugLogger {
+  private static enabled = true; // 设置为 false 可禁用所有日志
+
+  // 格式化轨道信息
+  private static formatTrack(trackId: string, trackName: string): string {
+    return `轨道[${trackName || trackId.slice(0, 8)}]`;
+  }
+
+  // 格式化字幕信息
+  private static formatSegment(segmentId: string, text: string): string {
+    const shortId = segmentId.slice(0, 8);
+    const shortText = text.length > 15 ? text.slice(0, 15) + '...' : text;
+    return `字幕[${shortId}:"${shortText}"]`;
+  }
+
+  // 格式化位置信息
+  private static formatPosition(x: number, y: number): string {
+    return `(${Math.round(x)}, ${Math.round(y)})`;
+  }
+
+  // 格式化距离
+  private static formatDistance(distance: number): string {
+    return `${Math.round(distance)}px`;
+  }
+
+  // 鼠标按下事件
+  static mouseDown(params: {
+    trackId: string;
+    trackName: string;
+    segmentId: string;
+    segmentText: string;
+    dragType: 'left' | 'right' | 'move';
+    position: { x: number; y: number };
+    startTime: number;
+    endTime: number;
+  }) {
+    if (!this.enabled) return;
+
+    const emoji = params.dragType === 'left' ? '⬅️' : params.dragType === 'right' ? '➡️' : '🖱️';
+    const action = params.dragType === 'left' ? '左边缘' : params.dragType === 'right' ? '右边缘' : '移动区';
+
+    console.log(
+      `%c${emoji} MouseDown | ${action}`,
+      'color: #4CAF50; font-weight: bold;',
+      '\n  ' + this.formatTrack(params.trackId, params.trackName),
+      '\n  ' + this.formatSegment(params.segmentId, params.segmentText),
+      '\n  位置:', this.formatPosition(params.position.x, params.position.y),
+      '\n  时间:', `${params.startTime.toFixed(2)}s - ${params.endTime.toFixed(2)}s`
+    );
+  }
+
+  // 鼠标移动事件
+  static mouseMove(params: {
+    segmentId: string;
+    distance: number;
+    distanceX: number;
+    distanceY: number;
+    hasMoved: boolean;
+    dragType: 'left' | 'right' | 'move' | null;
+    dragDirection: 'horizontal' | 'vertical' | null;
+  }) {
+    if (!this.enabled) return;
+
+    // 只在关键时刻记录移动日志（避免刷屏）
+    if (params.distance < 5 && !params.hasMoved) return;
+
+    const emoji = '🔄';
+    const status = params.hasMoved ? '拖拽中' : '等待确认';
+    const direction = params.dragDirection
+      ? (params.dragDirection === 'horizontal' ? '水平↔️' : '垂直↕️')
+      : '未确定';
+
+    console.log(
+      `%c${emoji} MouseMove | ${status}`,
+      'color: #2196F3; font-weight: bold;',
+      '\n  距离:', this.formatDistance(params.distance),
+      `(X:${Math.round(params.distanceX)}px, Y:${Math.round(params.distanceY)}px)`,
+      '\n  方向:', direction,
+      '\n  类型:', params.dragType || '未设置'
+    );
+  }
+
+  // 鼠标释放事件
+  static mouseUp(params: {
+    segmentId: string | null;
+    hasMoved: boolean;
+    distance: number;
+    action: 'click' | 'drag-horizontal' | 'drag-vertical' | 'none';
+    targetTrackId?: string;
+    targetTrackName?: string;
+  }) {
+    if (!this.enabled) return;
+
+    let emoji = '✅';
+    let actionText = '';
+    let color = '#4CAF50';
+
+    if (params.action === 'click') {
+      emoji = '✅';
+      actionText = '选中字幕';
+      color = '#4CAF50';
+    } else if (params.action === 'drag-horizontal') {
+      emoji = '🔄';
+      actionText = '调整时间';
+      color = '#2196F3';
+    } else if (params.action === 'drag-vertical') {
+      emoji = '🔀';
+      actionText = '切换轨道';
+      color = '#FF9800';
+    } else {
+      emoji = '⭕';
+      actionText = '无操作';
+      color = '#9E9E9E';
+    }
+
+    const parts = [
+      `%c${emoji} MouseUp   | ${actionText}`,
+      `color: ${color}; font-weight: bold;`,
+      `\n  距离: ${this.formatDistance(params.distance)}`,
+      `\n  判定: ${params.hasMoved ? '拖拽' : '点击'}`
+    ];
+
+    if (params.targetTrackId && params.targetTrackName) {
+      parts.push(`\n  目标: ${this.formatTrack(params.targetTrackId, params.targetTrackName)}`);
+    }
+
+    console.log(...parts);
+  }
+
+  // 点击事件
+  static click(params: {
+    trackId: string;
+    trackName: string;
+    segmentId: string;
+    segmentText: string;
+    startTime: number;
+    wasAlreadySelected: boolean;
+  }) {
+    if (!this.enabled) return;
+
+    const emoji = '🎯';
+    const status = params.wasAlreadySelected ? '已选中' : '新选中';
+
+    console.log(
+      `%c${emoji} Click     | ${status}`,
+      'color: #9C27B0; font-weight: bold;',
+      '\n  ' + this.formatTrack(params.trackId, params.trackName),
+      '\n  ' + this.formatSegment(params.segmentId, params.segmentText),
+      '\n  时间:', `${params.startTime.toFixed(2)}s`
+    );
+  }
+
+  // 方向确定事件
+  static directionDetermined(params: {
+    direction: 'horizontal' | 'vertical';
+    deltaX: number;
+    deltaY: number;
+  }) {
+    if (!this.enabled) return;
+
+    const emoji = params.direction === 'horizontal' ? '↔️' : '↕️';
+    const directionText = params.direction === 'horizontal' ? '水平拖拽' : '垂直拖拽';
+
+    console.log(
+      `%c${emoji} Direction | ${directionText}`,
+      'color: #FF5722; font-weight: bold;',
+      `\n  X偏移: ${Math.round(params.deltaX)}px`,
+      `\n  Y偏移: ${Math.round(params.deltaY)}px`
+    );
+  }
+
+  // 轨道切换事件
+  static trackSwitch(params: {
+    fromTrackId: string;
+    fromTrackName: string;
+    toTrackId: string;
+    toTrackName: string;
+  }) {
+    if (!this.enabled) return;
+
+    console.log(
+      `%c🔀 TrackSwitch`,
+      'color: #FF9800; font-weight: bold;',
+      `\n  从: ${this.formatTrack(params.fromTrackId, params.fromTrackName)}`,
+      `\n  到: ${this.formatTrack(params.toTrackId, params.toTrackName)}`
+    );
+  }
+
+  // 打印测试场景表格
+  static printTestScenarios() {
+    console.log('\n');
+    console.log('%c╔═══════════════════════════════════════════════════════════════╗', 'color: #00BCD4; font-weight: bold;');
+    console.log('%c║               时间轴交互测试场景验证表                         ║', 'color: #00BCD4; font-weight: bold;');
+    console.log('%c╠═══════════════════════════════════════════════════════════════╣', 'color: #00BCD4; font-weight: bold;');
+    console.log('%c║ 场景 1: 单击第一轨道字幕 → 应该选中                           ║', 'color: #4CAF50;');
+    console.log('%c║ 场景 2: 单击第二轨道字幕 → 应该选中                           ║', 'color: #4CAF50;');
+    console.log('%c║ 场景 3: 水平拖拽字幕     → 应该调整时间                       ║', 'color: #2196F3;');
+    console.log('%c║ 场景 4: 垂直拖拽字幕     → 应该切换轨道                       ║', 'color: #FF9800;');
+    console.log('%c║ 场景 5: 快速点击         → 应该选中，不触发拖拽               ║', 'color: #9C27B0;');
+    console.log('%c╠═══════════════════════════════════════════════════════════════╣', 'color: #00BCD4; font-weight: bold;');
+    console.log('%c║ 判定标准:                                                     ║', 'color: #FFC107;');
+    console.log('%c║ • 移动距离 < 5px  → 点击                                      ║', 'color: #FFC107;');
+    console.log('%c║ • 移动距离 ≥ 5px  → 拖拽                                      ║', 'color: #FFC107;');
+    console.log('%c║ • Y偏移 > 30px 且 Y > 2×X → 垂直拖拽                          ║', 'color: #FFC107;');
+    console.log('%c║ • 其他情况        → 水平拖拽                                  ║', 'color: #FFC107;');
+    console.log('%c╚═══════════════════════════════════════════════════════════════╝', 'color: #00BCD4; font-weight: bold;');
+    console.log('\n');
+  }
+
+  // 启用/禁用日志
+  static setEnabled(enabled: boolean) {
+    this.enabled = enabled;
+    console.log(`%c时间轴调试日志: ${enabled ? '已启用' : '已禁用'}`, `color: ${enabled ? '#4CAF50' : '#F44336'}; font-weight: bold;`);
+  }
+}
+
+// 在开发环境自动打印测试场景
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    TimelineDebugLogger.printTestScenarios();
+  }, 1000);
+}
+
 /**
  * 智能換行：根據實際渲染寬度進行精確換行
  * 使用通用的文本換行工具，確保與導出一致
@@ -1632,7 +1860,21 @@ export default function EditorProPage() {
     const segment = segments.find(s => s.id === segmentId);
     if (!segment || !timelineRef.current) return;
 
-    console.log('🎯 拖拽開始:', { segmentId, dragType, trackId, startTime: segment.startTime, endTime: segment.endTime });
+    // 获取轨道名称
+    const track = tracks.find(t => t.id === trackId);
+    const trackName = track?.name || '未知轨道';
+
+    // 使用调试日志工具
+    TimelineDebugLogger.mouseDown({
+      trackId,
+      trackName,
+      segmentId,
+      segmentText: segment.text,
+      dragType,
+      position: { x: e.clientX, y: e.clientY },
+      startTime: segment.startTime,
+      endTime: segment.endTime,
+    });
 
     // 記錄鼠標按下位置
     setMouseDownPos({ x: e.clientX, y: e.clientY });
@@ -1675,6 +1917,11 @@ export default function EditorProPage() {
       targetTrackId: null,
       dragDirection: null,
     });
+    // 延迟重置拖拽检测状态（确保 onClick 能读取到正确的 hasMoved 值）
+    setTimeout(() => {
+      setMouseDownPos(null);
+      setHasMoved(false);
+    }, 10);
   };
 
   // Document-level mouse listeners (OpenCut 核心機制)
@@ -1686,17 +1933,30 @@ export default function EditorProPage() {
     const handleMouseMove = (e: MouseEvent) => {
       if (!timelineRef.current) return;
 
+      const deltaX = e.clientX - timelineDragState.startMouseX;
+      const deltaY = e.clientY - timelineDragState.startMouseY;
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
       // 檢測是否真的移動了（超過5px視為拖拽）
       if (mouseDownPos && !hasMoved) {
         const moved = Math.abs(e.clientX - mouseDownPos.x) > 5 || Math.abs(e.clientY - mouseDownPos.y) > 5;
         if (moved) {
           setHasMoved(true);
+
+          // 记录首次移动超过阈值
+          TimelineDebugLogger.mouseMove({
+            segmentId: timelineDragState.segmentId || '',
+            distance,
+            distanceX: deltaX,
+            distanceY: deltaY,
+            hasMoved: true,
+            dragType: timelineDragState.dragType,
+            dragDirection: timelineDragState.dragDirection,
+          });
         }
       }
 
       const pixelsPerSecond = 100 * zoomLevel;
-      const deltaX = e.clientX - timelineDragState.startMouseX;
-      const deltaY = e.clientY - timelineDragState.startMouseY;
       const deltaTime = deltaX / pixelsPerSecond;
 
       const segment = segments.find(s => s.id === timelineDragState.segmentId);
@@ -1716,7 +1976,12 @@ export default function EditorProPage() {
             ? 'vertical'
             : 'horizontal';
 
-          console.log('🎯 拖拽方向確定:', newDirection, { deltaX, deltaY });
+          // 记录方向确定
+          TimelineDebugLogger.directionDetermined({
+            direction: newDirection,
+            deltaX,
+            deltaY,
+          });
 
           setTimelineDragState(prev => ({
             ...prev,
@@ -1755,10 +2020,14 @@ export default function EditorProPage() {
 
             // 更新目標軌道
             if (timelineDragState.targetTrackId !== targetTrack.id) {
-              console.log('🔀 切換目標軌道:', {
-                from: timelineDragState.sourceTrackId,
-                to: targetTrack.id,
-                trackName: targetTrack.name
+              const sourceTrack = tracks.find(t => t.id === timelineDragState.sourceTrackId);
+
+              // 记录轨道切换
+              TimelineDebugLogger.trackSwitch({
+                fromTrackId: timelineDragState.sourceTrackId || '',
+                fromTrackName: sourceTrack?.name || '未知',
+                toTrackId: targetTrack.id,
+                toTrackName: targetTrack.name,
               });
 
               setTimelineDragState(prev => ({
@@ -1827,7 +2096,33 @@ export default function EditorProPage() {
     };
 
     const handleMouseUp = () => {
-      console.log('✋ 拖拽結束');
+      // 计算移动距离
+      const deltaX = mouseDownPos ? (window.event as MouseEvent).clientX - mouseDownPos.x : 0;
+      const deltaY = mouseDownPos ? (window.event as MouseEvent).clientY - mouseDownPos.y : 0;
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+      // 确定动作类型
+      let action: 'click' | 'drag-horizontal' | 'drag-vertical' | 'none' = 'none';
+      if (!hasMoved) {
+        action = 'click';
+      } else if (timelineDragState.dragDirection === 'vertical') {
+        action = 'drag-vertical';
+      } else if (timelineDragState.dragDirection === 'horizontal' || timelineDragState.dragType !== 'move') {
+        action = 'drag-horizontal';
+      }
+
+      // 获取目标轨道信息
+      const targetTrack = tracks.find(t => t.id === timelineDragState.targetTrackId);
+
+      // 记录 MouseUp 事件
+      TimelineDebugLogger.mouseUp({
+        segmentId: timelineDragState.segmentId,
+        hasMoved,
+        distance,
+        action,
+        targetTrackId: timelineDragState.targetTrackId || undefined,
+        targetTrackName: targetTrack?.name || undefined,
+      });
 
       // 如果是垂直拖拽且切換了軌道，執行軌道切換
       if (
@@ -1837,12 +2132,6 @@ export default function EditorProPage() {
         timelineDragState.sourceTrackId !== timelineDragState.targetTrackId &&
         timelineDragState.segmentId
       ) {
-        console.log('🔀 執行軌道切換:', {
-          segmentId: timelineDragState.segmentId,
-          from: timelineDragState.sourceTrackId,
-          to: timelineDragState.targetTrackId,
-        });
-
         moveSegmentToTrack(
           timelineDragState.sourceTrackId,
           timelineDragState.targetTrackId,
@@ -3214,14 +3503,16 @@ export default function EditorProPage() {
                                               e.stopPropagation();
                                               // 只有沒有拖拽才觸發點擊
                                               if (!hasMoved) {
-                                                console.log('🎯 点击时间轴字幕块', {
+                                                // 使用调试日志工具
+                                                TimelineDebugLogger.click({
                                                   trackId: track.id,
                                                   trackName: track.name,
                                                   segmentId: segment.id,
-                                                  text: segment.text,
+                                                  segmentText: segment.text,
                                                   startTime: segment.startTime,
-                                                  isAlreadySelected: selectedSegmentId === segment.id
+                                                  wasAlreadySelected: selectedSegmentId === segment.id,
                                                 });
+
                                                 handleSegmentClick(segment.id, segment.startTime);
                                                 selectTrack(track.id);
                                               }
