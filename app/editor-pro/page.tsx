@@ -1437,11 +1437,37 @@ export default function EditorProPage() {
   };
 
   const handleSegmentClick = (segmentId: string, startTime: number) => {
-    console.log('📌 handleSegmentClick 被调用', {
+    console.log('🔒 [轨道锁定] handleSegmentClick 被调用', {
       segmentId,
       startTime,
       previousSelectedId: selectedSegmentId
     });
+
+    // 查找字幕所在的轨道
+    let targetTrackId: string | null = null;
+    for (const track of tracks) {
+      const segment = track.segments.find(seg => seg.id === segmentId);
+      if (segment) {
+        targetTrackId = track.id;
+        console.log('🔒 [轨道锁定] 找到字幕所在轨道:', {
+          轨道名: track.name,
+          轨道ID: targetTrackId,
+          字幕文本: segment.text.slice(0, 20)
+        });
+        break;
+      }
+    }
+
+    // 如果字幕在其他轨道，自动切换轨道
+    if (targetTrackId && targetTrackId !== currentTrackInfo.track?.id) {
+      console.log('🔒 [轨道锁定] 轨道不匹配，自动切换:', {
+        当前轨道: currentTrackInfo.track?.name,
+        目标轨道ID: targetTrackId
+      });
+      selectTrack(targetTrackId);
+    }
+
+    // 选中字幕
     setSelectedSegmentId(segmentId);
     selectSegment(segmentId);
     seekTo(startTime);
@@ -3135,7 +3161,46 @@ export default function EditorProPage() {
                       </span>
                     </div>
                   </div>
-  
+
+                  {/* 軌道切换选择器 - 类似标签页 */}
+                  <div className="flex items-center gap-1 px-2 py-1.5 bg-zinc-900 border-b border-zinc-800 overflow-x-auto scrollbar-thin">
+                    {tracks.map((track) => {
+                      const isSelected = selectedTrackId === track.id;
+                      console.log(`[Track Selector] Track: ${track.name}, Selected: ${isSelected}, Color: ${track.color}`);
+
+                      return (
+                        <button
+                          key={track.id}
+                          onClick={() => {
+                            console.log(`[Track Selector] Switching to track: ${track.id} (${track.name})`);
+                            selectTrack(track.id);
+                          }}
+                          className={`flex items-center gap-1.5 px-3 py-1 rounded-md whitespace-nowrap transition-all ${
+                            isSelected
+                              ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50'
+                              : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                          }`}
+                          title={`切换到轨道: ${track.name} (${track.segments.length} 个字幕)`}
+                        >
+                          {/* 轨道颜色指示符 */}
+                          <div
+                            className="w-2 h-2 rounded-full"
+                            style={{
+                              backgroundColor: track.color,
+                              boxShadow: isSelected ? `0 0 6px ${track.color}` : 'none'
+                            }}
+                          />
+                          {/* 轨道名称 */}
+                          <span className="text-xs font-medium">{track.name}</span>
+                          {/* 字幕数量标记 */}
+                          <span className={`text-[0.65rem] font-mono ${isSelected ? 'text-blue-100' : 'text-zinc-400'}`}>
+                            ({track.segments.length})
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
                   {/* 時間軸容器 - OpenCut 標準佈局 (無左側工具列) */}
                   <div
                     ref={timelineContainerRef}
@@ -3671,6 +3736,10 @@ export default function EditorProPage() {
                    setSelectedSegmentId(null);
                    toast.success('字幕已刪除');
                  }}
+                 onTrackSwitch={(trackId) => {
+                   console.log('🔒 [轨道锁定] 属性面板触发轨道切换:', trackId);
+                   selectTrack(trackId);
+                 }}
                />
              ) : (
                <PinnedSubtitlePanel />
@@ -3728,9 +3797,9 @@ export default function EditorProPage() {
             onConfirm={(startTime, endTime) => {
               console.log('✅ 確認更新時間:', { startTime, endTime });
               updateSegment(adjustingSegmentId, { startTime, endTime });
-              // 【修復】編輯完成後選中該字幕，讓右邊面板顯示
-              setSelectedSegmentId(adjustingSegmentId);
+              // 【修復】編輯完成後選中該字幕（會自動選中所屬軌道）
               selectSegment(adjustingSegmentId);
+              setSelectedSegmentId(adjustingSegmentId);
               toast.success('字幕時間已更新！');
             }}
             onDelete={() => {
@@ -3783,13 +3852,14 @@ export default function EditorProPage() {
             className="w-full px-4 py-2 text-sm text-left hover:bg-gray-700 flex items-center gap-2 transition"
             onClick={() => {
               if (contextMenu.segmentId && contextMenu.trackId) {
-                // 選中該字幕，讓右邊面板顯示
+                // 選中該字幕（會自動選中所屬軌道）
                 const track = tracks.find(t => t.id === contextMenu.trackId);
                 const segment = track?.segments.find(s => s.id === contextMenu.segmentId);
-                if (segment) {
-                  selectTrack(contextMenu.trackId);
-                  setSelectedSegmentId(contextMenu.segmentId);
+                if (segment && track) {
+                  console.log('🔒 [轨道锁定] 右键菜单编辑字幕，切换轨道:', track.name);
+                  selectTrack(track.id);
                   selectSegment(contextMenu.segmentId);
+                  setSelectedSegmentId(contextMenu.segmentId);
                   seekTo(segment.startTime);
                 }
               }
