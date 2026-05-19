@@ -4,6 +4,7 @@ import { VideoQualityConfig, CanvasRenderingConfig, getQualityConfig, QualityLev
 import { ColorManagementConfig, ColorQualityLevel, getColorConfig, getRecommendedColorConfig } from '../types/color-management';
 import { VideoFrameExtractor, createOptimizedCanvas, applyCanvasRenderingQuality, exportCanvasToBlob } from '../utils/video-frame-extractor';
 import { wrapTextByActualWidth, buildFontString } from '../utils/text-wrapping';
+import { ParallelUploadManager } from '../utils/parallel-upload-manager';
 
 interface RecorderOptions {
   fps?: number;
@@ -98,15 +99,15 @@ export function usePreviewRecorder() {
       const totalFrames = Math.ceil(duration * fps);
       const frameDuration = 1 / fps;
 
-      // 批次處理配置
-      const BATCH_SIZE = 30; // 每批30幀（約1秒視頻，約15MB數據）
-      const MAX_RETRIES = 3; // 最大重試次數
+      // 🔥 性能优化：批次大小从 30 提升到 50（减少网络开销）
+      const BATCH_SIZE = 50; // 每批50幀（約1.67秒視頻，約25MB數據）
       const sessionId = `session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       const totalBatches = Math.ceil(totalFrames / BATCH_SIZE);
 
       console.log(`🎬 開始錄製: ${duration}秒, ${totalFrames}幀, ${fps}FPS`);
       console.log(`📦 批次配置: ${totalBatches}批, 每批${BATCH_SIZE}幀, SessionID: ${sessionId}`);
       console.log(`💾 預計內存峰值: ~${Math.ceil(BATCH_SIZE * 0.5)}MB (批次) vs ~${Math.ceil(totalFrames * 0.5)}MB (原方案)`);
+      console.log(`🚀 並行上傳: 啟用 (編碼下一批的同時上傳當前批)`);
 
       // 計算超采样尺寸
       const ssConfig = renderConfig.supersampling;
@@ -220,49 +221,37 @@ export function usePreviewRecorder() {
       const wasPlaying = !videoElement.paused;
       videoElement.pause();
 
-      /**
-       * 發送批次數據到後端（帶重試機制）
-       */
-      const sendBatch = async (batchId: number, frames: Blob[], isLastBatch: boolean, retryCount = 0): Promise<void> => {
-        const formData = new FormData();
-        formData.append('sessionId', sessionId);
-        formData.append('batchId', batchId.toString());
-        formData.append('totalBatches', totalBatches.toString());
-        formData.append('isLastBatch', isLastBatch.toString());
-        formData.append('videoPath', videoPath);
-        formData.append('fps', fps.toString());
-        formData.append('totalFrames', totalFrames.toString());
+      // 🚀 創建並行上傳管理器
+      const uploadManager = new ParallelUploadManager(
+        sessionId,
+        videoPath,
+        fps,
+        totalFrames,
+        totalBatches
+      );
 
-        // 添加所有幀的Blob
-        frames.forEach((frameBlob, index) => {
-          const frameIndex = batchId * BATCH_SIZE + index;
-          formData.append(`frame_${frameIndex}`, frameBlob, `frame_${frameIndex.toString().padStart(8, '0')}.png`);
-        });
+      uploadManager.setCallbacks(
+        (uploadProgress, stats) => {
+          // 上傳進度回調：20% 用於上傳
+          const totalProgress = 0.8 + (uploadProgress * 0.2);
+          setProgress(totalProgress);
+          onProgress?.(totalProgress);
 
-        try {
-          const response = await fetch('/api/record-preview/batch', {
-            method: 'POST',
-            body: formData,
-          });
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`批次${batchId}上傳失敗: ${errorText}`);
-          }
-
-          const result = await response.json();
-          console.log(`✅ 批次 ${batchId + 1}/${totalBatches} 上傳成功`, result);
-
-        } catch (error: any) {
-          if (retryCount < MAX_RETRIES) {
-            console.warn(`⚠️ 批次${batchId}上傳失敗，重試 ${retryCount + 1}/${MAX_RETRIES}:`, error.message);
-            await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))); // 遞增延遲
-            return sendBatch(batchId, frames, isLastBatch, retryCount + 1);
-          } else {
-            throw new Error(`批次${batchId}上傳失敗（已重試${MAX_RETRIES}次）: ${error.message}`);
-          }
+          // 更新狀態信息
+          const speed = (stats.avgUploadSpeed / 1024 / 1024).toFixed(2);
+          const remaining = stats.estimatedTimeRemaining.toFixed(0);
+          setStatus(`上傳中... ${stats.uploadedBatches}/${stats.totalBatches} (${speed}MB/s, 剩餘${remaining}s)`);
+        },
+        (error) => {
+          console.error('❌ 上傳錯誤:', error);
+          onError?.(error);
         }
-      };
+      );
+
+      // 🎯 性能监控：开始计时
+      const recordingStartTime = performance.now();
+      let lastLogTime = recordingStartTime;
+      let framesProcessedSinceLastLog = 0;
 
       // 逐幀錄製
       for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
@@ -283,20 +272,40 @@ export function usePreviewRecorder() {
         // 設置影片時間
         videoElement.currentTime = currentTime;
 
-        // 等待影片跳轉到指定時間
+        // 🚀 性能优化：优先使用 requestVideoFrameCallback (Chrome 83+, Safari 15.4+)
         await new Promise<void>((resolve) => {
-          const checkTime = () => {
-            if (Math.abs(videoElement.currentTime - currentTime) < 0.01) {
-              resolve();
-            } else {
-              requestAnimationFrame(checkTime);
-            }
-          };
-          checkTime();
+          if ('requestVideoFrameCallback' in videoElement) {
+            // 使用 requestVideoFrameCallback 获得更精确的帧同步
+            (videoElement as any).requestVideoFrameCallback(() => {
+              if (Math.abs(videoElement.currentTime - currentTime) < 0.01) {
+                resolve();
+              } else {
+                // 降级到RAF
+                const checkTime = () => {
+                  if (Math.abs(videoElement.currentTime - currentTime) < 0.01) {
+                    resolve();
+                  } else {
+                    requestAnimationFrame(checkTime);
+                  }
+                };
+                checkTime();
+              }
+            });
+          } else {
+            // 降级到RAF轮询
+            const checkTime = () => {
+              if (Math.abs(videoElement.currentTime - currentTime) < 0.01) {
+                resolve();
+              } else {
+                requestAnimationFrame(checkTime);
+              }
+            };
+            checkTime();
+          }
         });
 
-        // 再等一幀確保渲染完成
-        await new Promise(resolve => requestAnimationFrame(resolve as any));
+        // 🔥 性能优化：删除双重RAF等待，减少延迟
+        // 原代码：await new Promise(resolve => requestAnimationFrame(resolve as any));
 
         // === 方案A：全画面超采样 ===
         if (ssConfig.mode !== 'none' && !ssConfig.subtitlesOnly) {
@@ -327,12 +336,16 @@ export function usePreviewRecorder() {
           // Downscale到目标分辨率（使用高质量算法）
           finalCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, targetWidth, targetHeight);
 
+          // 🔥 性能优化：在 high 质量模式下强制使用 JPEG (比 PNG 快 3-5 倍)
+          const exportFormat = qualityLevel === 'high' || qualityLevel === 'ultra' ? 'image/jpeg' : renderConfig.exportFormat;
+          const exportQuality = qualityLevel === 'high' || qualityLevel === 'ultra' ? 0.95 : renderConfig.exportQuality;
+
           // 导出downscale后的帧
           const frameBlob = await new Promise<Blob>((resolve) => {
             finalCanvas.toBlob(
               (b) => resolve(b!),
-              renderConfig.exportFormat,
-              renderConfig.exportQuality
+              exportFormat,
+              exportQuality
             );
           });
           currentBatchFrames.push(frameBlob);
@@ -363,12 +376,16 @@ export function usePreviewRecorder() {
           // 4. 合成：视频 + downscaled字幕
           ctx.drawImage(downscaleCanvas, 0, 0);
 
+          // 🔥 性能优化：在 high 质量模式下强制使用 JPEG (比 PNG 快 3-5 倍)
+          const exportFormat = qualityLevel === 'high' || qualityLevel === 'ultra' ? 'image/jpeg' : renderConfig.exportFormat;
+          const exportQuality = qualityLevel === 'high' || qualityLevel === 'ultra' ? 0.95 : renderConfig.exportQuality;
+
           // 导出合成后的帧
           const frameBlob = await new Promise<Blob>((resolve) => {
             canvas.toBlob(
               (b) => resolve(b!),
-              renderConfig.exportFormat,
-              renderConfig.exportQuality
+              exportFormat,
+              exportQuality
             );
           });
           currentBatchFrames.push(frameBlob);
@@ -390,17 +407,21 @@ export function usePreviewRecorder() {
             { width: canvas.width, height: canvas.height }  // 使用Canvas实际尺寸
           );
 
+          // 🔥 性能优化：在 high 质量模式下强制使用 JPEG (比 PNG 快 3-5 倍)
+          const exportFormat = qualityLevel === 'high' || qualityLevel === 'ultra' ? 'image/jpeg' : renderConfig.exportFormat;
+          const exportQuality = qualityLevel === 'high' || qualityLevel === 'ultra' ? 0.95 : renderConfig.exportQuality;
+
           const frameBlob = await new Promise<Blob>((resolve) => {
             canvas.toBlob(
               (b) => resolve(b!),
-              renderConfig.exportFormat,
-              renderConfig.exportQuality
+              exportFormat,
+              exportQuality
             );
           });
           currentBatchFrames.push(frameBlob);
         }
 
-        // 當批次滿了或是最後一幀，發送批次
+        // 當批次滿了或是最後一幀，加入上傳隊列（非阻塞！）
         const isBatchFull = currentBatchFrames.length >= BATCH_SIZE;
         const isLastFrame = frameIndex === totalFrames - 1;
 
@@ -408,29 +429,62 @@ export function usePreviewRecorder() {
           const batchId = currentBatchIndex;
           const isLastBatch = isLastFrame;
 
-          setStatus(`上傳批次 ${batchId + 1}/${totalBatches}... (${currentBatchFrames.length}幀)`);
-          console.log(`📤 發送批次 ${batchId}, ${currentBatchFrames.length} 幀`);
+          console.log(`📤 批次 ${batchId} 加入上傳隊列 (${currentBatchFrames.length} 幀)`);
 
-          await sendBatch(batchId, currentBatchFrames, isLastBatch);
+          // 🚀 非阻塞上傳：立即加入隊列，不等待上傳完成
+          uploadManager.queueBatch(batchId, currentBatchFrames, isLastBatch);
 
           // 清空當前批次（內存優化關鍵點！立即釋放內存）
           currentBatchFrames = [];
           currentBatchIndex++;
         }
 
-        // 更新進度（80%錄製+上傳，20%合成）
+        // 更新進度（80%錄製，20%上傳）
         const currentProgress = (frameIndex + 1) / totalFrames;
         setProgress(currentProgress * 0.8);
-        setStatus(`錄製中... ${frameIndex + 1}/${totalFrames} 幀`);
+        setStatus(`編碼中... ${frameIndex + 1}/${totalFrames} 幀`);
         onProgress?.(currentProgress * 0.8);
 
-        // 每10幀輸出一次日誌
-        if (frameIndex % 10 === 0) {
-          console.log(`錄製進度: ${frameIndex}/${totalFrames} (當前批次: ${currentBatchFrames.length}幀)`);
+        // 🎯 性能日志：每30帧输出一次详细性能数据
+        framesProcessedSinceLastLog++;
+        if (frameIndex % 30 === 0 && frameIndex > 0) {
+          const now = performance.now();
+          const elapsed = (now - recordingStartTime) / 1000;
+          const intervalTime = (now - lastLogTime) / 1000;
+          const avgFps = frameIndex / elapsed;
+          const recentFps = framesProcessedSinceLastLog / intervalTime;
+          const estimatedTimeRemaining = ((totalFrames - frameIndex) / avgFps).toFixed(0);
+
+          console.log(`📊 性能统计 [${frameIndex}/${totalFrames}]:`, {
+            avgFps: avgFps.toFixed(1),
+            recentFps: recentFps.toFixed(1),
+            elapsed: `${elapsed.toFixed(1)}s`,
+            remaining: `${estimatedTimeRemaining}s`,
+            batchSize: currentBatchFrames.length,
+            progress: `${(currentProgress * 100).toFixed(1)}%`
+          });
+
+          lastLogTime = now;
+          framesProcessedSinceLastLog = 0;
         }
       }
 
-      console.log(`✅ 所有批次已發送，共 ${totalFrames} 幀`);
+      // 🎯 最终性能统计
+      const totalEncodingTime = (performance.now() - recordingStartTime) / 1000;
+      const finalAvgFps = totalFrames / totalEncodingTime;
+      console.log(`✅ 所有幀已編碼完成！`, {
+        totalFrames,
+        encodingTime: `${totalEncodingTime.toFixed(2)}s`,
+        avgFps: finalAvgFps.toFixed(1),
+        realTimeRatio: `${(duration / totalEncodingTime).toFixed(2)}x`
+      });
+      setStatus('等待上傳完成...');
+      setProgress(0.8);
+
+      // 🚀 等待所有批次上傳完成
+      await uploadManager.waitForCompletion();
+
+      console.log(`✅ 所有批次已上傳完成`);
       setStatus('合成影片中...');
       setProgress(0.85);
 

@@ -25,9 +25,10 @@ export default function TimelineAdjustDialog({
   onConfirm,
   onDelete,
 }: TimelineAdjustDialogProps) {
-  const { deleteSegment } = useSubtitleStore();
+  const { deleteSegment, updateSegment } = useSubtitleStore();
   const [tempStartTime, setTempStartTime] = useState(segment.startTime);
   const [tempEndTime, setTempEndTime] = useState(segment.endTime);
+  const [tempText, setTempText] = useState(segment.text); // 新增：字幕文本状态
   const [zoomLevel, setZoomLevel] = useState(2); // 彈窗時間軸預設放大2倍
   const [isDragging, setIsDragging] = useState(false);
   const [dragType, setDragType] = useState<'left' | 'right' | 'move' | null>(null);
@@ -384,10 +385,16 @@ export default function TimelineAdjustDialog({
             </div>
           </div>
 
-          {/* 字幕文字顯示 */}
+          {/* 字幕文字編輯 */}
           <div className="bg-gray-800 rounded p-3 border border-gray-700">
-            <p className="text-sm text-gray-400 mb-1">字幕內容：</p>
-            <p className="text-white">{segment.text}</p>
+            <p className="text-sm text-gray-400 mb-2">字幕內容：</p>
+            <textarea
+              value={tempText}
+              onChange={(e) => setTempText(e.target.value)}
+              className="w-full bg-gray-900 text-white rounded px-3 py-2 border border-gray-600 focus:border-blue-500 focus:outline-none resize-none"
+              rows={3}
+              placeholder="輸入字幕文字..."
+            />
           </div>
 
           {/* 時間軸區域 */}
@@ -461,7 +468,7 @@ export default function TimelineAdjustDialog({
                     onMouseDown={(e) => handleDragStart(e, 'move')}
                   >
                     <span className="text-[0.65rem] text-white font-medium truncate">
-                      {segment.text}
+                      {tempText}
                     </span>
                   </div>
 
@@ -530,6 +537,8 @@ export default function TimelineAdjustDialog({
             </button>
             <button
               onClick={() => {
+                // 同時保存文本和時間
+                updateSegment(segment.id, { text: tempText });
                 onConfirm(tempStartTime, tempEndTime);
                 onClose();
               }}

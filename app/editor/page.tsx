@@ -77,6 +77,7 @@ export default function ProjectsPage() {
   const [showWhisperSettings, setShowWhisperSettings] = useState(false);
   const [selectedWhisperModel, setSelectedWhisperModel] = useState<WhisperModel>('base');
   const [selectedWhisperLanguage, setSelectedWhisperLanguage] = useState<WhisperLanguage>('auto');
+  const [optimizeTimings, setOptimizeTimings] = useState(false); // 新增：時間軸優化選項
   const [recommendedModel, setRecommendedModel] = useState<WhisperModel | null>(null);
   const [estimatedTime, setEstimatedTime] = useState<string>('');
   const [pendingVideoFile, setPendingVideoFile] = useState<File | null>(null); // 臨時保存檔案（不存入 localStorage）
@@ -408,6 +409,7 @@ export default function ProjectsPage() {
       formData.append('file', videoFile);
       formData.append('model', model);
       formData.append('language', language);
+      formData.append('optimizeTimings', optimizeTimings.toString()); // 添加時間軸優化參數
 
       console.log(`開始 Whisper 字幕識別: 模型=${model}, 語言=${language}`);
 
@@ -821,6 +823,32 @@ export default function ProjectsPage() {
                 <option value="de">Deutsch</option>
                 <option value="es">Español</option>
               </select>
+            </div>
+
+            {/* 時間軸優化選項 */}
+            <div className="mb-4">
+              <label className="flex items-start gap-3 p-3 rounded-lg border-2 border-gray-600 hover:border-gray-500 cursor-pointer transition-all">
+                <input
+                  type="checkbox"
+                  checked={optimizeTimings}
+                  onChange={(e) => setOptimizeTimings(e.target.checked)}
+                  className="mt-1"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-200">智能時間軸優化</span>
+                    <span className="px-2 py-0.5 text-xs bg-blue-600 text-white rounded-full">
+                      新功能
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-400 mt-1">
+                    自動檢測音頻靜音段落，調整字幕時間以避免字幕在說話前出現
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    ⚠️ 會增加約 10-20 秒的處理時間
+                  </p>
+                </div>
+              </label>
             </div>
 
             {/* 預估處理時間 */}

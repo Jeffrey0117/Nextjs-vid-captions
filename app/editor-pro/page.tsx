@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useSubtitleStore, SubtitleSegment } from '../stores/subtitle-store';
-import { Upload, FileText, Download, Languages, Trash2, Scissors, Film, Edit3, Edit, ArrowLeftToLine, ArrowRightToLine, SplitSquareHorizontal, Copy, Snowflake, Video, Music, Type, CaptionsIcon, Blend, Settings, Plus, ChevronDown, Check } from 'lucide-react';
+import { Upload, FileText, Download, Languages, Trash2, Scissors, Film, Edit3, Edit, ArrowLeftToLine, ArrowRightToLine, SplitSquareHorizontal, Copy, Snowflake, Video, Music, Type, CaptionsIcon, Blend, Settings, Plus, ChevronDown, Check, Lock, Unlock } from 'lucide-react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import SubtitlePropertiesPanel from '../components/SubtitlePropertiesPanel';
 import PinnedSubtitlePanel from '../components/PinnedSubtitlePanel';
@@ -448,7 +448,9 @@ export default function EditorProPage() {
     getAllSegments,
     loadProjectSegments,
     loadPinnedSubtitles,
-    moveSegmentToTrack
+    moveSegmentToTrack,
+    lockedTrackId,
+    lockTrack
   } = useSubtitleStore();
 
   // 取得當前播放的字幕 - 支持多轨道
@@ -478,6 +480,12 @@ export default function EditorProPage() {
   }, [currentSubtitles, tracks]);
 
   // 查找当前选中字幕所属的轨道和索引
+  // 获取当前选中的轨道（基于 selectedTrackId，不是字幕所在轨道）
+  const currentTrack = useMemo(() => {
+    return tracks.find(t => t.id === selectedTrackId) || null;
+  }, [selectedTrackId, tracks]);
+
+  // 获取选中字幕的信息
   const currentTrackInfo = useMemo(() => {
     if (!selectedSegmentId) return { track: null, segmentIndex: -1 };
 
@@ -1443,34 +1451,19 @@ export default function EditorProPage() {
       previousSelectedId: selectedSegmentId
     });
 
-    // 查找字幕所在的轨道
-    let targetTrackId: string | null = null;
-    for (const track of tracks) {
-      const segment = track.segments.find(seg => seg.id === segmentId);
-      if (segment) {
-        targetTrackId = track.id;
-        console.log('🔒 [轨道锁定] 找到字幕所在轨道:', {
-          轨道名: track.name,
-          轨道ID: targetTrackId,
-          字幕文本: segment.text.slice(0, 20)
-        });
-        break;
-      }
-    }
-
-    // 如果字幕在其他轨道，自动切换轨道
-    if (targetTrackId && targetTrackId !== currentTrackInfo.track?.id) {
-      console.log('🔒 [轨道锁定] 轨道不匹配，自动切换:', {
-        当前轨道: currentTrackInfo.track?.name,
-        目标轨道ID: targetTrackId
-      });
-      selectTrack(targetTrackId);
-    }
-
-    // 选中字幕
-    setSelectedSegmentId(segmentId);
+    // ✅ 修复：selectSegment 内部已经会自动切换到字幕所在的轨道
+    // 不需要手动调用 selectTrack，避免双重更新冲突
     selectSegment(segmentId);
+    setSelectedSegmentId(segmentId);
     seekTo(startTime);
+
+    // 日志：确认轨道切换
+    const track = tracks.find(t => t.segments.some(seg => seg.id === segmentId));
+    console.log('🔒 [轨道锁定] 字幕选中完成', {
+      segmentId,
+      trackName: track?.name,
+      trackId: track?.id
+    });
   };
 
   // 處理右鍵菜單
@@ -2672,7 +2665,6 @@ export default function EditorProPage() {
                                   });
                                   if (!isCurrentSubtitleSelected) {
                                     handleSegmentClick(subtitle.id, subtitle.startTime);
-                                    selectTrack(trackId);
                                   }
                                 }}
                                 onMouseDown={isCurrentSubtitleSelected ? handleSubtitleDragStart : undefined}
@@ -3321,23 +3313,26 @@ export default function EditorProPage() {
                               const selectedSegmentIndex = hasSelectedSubtitle
                                 ? track.segments.findIndex(seg => seg.id === selectedSegmentId)
                                 : -1;
+                              const isTrackLocked = lockedTrackId === track.id;
 
                               return (
                                 <div
                                   key={track.id}
                                   className={`flex flex-col px-2 py-1 group cursor-pointer border-l-4 transition-all ${
-                                    hasSelectedSubtitle
-                                      ? 'bg-gray-800/70 border-opacity-100'
-                                      : selectedTrackId === track.id
-                                        ? 'border-blue-500 bg-gray-800/50 border-opacity-60'
-                                        : 'border-transparent hover:bg-gray-800/30'
+                                    isTrackLocked
+                                      ? 'bg-cyan-900/40 border-cyan-500 ring-1 ring-cyan-500/50'
+                                      : hasSelectedSubtitle
+                                        ? 'bg-gray-800/70 border-opacity-100'
+                                        : selectedTrackId === track.id
+                                          ? 'border-blue-500 bg-gray-800/50 border-opacity-60'
+                                          : 'border-transparent hover:bg-gray-800/30'
                                   }`}
                                   style={{
                                     height: `${track.height}px`,
-                                    borderLeftColor: hasSelectedSubtitle ? track.color : (selectedTrackId === track.id ? '#3b82f6' : 'transparent'),
+                                    borderLeftColor: isTrackLocked ? '#06b6d4' : (hasSelectedSubtitle ? track.color : (selectedTrackId === track.id ? '#3b82f6' : 'transparent')),
                                   }}
                                   onClick={() => selectTrack(track.id)}
-                                  title={`点击选择轨道: ${track.name}\n共 ${track.segments.length} 个字幕${hasSelectedSubtitle ? `\n当前编辑: #${selectedSegmentIndex + 1}` : ''}`}
+                                  title={`点击选择轨道: ${track.name}\n共 ${track.segments.length} 个字幕${hasSelectedSubtitle ? `\n当前编辑: #${selectedSegmentIndex + 1}` : ''}${isTrackLocked ? '\n🔒 已锁定编辑' : ''}`}
                                 >
                                   <div className="flex items-center justify-between flex-1 min-w-0 gap-1">
                                     <div className="flex flex-col gap-0.5 flex-1 min-w-0">
@@ -3356,7 +3351,32 @@ export default function EditorProPage() {
                                         )}
                                       </div>
                                     </div>
-                                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
+                                    <div className={`flex gap-0.5 ${isTrackLocked ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition`}>
+                                      {/* 锁定/解锁按钮 */}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (isTrackLocked) {
+                                            lockTrack(null);
+                                            toast.success(`已解锁 ${track.name}`);
+                                          } else {
+                                            lockTrack(track.id);
+                                            toast.success(`已锁定编辑 ${track.name}`);
+                                          }
+                                        }}
+                                        className={`w-4 h-4 flex items-center justify-center rounded ${
+                                          isTrackLocked
+                                            ? 'bg-cyan-600 hover:bg-cyan-700'
+                                            : 'hover:bg-gray-700'
+                                        }`}
+                                        title={isTrackLocked ? '解锁轨道' : '锁定此轨道进行编辑'}
+                                      >
+                                        {isTrackLocked ? (
+                                          <Lock className="w-3 h-3 text-white" />
+                                        ) : (
+                                          <Unlock className="w-3 h-3 text-gray-400" />
+                                        )}
+                                      </button>
                                       {/* 显示/隐藏按钮 */}
                                       <button
                                         onClick={(e) => {
@@ -3527,16 +3547,23 @@ export default function EditorProPage() {
                             )}
 
                             {/* 渲染所有轨道 */}
-                            {tracks.map((track, trackIndex) => (
+                            {tracks.map((track, trackIndex) => {
+                              const isThisTrackLocked = lockedTrackId === track.id;
+                              const hasLockedTrack = lockedTrackId !== null;
+                              const isOtherTrackLocked = hasLockedTrack && !isThisTrackLocked;
+
+                              return (
                               <div
                                 key={track.id}
-                                className={`relative ${track.visible ? '' : 'opacity-30'}`}
+                                className={`relative ${track.visible ? '' : 'opacity-30'} ${
+                                  isOtherTrackLocked ? 'opacity-40 pointer-events-none' : ''
+                                } ${isThisTrackLocked ? 'ring-1 ring-cyan-500/30' : ''}`}
                                 style={{ height: `${track.height}px` }}
                               >
                                 <div
                                   className={`w-full h-full hover:bg-gray-800/20 relative transition-all ${
                                     selectedTrackId === track.id ? 'bg-gray-800/10' : ''
-                                  } ${
+                                  } ${isThisTrackLocked ? 'bg-cyan-900/20' : ''} ${
                                     timelineDragState.dragDirection === 'vertical' &&
                                     timelineDragState.targetTrackId === track.id
                                       ? 'bg-blue-500/20 border-2 border-dashed border-blue-400'
@@ -3586,6 +3613,7 @@ export default function EditorProPage() {
                                               ? `0 0 20px ${track.color}80, 0 0 40px ${track.color}40, inset 0 0 10px ${track.color}30`
                                               : 'none',
                                             animation: isSelected ? 'pulse-subtle 2s ease-in-out infinite' : 'none',
+                                            zIndex: isSelected ? 100 : (10 + trackIndex * 5),
                                           }}
                                         >
                                           {/* 序号标记 - 左上角显示 */}
@@ -3618,37 +3646,25 @@ export default function EditorProPage() {
                                               e.stopPropagation();
                                               // 只有沒有拖拽才觸發點擊
                                               if (!hasMoved) {
-                                                // 【修復】使用鼠標 Y 軸位置驗證點擊的軌道
-                                                // 這確保即使在複雜情況下也能正確識別軌道
-                                                const detectedTrackId = getTrackFromMouseY(e.clientY);
-                                                const finalTrackId = detectedTrackId || track.id;
-
-                                                // 使用调试日志工具
-                                                TimelineDebugLogger.click({
-                                                  trackId: finalTrackId,
-                                                  trackName: tracks.find(t => t.id === finalTrackId)?.name || track.name,
-                                                  segmentId: segment.id,
-                                                  segmentText: segment.text,
-                                                  startTime: segment.startTime,
-                                                  wasAlreadySelected: selectedSegmentId === segment.id,
-                                                });
-
-                                                // 【修復】先選軌道，確保後續選字幕時在正確的軌道上下文
-                                                selectTrack(finalTrackId);
-                                                // 然後選中字幕並跳轉時間
-                                                handleSegmentClick(segment.id, segment.startTime);
+                                                // 单击：只选中字幕，跳转时间
+                                                selectSegment(segment.id);
+                                                setSelectedSegmentId(segment.id);
+                                                seekTo(segment.startTime);
                                               }
                                             }}
                                             onDoubleClick={(e) => {
                                               e.stopPropagation();
                                               // 只有沒有拖拽才觸發雙擊
                                               if (!hasMoved) {
-                                                // 【修復】雙擊時也使用 Y 軸位置驗證軌道
-                                                const detectedTrackId = getTrackFromMouseY(e.clientY);
-                                                const finalTrackId = detectedTrackId || track.id;
-
-                                                // 確保選中正確的軌道
-                                                selectTrack(finalTrackId);
+                                                console.log('🖱️ 双击字幕:', {
+                                                  segmentId: segment.id,
+                                                  segmentText: segment.text,
+                                                  trackId: track.id,
+                                                  trackName: track.name
+                                                });
+                                                // 双击打开编辑弹窗
+                                                selectSegment(segment.id);
+                                                setSelectedSegmentId(segment.id);
                                                 setAdjustingSegmentId(segment.id);
                                                 setShowTimelineAdjust(true);
                                               }
@@ -3680,7 +3696,8 @@ export default function EditorProPage() {
                                   })}
                                 </div>
                               </div>
-                            ))}
+                            );
+                            })}
                           </div>
                         </div>
                       </div>
@@ -3730,7 +3747,7 @@ export default function EditorProPage() {
                  selectedSegmentId={selectedSegmentId}
                  applyToAll={applyToAll}
                  setApplyToAll={setApplyToAll}
-                 currentTrack={currentTrackInfo.track}
+                 currentTrack={currentTrack}
                  segmentIndex={currentTrackInfo.segmentIndex}
                  onDelete={() => {
                    setSelectedSegmentId(null);
@@ -3852,12 +3869,11 @@ export default function EditorProPage() {
             className="w-full px-4 py-2 text-sm text-left hover:bg-gray-700 flex items-center gap-2 transition"
             onClick={() => {
               if (contextMenu.segmentId && contextMenu.trackId) {
-                // 選中該字幕（會自動選中所屬軌道）
+                // ✅ 修复：selectSegment 会自动选中所属轨道
                 const track = tracks.find(t => t.id === contextMenu.trackId);
                 const segment = track?.segments.find(s => s.id === contextMenu.segmentId);
                 if (segment && track) {
-                  console.log('🔒 [轨道锁定] 右键菜单编辑字幕，切换轨道:', track.name);
-                  selectTrack(track.id);
+                  console.log('🔒 [轨道锁定] 右键菜单编辑字幕，轨道:', track.name);
                   selectSegment(contextMenu.segmentId);
                   setSelectedSegmentId(contextMenu.segmentId);
                   seekTo(segment.startTime);

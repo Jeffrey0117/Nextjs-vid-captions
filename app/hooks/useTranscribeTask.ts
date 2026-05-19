@@ -44,7 +44,7 @@ export function useTranscribeTask(options: UseTranscribeTaskOptions = {}) {
    * Start transcription task
    */
   const startTranscription = useCallback(
-    async (file: File, language: string = "en") => {
+    async (file: File, language: string = "en", optimizeTimings: boolean = false) => {
       try {
         setIsLoading(true);
         setTaskStatus(null);
@@ -52,6 +52,7 @@ export function useTranscribeTask(options: UseTranscribeTaskOptions = {}) {
         const formData = new FormData();
         formData.append("file", file);
         formData.append("language", language);
+        formData.append("optimizeTimings", optimizeTimings.toString());
 
         // Submit task
         const response = await fetch("/api/transcribe", {

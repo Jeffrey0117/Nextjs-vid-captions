@@ -5,6 +5,8 @@ import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import { taskQueue } from "@/app/lib/task-queue";
+import { parseSrt } from "@/lib/parseSrt";
+import { optimizeSubtitleTimings, subtitlesToSRT } from "@/lib/optimizeSubtitleTimings";
 
 export async function POST(request: Request) {
   try {
@@ -12,6 +14,7 @@ export async function POST(request: Request) {
     const file = formData.get("file") as File;
     const model = (formData.get("model") as string) || "base";
     const language = (formData.get("language") as string) || "auto";
+    const optimizeTimings = formData.get("optimizeTimings") === "true"; // 新增：是否优化时间轴
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -53,7 +56,7 @@ export async function POST(request: Request) {
     // Submit task to queue (non-blocking)
     taskQueue.submitTask(taskId, {
       execute: async () => {
-        return await executeWhisperTask(filePath, tempDir, fileName, model, language, taskId);
+        return await executeWhisperTask(filePath, tempDir, fileName, model, language, taskId, optimizeTimings);
       },
     });
 
@@ -81,7 +84,8 @@ async function executeWhisperTask(
   fileName: string,
   model: string,
   language: string,
-  taskId: string
+  taskId: string,
+  optimizeTimings: boolean = false
 ): Promise<any> {
   return new Promise((resolve, reject) => {
     const srtFileName = `${path.basename(fileName, path.extname(fileName))}.srt`;
@@ -98,6 +102,13 @@ async function executeWhisperTask(
       tempDir,
       "--verbose",
       "True",
+      "--word_timestamps",
+      "True",
+      // 优化 VAD 和时间戳精度
+      "--condition_on_previous_text",
+      "True",
+      "--initial_prompt",
+      "", // 空提示以提高准确性
     ];
 
     // Add language parameter (skip for 'auto' to let Whisper auto-detect)
@@ -140,7 +151,7 @@ async function executeWhisperTask(
       }
     });
 
-    whisper.on("close", (code) => {
+    whisper.on("close", async (code) => {
       console.log(`Whisper process exited with code ${code}`);
       console.log(`Expected SRT path: ${srtPath}`);
 
@@ -153,8 +164,37 @@ async function executeWhisperTask(
         console.log(`Files in temp directory:`, filesInTemp);
 
         if (fs.existsSync(srtPath)) {
-          const srtContent = fs.readFileSync(srtPath, "utf-8");
+          let srtContent = fs.readFileSync(srtPath, "utf-8");
           console.log(`✅ SRT file found, length: ${srtContent.length}`);
+
+          // 如果启用了时间轴优化
+          if (optimizeTimings) {
+            try {
+              console.log(`🔧 开始优化字幕时间轴...`);
+              taskQueue.updateProgress(taskId, 96, "正在优化字幕时间轴...");
+
+              // 解析 SRT
+              const subtitles = parseSrt(srtContent);
+              console.log(`📝 解析了 ${subtitles.length} 个字幕`);
+
+              // 优化时间轴
+              const optimizedSubtitles = await optimizeSubtitleTimings(subtitles, filePath, {
+                silenceThreshold: -30,
+                minSilenceDuration: 0.3,
+                maxAdjustment: 0.5,
+              });
+
+              // 转换回 SRT
+              srtContent = subtitlesToSRT(optimizedSubtitles);
+              console.log(`✅ 字幕时间轴优化完成`);
+
+              taskQueue.updateProgress(taskId, 99, "优化完成");
+            } catch (error) {
+              console.error(`⚠️ 字幕优化失败，使用原始字幕:`, error);
+              // 优化失败时继续使用原始字幕
+            }
+          }
+
           resolve({
             videoUrl: `/temp/${fileName}`,
             srtContent: srtContent,

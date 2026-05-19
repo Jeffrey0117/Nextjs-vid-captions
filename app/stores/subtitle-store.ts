@@ -89,6 +89,7 @@ interface SubtitleStore {
   tracks: SubtitleTrack[];
   selectedTrackId: string | null;
   selectedSegmentId: string | null;
+  lockedTrackId: string | null; // 鎖定編輯的軌道
 
   // 樣式模板支援
   styleTemplates: StyleTemplate[];
@@ -102,6 +103,7 @@ interface SubtitleStore {
   updateTrack: (trackId: string, updates: Partial<SubtitleTrack>) => void;
   reorderTracks: (fromIndex: number, toIndex: number) => void;
   selectTrack: (trackId: string | null) => void;
+  lockTrack: (trackId: string | null) => void; // 鎖定/解鎖軌道編輯
   
   // 字幕片段管理 (支援指定軌道)
   addSegment: (segment: Omit<SubtitleSegment, 'id'>, trackId?: string) => void;
@@ -299,11 +301,42 @@ const getDefaultPinnedSubtitles = (): PinnedSubtitle[] => [
   },
 ];
 
+// 初始化預設兩個軌道
+const createDefaultTracks = (): SubtitleTrack[] => {
+  const track1: SubtitleTrack = {
+    id: generateId(),
+    name: '字幕軌道 1',
+    segments: [],
+    muted: false,
+    visible: true,
+    locked: false,
+    color: '#5DBAA0',
+    height: 60,
+  };
+
+  const track2: SubtitleTrack = {
+    id: generateId(),
+    name: '字幕軌道 2',
+    segments: [],
+    muted: false,
+    visible: true,
+    locked: false,
+    color: '#4A90E2',
+    height: 60,
+  };
+
+  return [track1, track2];
+};
+
+// 創建預設軌道實例（只創建一次）
+const defaultTracks = createDefaultTracks();
+
 export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
-  // 多軌道狀態初始化
-  tracks: [],
-  selectedTrackId: null,
+  // 多軌道狀態初始化 - 預設兩個軌道
+  tracks: defaultTracks,
+  selectedTrackId: defaultTracks[0].id,
   selectedSegmentId: null,
+  lockedTrackId: null, // 預設不鎖定任何軌道
 
   // 固定字幕初始化 - 從 localStorage 載入或使用預設值
   pinnedSubtitles: loadSavedPinnedSubtitles(),
@@ -361,6 +394,14 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
 
   selectTrack: (trackId) => {
     set({ selectedTrackId: trackId });
+  },
+
+  lockTrack: (trackId) => {
+    set({ lockedTrackId: trackId });
+    // 如果鎖定了軌道，同時選中該軌道
+    if (trackId) {
+      set({ selectedTrackId: trackId });
+    }
   },
 
   // 字幕片段管理 (支援多軌道)
@@ -431,7 +472,24 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
   },
 
   selectSegment: (id) => {
-    set({ selectedSegmentId: id });
+    set((state) => {
+      // 自动找到该segment所属的轨道并同时选中
+      const trackWithSegment = state.tracks.find(track =>
+        track.segments.some(seg => seg.id === id)
+      );
+
+      console.log('🎯 selectSegment 调用', {
+        segmentId: id,
+        找到的轨道: trackWithSegment?.name,
+        轨道ID: trackWithSegment?.id,
+        之前的轨道ID: state.selectedTrackId
+      });
+
+      return {
+        selectedSegmentId: id,
+        selectedTrackId: trackWithSegment?.id || state.selectedTrackId
+      };
+    });
   },
 
   moveSegmentToTrack: (fromTrackId, toTrackId, segmentId) => {
@@ -925,7 +983,8 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     const template = state.styleTemplates.find(t => t.id === templateId);
     if (!template) return;
 
-    const segments = state.tracks.length > 0 ? state.tracks[0].segments : [];
+    // ✅ 修复：从所有轨道获取字幕，而不只是第一个轨道
+    const allSegments = state.tracks.flatMap(track => track.segments);
 
     // 只应用样式属性，排除大小和位置相关属性
     const getStyleWithoutSizeAndPosition = (currentStyle: SubtitleSegment['style']) => ({
@@ -952,23 +1011,23 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     });
 
     if (applyToAll) {
-      // 套用到所有字幕
-      segments.forEach(seg => {
+      // 套用到所有轨道的所有字幕
+      allSegments.forEach(seg => {
         state.updateSegment(seg.id, {
           style: getStyleWithoutSizeAndPosition(seg.style),
         });
       });
     } else if (segmentId) {
-      // 套用到指定字幕
-      const seg = segments.find(s => s.id === segmentId);
+      // 套用到指定字幕（支持所有轨道）
+      const seg = allSegments.find(s => s.id === segmentId);
       if (seg) {
         state.updateSegment(segmentId, {
           style: getStyleWithoutSizeAndPosition(seg.style),
         });
       }
     } else if (state.selectedSegmentId) {
-      // 套用到當前選中的字幕
-      const seg = segments.find(s => s.id === state.selectedSegmentId);
+      // 套用到當前選中的字幕（支持所有轨道）
+      const seg = allSegments.find(s => s.id === state.selectedSegmentId);
       if (seg) {
         state.updateSegment(state.selectedSegmentId, {
           style: getStyleWithoutSizeAndPosition(seg.style),

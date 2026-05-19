@@ -3,7 +3,7 @@
 import { useSubtitleStore, SubtitleSegment, SubtitleTrack } from '../stores/subtitle-store';
 import { HexColorPicker } from 'react-colorful';
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Type, Bold, Italic, Underline, Strikethrough, Palette, Eye, Square, Save, X, Plus, ArrowUp, ArrowRight, ArrowDown, ArrowLeft, ChevronDown, ChevronRight, Scissors, Layers, Trash2 } from 'lucide-react';
+import { Type, Bold, Italic, Underline, Strikethrough, Palette, Eye, Square, Save, X, Plus, ArrowUp, ArrowRight, ArrowDown, ArrowLeft, ChevronDown, ChevronRight, Scissors, Layers, Trash2, Lock } from 'lucide-react';
 import { useClickOutside } from '../hooks/useClickOutside';
 
 interface SubtitlePropertiesPanelProps {
@@ -13,6 +13,7 @@ interface SubtitlePropertiesPanelProps {
   currentTrack?: SubtitleTrack | null;
   segmentIndex?: number;
   onDelete?: () => void;
+  onTrackSwitch?: (trackId: string) => void;
 }
 
 export default function SubtitlePropertiesPanel({
@@ -21,9 +22,10 @@ export default function SubtitlePropertiesPanel({
   setApplyToAll,
   currentTrack,
   segmentIndex,
-  onDelete
+  onDelete,
+  onTrackSwitch
 }: SubtitlePropertiesPanelProps) {
-  const { tracks, updateSegment, splitSegment, deleteSegment } = useSubtitleStore();
+  const { tracks, updateSegment, splitSegment, deleteSegment, lockedTrackId } = useSubtitleStore();
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showBgColorPicker, setShowBgColorPicker] = useState(false);
   const [showShadowColorPicker, setShowShadowColorPicker] = useState(false);
@@ -49,17 +51,31 @@ export default function SubtitlePropertiesPanel({
   useClickOutside(shadowColorPickerRef, () => setShowShadowColorPicker(false), showShadowColorPicker);
   useClickOutside(strokeColorPickerRef, () => setShowStrokeColorPicker(false), showStrokeColorPicker);
 
-  // 從所有 tracks 中查找選中的 segment
-  const selectedSegment = useMemo(() => {
-    if (!selectedSegmentId) return null;
+  // 查找选中段的轨道
+  const selectedSegmentTrackInfo = useMemo(() => {
+    if (!selectedSegmentId) {
+      console.log('🔒 [轨道锁定] ❌ 没有选中的字幕ID');
+      return { track: null, segment: null };
+    }
 
     for (const track of tracks) {
       const segment = track.segments.find(seg => seg.id === selectedSegmentId);
-      if (segment) return segment;
+      if (segment) {
+        console.log('🔒 [轨道锁定] ✅ 找到选中的字幕', {
+          轨道: track.name,
+          轨道ID: track.id,
+          字幕文本: segment.text.slice(0, 20)
+        });
+        return { track, segment };
+      }
     }
 
-    return null;
+    console.log('🔒 [轨道锁定] ⚠️ 未找到匹配的字幕 - ID:', selectedSegmentId);
+    return { track: null, segment: null };
   }, [selectedSegmentId, tracks]);
+
+  // 从所有 tracks 中查找选中的 segment（向后兼容）
+  const selectedSegment = selectedSegmentTrackInfo.segment;
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections(prev => ({
@@ -68,12 +84,56 @@ export default function SubtitlePropertiesPanel({
     }));
   };
 
+  // 检查是否需要轨道切换提示
   if (!selectedSegment) {
+    // 如果有选中的字幕ID但没有找到，可能需要切换轨道
+    if (selectedSegmentId && selectedSegmentTrackInfo.track === null) {
+      console.log('🔒 [轨道锁定] 检测到轨道不匹配');
+      return (
+        <div className="h-full flex items-center justify-center text-gray-500">
+          <div className="text-center">
+            <Type size={48} className="mx-auto mb-4 opacity-50" />
+            <p className="mb-4">選中的字幕不在當前軌道</p>
+            <p className="text-xs text-gray-400 mb-4">請在軌道列表中切換到對應軌道</p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="h-full flex items-center justify-center text-gray-500">
         <div className="text-center">
           <Type size={48} className="mx-auto mb-4 opacity-50" />
           <p>請選擇字幕片段進行編輯</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 检查选中字幕是否在当前轨道中
+  const isSegmentInCurrentTrack = selectedSegmentTrackInfo.track?.id === currentTrack?.id;
+
+  if (!isSegmentInCurrentTrack && currentTrack && selectedSegmentTrackInfo.track) {
+    console.log('🔒 [轨道锁定] ⚠️ 轨道不匹配 - 当前轨道:', currentTrack.name, '字幕轨道:', selectedSegmentTrackInfo.track.name);
+    return (
+      <div className="h-full flex items-center justify-center text-gray-500 p-4">
+        <div className="text-center">
+          <Type size={48} className="mx-auto mb-4 opacity-50" />
+          <p className="mb-2 font-semibold">軌道不匹配</p>
+          <p className="text-sm text-gray-400 mb-4">
+            選中的字幕在「<span className="text-blue-400">{selectedSegmentTrackInfo.track.name}</span>」軌道中
+          </p>
+          <button
+            onClick={() => {
+              console.log('🔒 [轨道锁定] 用户点击切换轨道按钮');
+              if (onTrackSwitch && selectedSegmentTrackInfo.track) {
+                onTrackSwitch(selectedSegmentTrackInfo.track.id);
+              }
+            }}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition text-sm"
+          >
+            切換到該軌道
+          </button>
         </div>
       </div>
     );
@@ -128,6 +188,12 @@ export default function SubtitlePropertiesPanel({
             {currentTrack.locked && (
               <div className="px-2 py-1 bg-yellow-500/20 border border-yellow-500/50 rounded text-xs text-yellow-300">
                 已锁定
+              </div>
+            )}
+            {lockedTrackId === currentTrack.id && (
+              <div className="px-2 py-1 bg-cyan-500/20 border border-cyan-500/50 rounded text-xs text-cyan-300 flex items-center gap-1">
+                <Lock size={10} />
+                編輯中
               </div>
             )}
             {/* 删除按钮 */}
