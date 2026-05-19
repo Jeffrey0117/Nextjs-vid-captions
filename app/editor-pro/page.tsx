@@ -3258,7 +3258,8 @@ export default function EditorProPage() {
                               };
                               
                               const interval = getTimeInterval(zoomLevel);
-                              const markerCount = Math.ceil(duration / interval) + 1;
+                              const rawCount = (duration > 0 && isFinite(duration)) ? Math.ceil(duration / interval) + 1 : 0;
+                              const markerCount = Math.min(rawCount, 10000);
                               
                               return Array.from({ length: markerCount }, (_, i) => {
                                 const time = i * interval;
