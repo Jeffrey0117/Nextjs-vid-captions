@@ -33,15 +33,18 @@ import { SubtitleSegment, PinnedSubtitle } from '../app/stores/subtitle-store';
 export function generateAssSubtitle(
   segments: SubtitleSegment[],
   pinnedSubtitles?: PinnedSubtitle[],
-  secondarySegments?: SubtitleSegment[]
+  secondarySegments?: SubtitleSegment[],
+  videoDimensions?: { width: number; height: number }
 ): string {
+  const dim = videoDimensions ?? { width: 1920, height: 1080 };
+
   // ASS 檔頭 - 添加 Hinting 和抗鋸齒優化
   const header = `[Script Info]
 Title: Generated Subtitles
 ScriptType: v4.00+
 WrapStyle: 0
-PlayResX: 1920
-PlayResY: 1080
+PlayResX: ${dim.width}
+PlayResY: ${dim.height}
 ScaledBorderAndShadow: yes
 YCbCr Matrix: TV.709
 
@@ -304,11 +307,11 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
     const end = formatAssTime(seg.endTime);
     const text = (seg.translatedText || seg.text).replace(/\n/g, '\\N');
 
-    // 計算位置 (1920x1080 為基準)
+    // 計算位置 (動態解析度)
     // positionX: 0-100% (水平位置,可能超出範圍 -50 到 150)
     // positionY: 0-100% (垂直位置,可能超出範圍 -50 到 150)
-    let posX = Math.round(1920 * (seg.style.positionX / 100));
-    let posY = Math.round(1080 * (seg.style.positionY / 100));
+    let posX = Math.round(dim.width * (seg.style.positionX / 100));
+    let posY = Math.round(dim.height * (seg.style.positionY / 100));
 
     // 双轨道模式：主字幕位置向下偏移（放在更下方）
     if (isDualTrack) {
@@ -330,8 +333,8 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
         const styleIndex = segments.length + index;
 
         // 計算位置
-        let posX = Math.round(1920 * (seg.style.positionX / 100));
-        let posY = Math.round(1080 * (seg.style.positionY / 100));
+        let posX = Math.round(dim.width * (seg.style.positionX / 100));
+        let posY = Math.round(dim.height * (seg.style.positionY / 100));
 
         // 次字幕位置向上偏移（放在更上方，在主字幕上面）
         posY -= 40; // 向上偏移 40px
@@ -351,8 +354,8 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
       const text = pinned.text.replace(/\n/g, '\\N');
 
       // 計算位置
-      const posX = 1920 / 2; // 水平居中
-      const posY = Math.round(1080 * (pinned.style.positionY / 100));
+      const posX = Math.round(dim.width / 2); // 水平居中
+      const posY = Math.round(dim.height * (pinned.style.positionY / 100));
       const posTag = `{\\pos(${posX},${posY})}`;
 
       // 固定字幕時間跨度：0:00:00.00 到 99:59:59.99（整個視頻）

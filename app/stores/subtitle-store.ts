@@ -218,7 +218,7 @@ const loadSavedPinnedSubtitles = (): PinnedSubtitle[] => {
   return getDefaultPinnedSubtitles();
 };
 
-// 從 localStorage 載入樣式模板（如果存在）
+// 從 localStorage 載入樣式模板（如果存在），自動補齊缺少的內建模板
 const loadSavedStyleTemplates = (): StyleTemplate[] => {
   if (typeof window === 'undefined') {
     return getDefaultStyleTemplates();
@@ -227,7 +227,17 @@ const loadSavedStyleTemplates = (): StyleTemplate[] => {
   try {
     const saved = localStorage.getItem('subtitle-style-templates');
     if (saved) {
-      const parsed = JSON.parse(saved);
+      const parsed: StyleTemplate[] = JSON.parse(saved);
+      // 自動補齊缺少的內建模板
+      const defaults = getDefaultStyleTemplates();
+      const savedIds = new Set(parsed.map(t => t.id));
+      const missing = defaults.filter(d => !savedIds.has(d.id));
+      if (missing.length > 0) {
+        const merged = [...parsed, ...missing];
+        localStorage.setItem('subtitle-style-templates', JSON.stringify(merged));
+        console.log(`✅ 從 localStorage 載入樣式模板: ${parsed.length} 個，補齊 ${missing.length} 個內建模板`);
+        return merged;
+      }
       console.log('✅ 從 localStorage 載入樣式模板:', parsed.length, '個');
       return parsed;
     }
@@ -245,7 +255,95 @@ const getDefaultStyleTemplates = (): StyleTemplate[] => [
     name: '預設樣式',
     style: DEFAULT_STYLE,
     isDefault: true,
-    createdAt: Date.now(),
+    createdAt: 0,
+  },
+  {
+    id: 'reel-large-center',
+    name: 'Reel 大字居中',
+    style: {
+      ...DEFAULT_STYLE,
+      fontSize: 48,
+      fontWeight: 'bold',
+      positionX: 50,
+      positionY: 50,
+      enableStroke: true,
+      strokeColor: '#000000',
+      strokeWidth: 4,
+      enableShadow: false,
+      shadowOffsetX: 0,
+      shadowOffsetY: 0,
+      shadowBlur: 0,
+      scale: 1.0,
+    },
+    isDefault: true,
+    createdAt: 0,
+  },
+  {
+    id: 'reel-colorful-stroke',
+    name: 'Reel 彩色描邊',
+    style: {
+      ...DEFAULT_STYLE,
+      fontSize: 40,
+      fontWeight: 'bold',
+      color: '#FFD700',
+      positionX: 50,
+      positionY: 50,
+      enableStroke: true,
+      strokeColor: '#FF1493',
+      strokeWidth: 3,
+      enableShadow: false,
+      shadowOffsetX: 0,
+      shadowOffsetY: 0,
+      shadowBlur: 0,
+      scale: 1.0,
+    },
+    isDefault: true,
+    createdAt: 0,
+  },
+  {
+    id: 'reel-title-subtitle',
+    name: 'Reel 標題+字幕',
+    style: {
+      ...DEFAULT_STYLE,
+      fontSize: 32,
+      fontWeight: 'bold',
+      positionX: 50,
+      positionY: 80,
+      enableStroke: true,
+      strokeColor: '#000000',
+      strokeWidth: 2,
+      enableShadow: true,
+      shadowColor: '#000000',
+      shadowOffsetX: 2,
+      shadowOffsetY: 2,
+      shadowBlur: 4,
+      scale: 1.0,
+    },
+    isDefault: true,
+    createdAt: 0,
+  },
+  {
+    id: 'reel-minimal',
+    name: 'Reel 簡約白字',
+    style: {
+      ...DEFAULT_STYLE,
+      fontSize: 28,
+      fontWeight: 'normal',
+      color: '#FFFFFF',
+      positionX: 50,
+      positionY: 85,
+      enableStroke: false,
+      strokeColor: '#000000',
+      strokeWidth: 0,
+      enableShadow: true,
+      shadowColor: '#000000',
+      shadowOffsetX: 1,
+      shadowOffsetY: 1,
+      shadowBlur: 4,
+      scale: 1.0,
+    },
+    isDefault: true,
+    createdAt: 0,
   },
 ];
 

@@ -78,6 +78,39 @@ export async function POST(request: Request) {
 /**
  * Execute Whisper transcription with progress tracking
  */
+/**
+ * Find the Python executable path (cached after first lookup)
+ */
+let cachedPythonPath: string | null = null;
+
+function findPythonPath(): string {
+  if (cachedPythonPath) return cachedPythonPath;
+
+  const candidates = [
+    path.join(process.env.LOCALAPPDATA || "", "Programs", "Python", "Python313", "python.exe"),
+    path.join(process.env.LOCALAPPDATA || "", "Programs", "Python", "Python312", "python.exe"),
+    path.join(process.env.LOCALAPPDATA || "", "Programs", "Python", "Python311", "python.exe"),
+    "python",
+    "python3",
+  ];
+
+  for (const p of candidates) {
+    try {
+      if (p.includes(path.sep) && fs.existsSync(p)) {
+        cachedPythonPath = p;
+        return p;
+      }
+    } catch { /* skip */ }
+  }
+
+  // Fallback to bare command, let spawn resolve it
+  cachedPythonPath = candidates[candidates.length - 2];
+  return cachedPythonPath;
+}
+
+/**
+ * Execute faster-whisper transcription with progress tracking
+ */
 async function executeWhisperTask(
   filePath: string,
   tempDir: string,
@@ -91,57 +124,37 @@ async function executeWhisperTask(
     const srtFileName = `${path.basename(fileName, path.extname(fileName))}.srt`;
     const srtPath = path.join(tempDir, srtFileName);
 
-    // Build Whisper command arguments
+    const pythonPath = findPythonPath();
+    const scriptPath = path.join(process.cwd(), "scripts", "faster-whisper-srt.py");
+
     const whisperArgs = [
+      scriptPath,
       filePath,
-      "--model",
-      model,
-      "--output_format",
-      "srt",
-      "--output_dir",
-      tempDir,
-      "--verbose",
-      "True",
-      "--word_timestamps",
-      "True",
-      // 优化 VAD 和时间戳精度
-      "--condition_on_previous_text",
-      "True",
-      "--initial_prompt",
-      "", // 空提示以提高准确性
+      "--model", model,
+      "--language", language,
+      "--output_dir", tempDir,
     ];
 
-    // Add language parameter (skip for 'auto' to let Whisper auto-detect)
-    if (language !== "auto") {
-      whisperArgs.push("--language", language);
-    }
-
-    console.log(`Starting Whisper: model=${model}, language=${language}`);
-    console.log(`Whisper command: whisper ${whisperArgs.join(' ')}`);
-    console.log(`Input file: ${filePath}`);
-    console.log(`Output directory: ${tempDir}`);
+    console.log(`Starting faster-whisper: model=${model}, language=${language}`);
+    console.log(`Command: ${pythonPath} ${whisperArgs.join(' ')}`);
     console.log(`Expected SRT: ${srtPath}`);
 
-    // Use spawn instead of exec for real-time output
-    const whisper = spawn("whisper", whisperArgs);
+    const whisper = spawn(pythonPath, whisperArgs);
 
     let stderrData = "";
 
-    // Parse Whisper progress from stderr
     whisper.stderr.on("data", (data: Buffer) => {
       const output = data.toString();
       stderrData += output;
 
-      // Parse progress from Whisper output
-      // Example: "[00:01.000 --> 00:05.000]  Processing..."
-      const progressMatch = output.match(/\[(\d{2}):(\d{2})\.(\d{3})\s*-->/);
+      // Parse progress from faster-whisper output
+      // Format: [MM:SS.mmm -->] text
+      const progressMatch = output.match(/\[(\d{2}):(\d{2})\.(\d{3})\s*-->\]/);
       if (progressMatch) {
         const minutes = parseInt(progressMatch[1]);
         const seconds = parseInt(progressMatch[2]);
         const currentTime = minutes * 60 + seconds;
 
-        // Estimate progress (assume ~5 min video = 100%)
-        // This is a rough estimate, adjust based on actual video duration
         const estimatedProgress = Math.min(95, (currentTime / 300) * 100);
         taskQueue.updateProgress(
           taskId,
@@ -152,46 +165,29 @@ async function executeWhisperTask(
     });
 
     whisper.on("close", async (code) => {
-      console.log(`Whisper process exited with code ${code}`);
-      console.log(`Expected SRT path: ${srtPath}`);
+      console.log(`faster-whisper exited with code ${code}`);
 
       if (code === 0) {
-        // Success - check for SRT file
-        console.log(`Checking if SRT file exists at: ${srtPath}`);
-
-        // List all files in temp directory for debugging
-        const filesInTemp = fs.readdirSync(tempDir);
-        console.log(`Files in temp directory:`, filesInTemp);
-
         if (fs.existsSync(srtPath)) {
           let srtContent = fs.readFileSync(srtPath, "utf-8");
-          console.log(`✅ SRT file found, length: ${srtContent.length}`);
+          console.log(`SRT file found, length: ${srtContent.length}`);
 
-          // 如果启用了时间轴优化
           if (optimizeTimings) {
             try {
-              console.log(`🔧 开始优化字幕时间轴...`);
-              taskQueue.updateProgress(taskId, 96, "正在优化字幕时间轴...");
+              console.log(`Optimizing subtitle timings...`);
+              taskQueue.updateProgress(taskId, 96, "正在優化字幕時間軸...");
 
-              // 解析 SRT
               const subtitles = parseSrt(srtContent);
-              console.log(`📝 解析了 ${subtitles.length} 个字幕`);
-
-              // 优化时间轴
               const optimizedSubtitles = await optimizeSubtitleTimings(subtitles, filePath, {
                 silenceThreshold: -30,
                 minSilenceDuration: 0.3,
                 maxAdjustment: 0.5,
               });
 
-              // 转换回 SRT
               srtContent = subtitlesToSRT(optimizedSubtitles);
-              console.log(`✅ 字幕时间轴优化完成`);
-
-              taskQueue.updateProgress(taskId, 99, "优化完成");
+              taskQueue.updateProgress(taskId, 99, "優化完成");
             } catch (error) {
-              console.error(`⚠️ 字幕优化失败，使用原始字幕:`, error);
-              // 优化失败时继续使用原始字幕
+              console.error(`Subtitle optimization failed, using original:`, error);
             }
           }
 
@@ -201,21 +197,20 @@ async function executeWhisperTask(
             status: "completed",
           });
         } else {
-          console.error(`❌ SRT file NOT found at expected path: ${srtPath}`);
-          console.error(`Whisper stderr output:`, stderrData);
+          console.error(`SRT file NOT found at: ${srtPath}`);
+          console.error(`stderr:`, stderrData);
           reject(new Error("SRT file not generated"));
         }
       } else {
-        // Error
-        console.error("Whisper stderr:", stderrData);
-        reject(new Error(`Whisper exited with code ${code}`));
+        console.error("faster-whisper stderr:", stderrData);
+        reject(new Error(`faster-whisper exited with code ${code}: ${stderrData.slice(-500)}`));
       }
     });
 
     whisper.on("error", (error) => {
-      console.error("Whisper spawn error:", error);
+      console.error("Spawn error:", error);
       if (error.message.includes('ENOENT')) {
-        reject(new Error("Whisper 未安裝。請執行: pip install openai-whisper"));
+        reject(new Error("Python 未找到。請確認 Python 已安裝並包含 faster-whisper 套件。"));
       } else {
         reject(error);
       }

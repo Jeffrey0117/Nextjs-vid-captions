@@ -74,11 +74,27 @@ export async function POST(request: Request) {
       await fs.promises.writeFile(finalVideoPath, videoBuffer);
     }
 
+    // 偵測影片實際寬高
+    let videoDimensions: { width: number; height: number } | undefined;
+    try {
+      const { stdout: probeStdout } = await execAsync(
+        `ffprobe -v quiet -print_format json -show_streams "${finalVideoPath}"`
+      );
+      const streams = JSON.parse(probeStdout).streams;
+      const videoStream = streams.find((s: any) => s.codec_type === 'video');
+      if (videoStream?.width && videoStream?.height) {
+        videoDimensions = { width: videoStream.width, height: videoStream.height };
+        console.log(`📐 Video dimensions: ${videoDimensions.width}x${videoDimensions.height}`);
+      }
+    } catch (probeError) {
+      console.warn('⚠️ ffprobe failed, using default 1920x1080:', probeError);
+    }
+
     // 生成 ASS 字幕檔（包含固定字幕）
     // 如果提供了双字幕轨道，使用双轨道模式；否则使用传统单轨道模式
     const assContent = (primarySubtitles && secondarySubtitles)
-      ? generateAssSubtitle(primarySubtitles, pinnedSubtitles, secondarySubtitles)
-      : generateAssSubtitle(subtitles, pinnedSubtitles);
+      ? generateAssSubtitle(primarySubtitles, pinnedSubtitles, secondarySubtitles, videoDimensions)
+      : generateAssSubtitle(subtitles, pinnedSubtitles, undefined, videoDimensions);
     const assFileName = `subtitle_${Date.now()}.ass`;
     const assPath = path.join(tempDir, assFileName);
     await fs.promises.writeFile(assPath, assContent, "utf-8");

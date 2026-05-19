@@ -109,6 +109,22 @@ export default function ProjectsPage() {
   useEffect(() => {
     const importVideoUrl = searchParams.get('import');
     const importName = searchParams.get('name');
+    const source = searchParams.get('source');
+    const origin = searchParams.get('origin');
+
+    // Store ReelMaker origin in sessionStorage for editor-pro to read
+    // Validate origin is a valid URL to prevent abuse
+    if (source === 'reelmaker' && origin) {
+      try {
+        const parsed = new URL(origin);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+          sessionStorage.setItem('reelmaker-origin', parsed.origin);
+        }
+      } catch {
+        // Invalid origin URL, ignore
+      }
+    }
+
     if (!importVideoUrl || importHandled.current) return;
     importHandled.current = true;
 
