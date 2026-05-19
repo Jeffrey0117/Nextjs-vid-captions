@@ -16,7 +16,7 @@ import {
   Zap,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { useSubtitleStore } from "../stores/subtitle-store";
 import BulkSubtitleEditor from "../components/BulkSubtitleEditor";
@@ -82,9 +82,13 @@ export default function ProjectsPage() {
   const [estimatedTime, setEstimatedTime] = useState<string>('');
   const [pendingVideoFile, setPendingVideoFile] = useState<File | null>(null); // 臨時保存檔案（不存入 localStorage）
 
+  // URL import support (from ReelMaker)
+  const searchParams = useSearchParams();
+  const importHandled = useRef(false);
+
   // Zustand store
   const { tracks, loadProjectSegments, clearAll } = useSubtitleStore();
-  
+
   // 初始化:從 localStorage 載入專案
   useEffect(() => {
     const savedProjects = localStorage.getItem('subtitle-projects');
@@ -99,6 +103,67 @@ export default function ProjectsPage() {
       }));
       setProjects(restored);
     }
+  }, []);
+
+  // Handle ?import=VIDEO_URL from ReelMaker
+  useEffect(() => {
+    const importVideoUrl = searchParams.get('import');
+    const importName = searchParams.get('name');
+    if (!importVideoUrl || importHandled.current) return;
+    importHandled.current = true;
+
+    // Clear URL to avoid re-import on refresh
+    window.history.replaceState({}, '', '/editor');
+
+    const newId = Date.now().toString();
+    const projectName = importName
+      ? importName.replace(/\.\w+$/, '')
+      : `匯入 ${new Date().toLocaleTimeString()}`;
+
+    const newProject: Project = {
+      id: newId,
+      name: projectName,
+      createdAt: new Date(),
+      videoUrl: importVideoUrl,
+      status: 'idle',
+      progress: 0,
+    };
+
+    setProjects(prev => [newProject, ...prev]);
+
+    // Fetch video as File, generate thumbnail, show Whisper settings
+    (async () => {
+      try {
+        const res = await fetch(importVideoUrl);
+        const blob = await res.blob();
+        const file = new File(
+          [blob],
+          importName || 'imported.webm',
+          { type: blob.type || 'video/webm' }
+        );
+
+        const thumbnail = await generateVideoThumbnail(file);
+        const duration = await getVideoDuration(file);
+
+        updateProject(newId, { thumbnail, videoDuration: duration });
+
+        setPendingVideoFile(file);
+        setCurrentEditingProjectId(newId);
+
+        const recommended = getRecommendedModel(duration);
+        setRecommendedModel(recommended);
+        setSelectedWhisperModel(recommended);
+        setEstimatedTime(calculateEstimatedTime(duration, recommended));
+        setShowWhisperSettings(true);
+      } catch (err) {
+        console.error('Import video failed:', err);
+        updateProject(newId, {
+          status: 'error',
+          errorMessage: '匯入影片失敗: ' + (err as Error).message,
+        });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
   // 持久化:專案變更時儲存到 localStorage

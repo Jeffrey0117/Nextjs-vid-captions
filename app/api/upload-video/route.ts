@@ -2,6 +2,16 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
+
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -10,7 +20,7 @@ export async function POST(request: Request) {
     if (!videoFile) {
       return NextResponse.json(
         { error: "沒有找到影片檔案" },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -33,13 +43,13 @@ export async function POST(request: Request) {
       success: true,
       videoPath: videoFileName, // 只返回檔案名稱
       message: "影片上傳成功"
-    });
+    }, { headers: corsHeaders });
 
   } catch (error) {
     console.error("影片上傳錯誤:", error);
     return NextResponse.json(
       { error: "影片上傳失敗" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
