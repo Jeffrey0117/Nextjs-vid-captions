@@ -1,0 +1,1394 @@
+import { create } from 'zustand';
+
+export interface SubtitleSegment {
+  id: string;
+  startTime: number;
+  endTime: number;
+  text: string;
+  translatedText?: string;
+  style: {
+    fontSize: number;
+    fontFamily: string;
+    fontWeight: 'normal' | 'bold';
+    fontStyle: 'normal' | 'italic';
+    textDecoration: 'none' | 'underline' | 'line-through';
+    color: string;
+    opacity: number;
+    backgroundColor: string;
+    position: 'top' | 'center' | 'bottom';
+    enableShadow: boolean; // 陰影開關
+    shadowColor: string;
+    shadowOffsetX: number; // 陰影 X 偏移 (-50 to 50)
+    shadowOffsetY: number; // 陰影 Y 偏移 (-50 to 50)
+    shadowBlur: number; // 陰影模糊半徑 (0-50)
+    enableStroke: boolean; // 描邊開關
+    strokeColor: string; // 描邊顏色
+    strokeWidth: number; // 描邊寬度 (0-10)
+    positionX: number; // 水平位置百分比 (0-100, 50=中間)
+    positionY: number; // 垂直位置百分比 (0-100)
+    maxWidth: number; // 最大寬度 vw 單位 (10-100)
+    scale: number; // 縮放比例 (0.5-3.0)
+  };
+}
+
+// 字幕樣式模板
+export interface StyleTemplate {
+  id: string;
+  name: string; // 模板名稱，如 "預設", "標題樣式", "對話樣式" 等
+  style: SubtitleSegment['style'];
+  isDefault: boolean; // 是否為預設模板
+  createdAt: number; // 創建時間戳
+}
+
+// 固定字幕（貫穿整個影片的字幕）
+export interface PinnedSubtitle {
+  id: string;
+  text: string;
+  position: 'top' | 'bottom';
+  enabled: boolean; // 是否启用
+  generatedTitles?: { // AI 生成的 3 個標題選項
+    viral: string;
+    funny: string;
+    mystery: string;
+  };
+  style: {
+    fontSize: number;
+    fontFamily: string;
+    fontWeight: 'normal' | 'bold';
+    fontStyle: 'normal' | 'italic';
+    color: string;
+    opacity: number;
+    backgroundColor: string; // 顶部固定字幕用
+    enableShadow: boolean;
+    shadowColor: string;
+    shadowOffsetX: number;
+    shadowOffsetY: number;
+    shadowBlur: number;
+    enableStroke: boolean;
+    strokeColor: string;
+    strokeWidth: number;
+    positionY: number; // 精确垂直位置（0-100）
+  };
+}
+
+// 字幕軌道類型定義 (參考 OpenCut TimelineTrack)
+export interface SubtitleTrack {
+  id: string;
+  name: string; // "中文字幕", "English Subtitles", etc.
+  segments: SubtitleSegment[];
+  muted: boolean; // 是否靜音 (不顯示)
+  visible: boolean; // 是否在時間軸顯示
+  locked: boolean; // 是否鎖定 (無法編輯)
+  color: string; // 軌道顏色標記 (用於時間軸區分)
+  height: number; // 軌道高度 (px)
+  defaultStyle?: Partial<SubtitleSegment['style']>; // 該軌道的預設樣式
+}
+
+interface SubtitleStore {
+  // 多軌道支援
+  tracks: SubtitleTrack[];
+  selectedTrackId: string | null;
+  selectedSegmentId: string | null;
+  lockedTrackId: string | null; // 鎖定編輯的軌道
+
+  // 樣式模板支援
+  styleTemplates: StyleTemplate[];
+
+  // 固定字幕支援
+  pinnedSubtitles: PinnedSubtitle[];
+
+  // 軌道管理
+  addTrack: (name: string, defaultStyle?: Partial<SubtitleSegment['style']>) => void;
+  deleteTrack: (trackId: string) => void;
+  updateTrack: (trackId: string, updates: Partial<SubtitleTrack>) => void;
+  reorderTracks: (fromIndex: number, toIndex: number) => void;
+  selectTrack: (trackId: string | null) => void;
+  lockTrack: (trackId: string | null) => void; // 鎖定/解鎖軌道編輯
+  
+  // 字幕片段管理 (支援指定軌道)
+  addSegment: (segment: Omit<SubtitleSegment, 'id'>, trackId?: string) => void;
+  updateSegment: (id: string, updates: Partial<SubtitleSegment>) => void;
+  deleteSegment: (id: string) => void;
+  selectSegment: (id: string | null) => void;
+  moveSegmentToTrack: (fromTrackId: string, toTrackId: string, segmentId: string) => void;
+  splitSegment: (id: string, splitTime?: number) => void; // 切割字幕
+  
+  // 樣式模板管理
+  saveStyleTemplate: (name: string, style: SubtitleSegment['style'], isDefault?: boolean) => void;
+  applyStyleTemplate: (templateId: string, segmentId?: string, applyToAll?: boolean) => void;
+  deleteStyleTemplate: (templateId: string) => void;
+  updateStyleTemplate: (templateId: string, updates: Partial<StyleTemplate>) => void;
+  getDefaultTemplate: () => StyleTemplate | null;
+  setDefaultTemplate: (templateId: string) => void;
+
+  // 固定字幕管理
+  addPinnedSubtitle: (position: 'top' | 'bottom') => void;
+  updatePinnedSubtitle: (id: string, updates: Partial<PinnedSubtitle>) => void;
+  deletePinnedSubtitle: (id: string) => void;
+  togglePinnedSubtitle: (id: string, enabled: boolean) => void;
+  
+  // 匯入 SRT (可指定軌道)
+  importFromSrt: (srtContent: string, targetTrackId?: string) => void;
+  
+  // 匯出 SRT (可匯出單一軌道或全部)
+  exportToSrt: (trackId?: string) => string;
+  
+  // 清空所有字幕
+  clearAll: () => void;
+  
+  // 向後相容性方法 (getter)
+  get segments(): SubtitleSegment[];
+  getActiveTrack: () => SubtitleTrack | null;
+  getAllSegments: () => SubtitleSegment[];
+  
+  // 批量載入專案字幕 (用於從 localStorage 載入)
+  loadProjectSegments: (segments: SubtitleSegment[]) => void;
+
+  // 批量載入固定字幕 (用於從 localStorage 載入)
+  loadPinnedSubtitles: (pinnedSubtitles: PinnedSubtitle[]) => void;
+
+  // AI 自動優化功能
+  autoOptimizeSegment: (segmentId: string, videoWidth: number) => void;
+  autoOptimizeAllSegments: (videoWidth: number) => void;
+  detectOverflowSegments: (videoWidth: number) => SubtitleSegment[];
+}
+
+// 簡單的 ID 生成器
+const generateId = () => Math.random().toString(36).substr(2, 9);
+
+// 解析 SRT 時間格式
+const parseSrtTime = (timeStr: string): number => {
+  const [time, ms] = timeStr.split(',');
+  const [hours, minutes, seconds] = time.split(':').map(Number);
+  return hours * 3600 + minutes * 60 + seconds + Number(ms) / 1000;
+};
+
+// 格式化時間為 SRT 格式
+const formatSrtTime = (seconds: number): string => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  const ms = Math.floor((seconds % 1) * 1000);
+  
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
+};
+
+// 預設樣式常數
+export const DEFAULT_STYLE: SubtitleSegment['style'] = {
+  fontSize: 32,
+  fontFamily: 'Noto Sans SC',
+  fontWeight: 'normal',
+  fontStyle: 'normal',
+  textDecoration: 'none',
+  color: '#FFFFFF',
+  opacity: 1,
+  backgroundColor: 'transparent',
+  position: 'bottom',
+  enableShadow: true,
+  shadowColor: '#000000',
+  shadowOffsetX: 4,
+  shadowOffsetY: 4,
+  shadowBlur: 8,
+  enableStroke: true,
+  strokeColor: '#000000',
+  strokeWidth: 2,
+  positionX: 50,
+  positionY: 75,
+  maxWidth: 80,
+  scale: 1.0,
+};
+
+// 從 localStorage 載入固定字幕（如果存在）
+const loadSavedPinnedSubtitles = (): PinnedSubtitle[] => {
+  if (typeof window === 'undefined') {
+    return getDefaultPinnedSubtitles();
+  }
+
+  try {
+    const saved = localStorage.getItem('subtitle-pinned-subtitles');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      console.log('✅ 從 localStorage 載入固定字幕');
+      return parsed;
+    }
+  } catch (error) {
+    console.error('❌ 載入固定字幕失敗:', error);
+  }
+
+  return getDefaultPinnedSubtitles();
+};
+
+// 從 localStorage 載入樣式模板（如果存在），自動補齊缺少的內建模板
+const loadSavedStyleTemplates = (): StyleTemplate[] => {
+  if (typeof window === 'undefined') {
+    return getDefaultStyleTemplates();
+  }
+
+  try {
+    const saved = localStorage.getItem('subtitle-style-templates');
+    if (saved) {
+      const parsed: StyleTemplate[] = JSON.parse(saved);
+      // 自動補齊缺少的內建模板
+      const defaults = getDefaultStyleTemplates();
+      const savedIds = new Set(parsed.map(t => t.id));
+      const missing = defaults.filter(d => !savedIds.has(d.id));
+      if (missing.length > 0) {
+        const merged = [...parsed, ...missing];
+        localStorage.setItem('subtitle-style-templates', JSON.stringify(merged));
+        console.log(`✅ 從 localStorage 載入樣式模板: ${parsed.length} 個，補齊 ${missing.length} 個內建模板`);
+        return merged;
+      }
+      console.log('✅ 從 localStorage 載入樣式模板:', parsed.length, '個');
+      return parsed;
+    }
+  } catch (error) {
+    console.error('❌ 載入樣式模板失敗:', error);
+  }
+
+  return getDefaultStyleTemplates();
+};
+
+// 預設樣式模板
+const getDefaultStyleTemplates = (): StyleTemplate[] => [
+  {
+    id: 'default',
+    name: '預設樣式',
+    style: DEFAULT_STYLE,
+    isDefault: true,
+    createdAt: 0,
+  },
+  {
+    id: 'reel-large-center',
+    name: 'Reel 大字居中',
+    style: {
+      ...DEFAULT_STYLE,
+      fontSize: 48,
+      fontWeight: 'bold',
+      positionX: 50,
+      positionY: 50,
+      enableStroke: true,
+      strokeColor: '#000000',
+      strokeWidth: 4,
+      enableShadow: false,
+      shadowOffsetX: 0,
+      shadowOffsetY: 0,
+      shadowBlur: 0,
+      scale: 1.0,
+    },
+    isDefault: true,
+    createdAt: 0,
+  },
+  {
+    id: 'reel-colorful-stroke',
+    name: 'Reel 彩色描邊',
+    style: {
+      ...DEFAULT_STYLE,
+      fontSize: 40,
+      fontWeight: 'bold',
+      color: '#FFD700',
+      positionX: 50,
+      positionY: 50,
+      enableStroke: true,
+      strokeColor: '#FF1493',
+      strokeWidth: 3,
+      enableShadow: false,
+      shadowOffsetX: 0,
+      shadowOffsetY: 0,
+      shadowBlur: 0,
+      scale: 1.0,
+    },
+    isDefault: true,
+    createdAt: 0,
+  },
+  {
+    id: 'reel-title-subtitle',
+    name: 'Reel 標題+字幕',
+    style: {
+      ...DEFAULT_STYLE,
+      fontSize: 32,
+      fontWeight: 'bold',
+      positionX: 50,
+      positionY: 80,
+      enableStroke: true,
+      strokeColor: '#000000',
+      strokeWidth: 2,
+      enableShadow: true,
+      shadowColor: '#000000',
+      shadowOffsetX: 2,
+      shadowOffsetY: 2,
+      shadowBlur: 4,
+      scale: 1.0,
+    },
+    isDefault: true,
+    createdAt: 0,
+  },
+  {
+    id: 'reel-minimal',
+    name: 'Reel 簡約白字',
+    style: {
+      ...DEFAULT_STYLE,
+      fontSize: 28,
+      fontWeight: 'normal',
+      color: '#FFFFFF',
+      positionX: 50,
+      positionY: 85,
+      enableStroke: false,
+      strokeColor: '#000000',
+      strokeWidth: 0,
+      enableShadow: true,
+      shadowColor: '#000000',
+      shadowOffsetX: 1,
+      shadowOffsetY: 1,
+      shadowBlur: 4,
+      scale: 1.0,
+    },
+    isDefault: true,
+    createdAt: 0,
+  },
+];
+
+// 預設固定字幕
+const getDefaultPinnedSubtitles = (): PinnedSubtitle[] => [
+  {
+    id: 'pinned-top',
+    text: '影片標題',
+    position: 'top',
+    enabled: true,
+    style: {
+      fontSize: 28,
+      fontFamily: 'Noto Sans SC',
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      color: '#FFFFFF',
+      opacity: 1,
+      backgroundColor: 'rgba(0,0,0,0.8)',
+      enableShadow: true,
+      shadowColor: '#000000',
+      shadowOffsetX: 2,
+      shadowOffsetY: 2,
+      shadowBlur: 4,
+      enableStroke: false,
+      strokeColor: '#000000',
+      strokeWidth: 0,
+      positionY: 10,
+    },
+  },
+  {
+    id: 'pinned-bottom',
+    text: '@your_watermark',
+    position: 'bottom',
+    enabled: true,
+    style: {
+      fontSize: 24,
+      fontFamily: 'Noto Sans SC',
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      color: '#FFFFFF',
+      opacity: 0.6,
+      backgroundColor: 'transparent',
+      enableShadow: true,
+      shadowColor: '#000000',
+      shadowOffsetX: 2,
+      shadowOffsetY: 2,
+      shadowBlur: 4,
+      enableStroke: false,
+      strokeColor: '#000000',
+      strokeWidth: 0,
+      positionY: 95,
+    },
+  },
+];
+
+// 初始化預設兩個軌道
+const createDefaultTracks = (): SubtitleTrack[] => {
+  const track1: SubtitleTrack = {
+    id: generateId(),
+    name: '字幕軌道 1',
+    segments: [],
+    muted: false,
+    visible: true,
+    locked: false,
+    color: '#5DBAA0',
+    height: 60,
+  };
+
+  const track2: SubtitleTrack = {
+    id: generateId(),
+    name: '字幕軌道 2',
+    segments: [],
+    muted: false,
+    visible: true,
+    locked: false,
+    color: '#4A90E2',
+    height: 60,
+  };
+
+  return [track1, track2];
+};
+
+// 創建預設軌道實例（只創建一次）
+const defaultTracks = createDefaultTracks();
+
+export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
+  // 多軌道狀態初始化 - 預設兩個軌道
+  tracks: defaultTracks,
+  selectedTrackId: defaultTracks[0].id,
+  selectedSegmentId: null,
+  lockedTrackId: null, // 預設不鎖定任何軌道
+
+  // 固定字幕初始化 - 從 localStorage 載入或使用預設值
+  pinnedSubtitles: loadSavedPinnedSubtitles(),
+
+  // 樣式模板初始化 - 從 localStorage 載入或使用預設模板
+  styleTemplates: loadSavedStyleTemplates(),
+
+  // 軌道管理方法
+  addTrack: (name, defaultStyle) => {
+    const newTrack: SubtitleTrack = {
+      id: generateId(),
+      name,
+      segments: [],
+      muted: false,
+      visible: true,
+      locked: false,
+      color: '#5DBAA0', // OpenCut 預設綠色
+      height: 60, // 預設軌道高度
+      defaultStyle,
+    };
+    
+    set((state) => ({
+      tracks: [...state.tracks, newTrack],
+      // 如果是第一個軌道,自動選中
+      selectedTrackId: state.tracks.length === 0 ? newTrack.id : state.selectedTrackId,
+    }));
+  },
+
+  deleteTrack: (trackId) => {
+    set((state) => ({
+      tracks: state.tracks.filter(t => t.id !== trackId),
+      selectedTrackId: state.selectedTrackId === trackId ?
+        (state.tracks.length > 1 ? state.tracks[0].id : null) :
+        state.selectedTrackId,
+      selectedSegmentId: null, // 清空選中的字幕
+    }));
+  },
+
+  updateTrack: (trackId, updates) => {
+    set((state) => ({
+      tracks: state.tracks.map(t =>
+        t.id === trackId ? { ...t, ...updates } : t
+      ),
+    }));
+  },
+
+  reorderTracks: (fromIndex, toIndex) => {
+    set((state) => {
+      const newTracks = [...state.tracks];
+      const [removed] = newTracks.splice(fromIndex, 1);
+      newTracks.splice(toIndex, 0, removed);
+      return { tracks: newTracks };
+    });
+  },
+
+  selectTrack: (trackId) => {
+    set({ selectedTrackId: trackId });
+  },
+
+  lockTrack: (trackId) => {
+    set({ lockedTrackId: trackId });
+    // 如果鎖定了軌道，同時選中該軌道
+    if (trackId) {
+      set({ selectedTrackId: trackId });
+    }
+  },
+
+  // 字幕片段管理 (支援多軌道)
+  addSegment: (segment, trackId) => {
+    const state = get();
+    
+    // 決定目標軌道
+    let targetTrackId = trackId || state.selectedTrackId || state.tracks[0]?.id;
+    
+    // 如果沒有軌道,自動創建第一個
+    if (!targetTrackId) {
+      const newTrack: SubtitleTrack = {
+        id: generateId(),
+        name: '字幕軌道 1',
+        segments: [],
+        muted: false,
+        visible: true,
+        locked: false,
+        color: '#5DBAA0',
+        height: 60,
+      };
+      set({ tracks: [newTrack], selectedTrackId: newTrack.id });
+      targetTrackId = newTrack.id;
+    }
+    
+    // 獲取軌道的預設樣式
+    const track = state.tracks.find(t => t.id === targetTrackId);
+    const defaultStyle = track?.defaultStyle || {};
+    
+    const newSegment: SubtitleSegment = {
+      ...segment,
+      id: generateId(),
+      style: {
+        ...DEFAULT_STYLE, // 基礎預設樣式
+        ...defaultStyle, // 應用軌道預設樣式
+        ...segment.style, // 應用傳入的樣式
+      },
+    };
+    
+    set((state) => ({
+      tracks: state.tracks.map(t =>
+        t.id === targetTrackId
+          ? { ...t, segments: [...t.segments, newSegment].sort((a, b) => a.startTime - b.startTime) }
+          : t
+      ),
+    }));
+  },
+
+  updateSegment: (id, updates) => {
+    set((state) => ({
+      tracks: state.tracks.map(track => ({
+        ...track,
+        segments: track.segments.map(seg =>
+          seg.id === id ? { ...seg, ...updates } : seg
+        ),
+      })),
+    }));
+  },
+
+  deleteSegment: (id) => {
+    set((state) => ({
+      tracks: state.tracks.map(track => ({
+        ...track,
+        segments: track.segments.filter(seg => seg.id !== id),
+      })),
+      selectedSegmentId: state.selectedSegmentId === id ? null : state.selectedSegmentId,
+    }));
+  },
+
+  selectSegment: (id) => {
+    set((state) => {
+      // 自动找到该segment所属的轨道并同时选中
+      const trackWithSegment = state.tracks.find(track =>
+        track.segments.some(seg => seg.id === id)
+      );
+
+      console.log('🎯 selectSegment 调用', {
+        segmentId: id,
+        找到的轨道: trackWithSegment?.name,
+        轨道ID: trackWithSegment?.id,
+        之前的轨道ID: state.selectedTrackId
+      });
+
+      return {
+        selectedSegmentId: id,
+        selectedTrackId: trackWithSegment?.id || state.selectedTrackId
+      };
+    });
+  },
+
+  moveSegmentToTrack: (fromTrackId, toTrackId, segmentId) => {
+    set((state) => {
+      const fromTrack = state.tracks.find(t => t.id === fromTrackId);
+      const segment = fromTrack?.segments.find(s => s.id === segmentId);
+
+      if (!segment) return state;
+
+      return {
+        tracks: state.tracks.map(track => {
+          if (track.id === fromTrackId) {
+            return { ...track, segments: track.segments.filter(s => s.id !== segmentId) };
+          } else if (track.id === toTrackId) {
+            return { ...track, segments: [...track.segments, segment].sort((a, b) => a.startTime - b.startTime) };
+          }
+          return track;
+        }),
+      };
+    });
+  },
+
+  // 切割字幕
+  splitSegment: (id, splitTime) => {
+    set((state) => {
+      const track = state.tracks.find(t => t.segments.some(s => s.id === id));
+      if (!track) return state;
+
+      const segment = track.segments.find(s => s.id === id);
+      if (!segment) return state;
+
+      // 如果提供了切割時間點，按時間切割
+      if (splitTime !== undefined) {
+        // 確保切割點在字幕時間範圍內
+        if (splitTime <= segment.startTime || splitTime >= segment.endTime) {
+          return state;
+        }
+
+        // 計算切割比例
+        const totalDuration = segment.endTime - segment.startTime;
+        const firstDuration = splitTime - segment.startTime;
+        const ratio = firstDuration / totalDuration;
+
+        // 按比例分割文字
+        const textLength = segment.text.length;
+        const splitIndex = Math.round(textLength * ratio);
+
+        const firstText = segment.text.substring(0, splitIndex).trim();
+        const secondText = segment.text.substring(splitIndex).trim();
+
+        // 翻译文本也要分割
+        const firstTranslatedText = segment.translatedText
+          ? segment.translatedText.substring(0, Math.round(segment.translatedText.length * ratio)).trim()
+          : '';
+        const secondTranslatedText = segment.translatedText
+          ? segment.translatedText.substring(Math.round(segment.translatedText.length * ratio)).trim()
+          : '';
+
+        // 创建两个新字幕
+        const firstSegment: SubtitleSegment = {
+          ...segment,
+          id: generateId(),
+          endTime: splitTime,
+          text: firstText,
+          translatedText: firstTranslatedText || firstText,
+        };
+
+        const secondSegment: SubtitleSegment = {
+          ...segment,
+          id: generateId(),
+          startTime: splitTime,
+          text: secondText,
+          translatedText: secondTranslatedText || secondText,
+        };
+
+        // 替换原字幕
+        return {
+          tracks: state.tracks.map(t =>
+            t.id === track.id
+              ? {
+                  ...t,
+                  segments: t.segments
+                    .filter(s => s.id !== id)
+                    .concat([firstSegment, secondSegment])
+                    .sort((a, b) => a.startTime - b.startTime),
+                }
+              : t
+          ),
+          selectedSegmentId: firstSegment.id,
+        };
+      }
+      // 否则按标点符号自动分句
+      else {
+        // 優先分割翻譯文字，如果沒有才分割原文
+        const textToSplit = segment.translatedText || segment.text;
+        const isTranslated = !!segment.translatedText;
+
+        console.log('🔪 開始自動分句');
+        console.log('📝 要分割的文字:', textToSplit);
+        console.log('🌐 是否為翻譯:', isTranslated ? '是（中文）' : '否（原文）');
+
+        const text = textToSplit;
+
+        // 步驟1: 按所有標點符號分割，保留標點
+        const parts: string[] = [];
+        let currentPart = '';
+
+        for (let i = 0; i < text.length; i++) {
+          const char = text[i];
+          currentPart += char;
+
+          // 遇到標點符號就切分
+          if (/[，,。！？.!?；;]/.test(char)) {
+            parts.push(currentPart);
+            currentPart = '';
+          }
+        }
+
+        // 添加剩餘部分
+        if (currentPart.trim()) {
+          parts.push(currentPart);
+        }
+
+        console.log('📝 切分後的部分:', parts);
+
+        // 如果沒有標點，智能分割（按長度或空格）
+        if (parts.length <= 1) {
+          console.log('⚠️ 沒有標點符號，改用智能分割');
+
+          const MIN_WORDS = 5; // 最少單詞數（英文）或字數（中文）
+          const isEnglish = /^[a-zA-Z\s']+/.test(text);
+
+          if (isEnglish) {
+            // 英文：按空格分詞
+            const words = text.split(/\s+/);
+            console.log(`📝 英文句子，共 ${words.length} 個單詞`);
+
+            if (words.length <= MIN_WORDS * 2) {
+              console.log('⚠️ 單詞太少，不切割');
+              return state;
+            }
+
+            // 每 MIN_WORDS 個詞為一組
+            const midPoint = Math.floor(words.length / 2);
+            const firstHalf = words.slice(0, midPoint).join(' ');
+            const secondHalf = words.slice(midPoint).join(' ');
+
+            parts.length = 0;
+            parts.push(firstHalf, secondHalf);
+            console.log('✂️ 英文分割結果:', parts);
+          } else {
+            // 中文：按長度平分
+            const midPoint = Math.floor(text.length / 2);
+
+            if (text.length <= MIN_WORDS * 2) {
+              console.log('⚠️ 字數太少，不切割');
+              return state;
+            }
+
+            const firstHalf = text.substring(0, midPoint);
+            const secondHalf = text.substring(midPoint);
+
+            parts.length = 0;
+            parts.push(firstHalf, secondHalf);
+            console.log('✂️ 中文分割結果:', parts);
+          }
+        }
+
+        // 步驟2: 智能分組
+        const sentences: string[] = [];
+        let currentSentence = '';
+        const MAX_LENGTH = 15; // 每句最大字數（降低以支持更頻繁的分句）
+
+        for (const part of parts) {
+          const trimmedPart = part.trim();
+          if (!trimmedPart) continue;
+
+          // 檢查是否是強結束符（句號、問號、感嘆號）
+          const hasStrongEnder = /[。！？.!?]$/.test(trimmedPart);
+          const combinedLength = currentSentence.length + trimmedPart.length;
+
+          if (currentSentence === '') {
+            // 第一句，直接添加
+            currentSentence = trimmedPart;
+          } else if (hasStrongEnder || combinedLength > MAX_LENGTH) {
+            // 遇到強標點或超過長度限制，分句
+            if (!hasStrongEnder && combinedLength <= MAX_LENGTH) {
+              // 雖然超過長度但可以合併
+              currentSentence += trimmedPart;
+            } else {
+              // 保存當前句子
+              sentences.push(currentSentence);
+              currentSentence = trimmedPart;
+            }
+          } else {
+            // 繼續累積（逗號等弱標點）
+            currentSentence += trimmedPart;
+          }
+
+          // 如果遇到強標點，立即結束這句
+          if (hasStrongEnder && currentSentence === trimmedPart) {
+            sentences.push(currentSentence);
+            currentSentence = '';
+          }
+        }
+
+        // 添加最後一句
+        if (currentSentence.trim()) {
+          sentences.push(currentSentence.trim());
+        }
+
+        console.log('✂️ 分句結果:', sentences);
+
+        // 如果只有一句，不切割
+        if (sentences.length <= 1) {
+          console.log('⚠️ 只有一句，不切割');
+          return state;
+        }
+
+        // 步驟3: 計算每句的時間（根據字數加權分配）
+        const totalDuration = segment.endTime - segment.startTime;
+        const totalChars = sentences.reduce((sum, s) => sum + s.length, 0);
+
+        // 步驟4: 創建新字幕
+        let currentStartTime = segment.startTime;
+        const newSegments: SubtitleSegment[] = sentences.map((sentenceText, index) => {
+          const charRatio = sentenceText.length / totalChars;
+          const segDuration = totalDuration * charRatio;
+          const startTime = currentStartTime;
+          const endTime = currentStartTime + segDuration;
+          currentStartTime = endTime;
+
+          // 根據是否為翻譯文本，決定如何填充
+          let newText: string;
+          let newTranslatedText: string;
+
+          if (isTranslated) {
+            // 分割的是翻譯文本，保留原文不動
+            newText = segment.text; // 原文保持不變
+            newTranslatedText = sentenceText; // 分割後的翻譯文本
+          } else {
+            // 分割的是原文
+            newText = sentenceText;
+            newTranslatedText = sentenceText;
+          }
+
+          return {
+            ...segment,
+            id: generateId(),
+            startTime,
+            endTime,
+            text: newText,
+            translatedText: newTranslatedText,
+          };
+        });
+
+        console.log(`✅ 成功分割成 ${newSegments.length} 句`);
+
+        // 替換原字幕
+        return {
+          tracks: state.tracks.map(t =>
+            t.id === track.id
+              ? {
+                  ...t,
+                  segments: t.segments
+                    .filter(s => s.id !== id)
+                    .concat(newSegments)
+                    .sort((a, b) => a.startTime - b.startTime),
+                }
+              : t
+          ),
+          selectedSegmentId: newSegments[0].id,
+        };
+      }
+    });
+  },
+
+  // 匯入 SRT (支援指定軌道)
+  importFromSrt: (srtContent, targetTrackId) => {
+    const lines = srtContent.trim().split('\n');
+    const segments: SubtitleSegment[] = [];
+    
+    let i = 0;
+    while (i < lines.length) {
+      // 跳過序號行
+      if (lines[i].trim().match(/^\d+$/)) {
+        i++;
+      }
+      
+      // 解析時間行
+      const timeLine = lines[i]?.trim();
+      if (timeLine && timeLine.includes('-->')) {
+        const [startStr, endStr] = timeLine.split('-->').map(s => s.trim());
+        const startTime = parseSrtTime(startStr);
+        const endTime = parseSrtTime(endStr);
+        
+        i++;
+        
+        // 收集文字行
+        const textLines: string[] = [];
+        while (i < lines.length && lines[i].trim() !== '') {
+          textLines.push(lines[i].trim());
+          i++;
+        }
+        
+        if (textLines.length > 0) {
+          segments.push({
+            id: generateId(),
+            startTime,
+            endTime,
+            text: textLines.join('\n'),
+            style: {
+              fontSize: 32,
+              fontFamily: 'Arial',
+              fontWeight: 'normal',
+              fontStyle: 'normal',
+              textDecoration: 'none',
+              color: '#FFFFFF',
+              opacity: 1,
+              backgroundColor: 'transparent',
+              position: 'bottom',
+              enableShadow: true,
+              shadowColor: '#000000',
+              shadowOffsetX: 4,
+              shadowOffsetY: 4,
+              shadowBlur: 8,
+              enableStroke: false,
+              strokeColor: '#000000',
+              strokeWidth: 2,
+              positionX: 50,
+              positionY: 90,
+              maxWidth: 80,
+              scale: 1.0,
+            },
+          });
+        }
+      }
+      
+      i++;
+    }
+    
+    // 決定匯入到哪個軌道
+    const state = get();
+    let trackId = targetTrackId || state.selectedTrackId || state.tracks[0]?.id;
+    
+    // 如果沒有軌道,自動創建第一個
+    if (!trackId) {
+      const newTrack: SubtitleTrack = {
+        id: generateId(),
+        name: '字幕軌道 1',
+        segments: [],
+        muted: false,
+        visible: true,
+        locked: false,
+        color: '#5DBAA0',
+        height: 60,
+      };
+      set({ tracks: [newTrack], selectedTrackId: newTrack.id });
+      trackId = newTrack.id;
+    }
+    
+    // 匯入字幕到指定軌道,並確保該軌道被選中
+    set((state) => ({
+      tracks: state.tracks.map(t =>
+        t.id === trackId
+          ? { ...t, segments: segments.sort((a, b) => a.startTime - b.startTime) }
+          : t
+      ),
+      selectedTrackId: trackId, // 確保選中該軌道
+    }));
+  },
+
+  // 匯出 SRT (支援單一軌道或全部)
+  exportToSrt: (trackId) => {
+    const state = get();
+    
+    if (trackId) {
+      // 匯出單一軌道
+      const track = state.tracks.find(t => t.id === trackId);
+      if (!track) return '';
+      
+      return track.segments
+        .map((seg, index) => {
+          return `${index + 1}\n${formatSrtTime(seg.startTime)} --> ${formatSrtTime(seg.endTime)}\n${seg.translatedText || seg.text}\n`;
+        })
+        .join('\n');
+    } else {
+      // 匯出全部可見軌道 (合併所有字幕並排序)
+      const allSegments = state.tracks
+        .filter(t => t.visible)
+        .flatMap(t => t.segments)
+        .sort((a, b) => a.startTime - b.startTime);
+      
+      return allSegments
+        .map((seg, index) => {
+          return `${index + 1}\n${formatSrtTime(seg.startTime)} --> ${formatSrtTime(seg.endTime)}\n${seg.translatedText || seg.text}\n`;
+        })
+        .join('\n');
+    }
+  },
+
+  clearAll: () => {
+    set({ tracks: [], selectedTrackId: null, selectedSegmentId: null });
+  },
+
+  // 向後相容性 getter
+  get segments(): SubtitleSegment[] {
+    const state = get();
+    
+    // 如果只有一個軌道,返回該軌道的字幕 (向後相容)
+    if (state.tracks.length === 1) {
+      return state.tracks[0].segments;
+    }
+    
+    // 多軌道時返回當前選中軌道的字幕
+    const activeTrack = state.tracks.find(t => t.id === state.selectedTrackId);
+    return activeTrack?.segments || [];
+  },
+
+  getActiveTrack: () => {
+    const state = get();
+    return state.tracks.find(t => t.id === state.selectedTrackId) || state.tracks[0] || null;
+  },
+
+  getAllSegments: () => {
+    const state = get();
+    // 返回所有可見軌道的字幕
+    return state.tracks
+      .filter(t => t.visible && !t.muted)
+      .flatMap(t => t.segments)
+      .sort((a, b) => a.startTime - b.startTime);
+  },
+  
+  // 樣式模板管理方法
+  saveStyleTemplate: (name, style, isDefault = false) => {
+    set((state) => {
+      // 只保存样式属性，排除大小和位置
+      const styleWithoutSizeAndPosition = {
+        fontFamily: style.fontFamily,
+        fontWeight: style.fontWeight,
+        fontStyle: style.fontStyle,
+        textDecoration: style.textDecoration,
+        color: style.color,
+        opacity: style.opacity,
+        backgroundColor: style.backgroundColor,
+        position: style.position,
+        enableShadow: style.enableShadow,
+        shadowColor: style.shadowColor,
+        shadowOffsetX: style.shadowOffsetX,
+        shadowOffsetY: style.shadowOffsetY,
+        shadowBlur: style.shadowBlur,
+        enableStroke: style.enableStroke,
+        strokeColor: style.strokeColor,
+        strokeWidth: style.strokeWidth,
+        // 使用默认值填充必需的属性（不会被应用）
+        fontSize: 32,
+        scale: 1,
+        positionX: 50,
+        positionY: 90,
+        maxWidth: 80,
+      };
+
+      const newTemplate: StyleTemplate = {
+        id: generateId(),
+        name,
+        style: styleWithoutSizeAndPosition as SubtitleSegment['style'],
+        isDefault,
+        createdAt: Date.now(),
+      };
+      
+      // 如果設定為預設，取消其他模板的預設狀態
+      const updatedTemplates = isDefault
+        ? state.styleTemplates.map(t => ({ ...t, isDefault: false }))
+        : state.styleTemplates;
+      
+      const newTemplates = [...updatedTemplates, newTemplate];
+      
+      // 持久化到 localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('subtitle-style-templates', JSON.stringify(newTemplates));
+      }
+      
+      return {
+        styleTemplates: newTemplates,
+      };
+    });
+  },
+
+  applyStyleTemplate: (templateId, segmentId, applyToAll = false) => {
+    const state = get();
+    const template = state.styleTemplates.find(t => t.id === templateId);
+    if (!template) return;
+
+    // ✅ 修复：从所有轨道获取字幕，而不只是第一个轨道
+    const allSegments = state.tracks.flatMap(track => track.segments);
+
+    // 只应用样式属性，排除大小和位置相关属性
+    const getStyleWithoutSizeAndPosition = (currentStyle: SubtitleSegment['style']) => ({
+      ...currentStyle,
+      // 只覆盖样式属性，保留原有的大小和位置
+      fontFamily: template.style.fontFamily,
+      fontWeight: template.style.fontWeight,
+      fontStyle: template.style.fontStyle,
+      textDecoration: template.style.textDecoration,
+      color: template.style.color,
+      opacity: template.style.opacity,
+      backgroundColor: template.style.backgroundColor,
+      position: template.style.position,
+      enableShadow: template.style.enableShadow,
+      shadowColor: template.style.shadowColor,
+      shadowOffsetX: template.style.shadowOffsetX,
+      shadowOffsetY: template.style.shadowOffsetY,
+      shadowBlur: template.style.shadowBlur,
+      enableStroke: template.style.enableStroke,
+      strokeColor: template.style.strokeColor,
+      strokeWidth: template.style.strokeWidth,
+      // 保留原有的大小和位置属性
+      // fontSize, scale, positionX, positionY, maxWidth 不变
+    });
+
+    if (applyToAll) {
+      // 套用到所有轨道的所有字幕
+      allSegments.forEach(seg => {
+        state.updateSegment(seg.id, {
+          style: getStyleWithoutSizeAndPosition(seg.style),
+        });
+      });
+    } else if (segmentId) {
+      // 套用到指定字幕（支持所有轨道）
+      const seg = allSegments.find(s => s.id === segmentId);
+      if (seg) {
+        state.updateSegment(segmentId, {
+          style: getStyleWithoutSizeAndPosition(seg.style),
+        });
+      }
+    } else if (state.selectedSegmentId) {
+      // 套用到當前選中的字幕（支持所有轨道）
+      const seg = allSegments.find(s => s.id === state.selectedSegmentId);
+      if (seg) {
+        state.updateSegment(state.selectedSegmentId, {
+          style: getStyleWithoutSizeAndPosition(seg.style),
+        });
+      }
+    }
+  },
+
+  deleteStyleTemplate: (templateId) => {
+    set((state) => {
+      const newTemplates = state.styleTemplates.filter(t => t.id !== templateId);
+
+      // 持久化到 localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('subtitle-style-templates', JSON.stringify(newTemplates));
+      }
+
+      return {
+        styleTemplates: newTemplates,
+      };
+    });
+  },
+
+  updateStyleTemplate: (templateId, updates) => {
+    set((state) => {
+      const newTemplates = state.styleTemplates.map(t =>
+        t.id === templateId ? { ...t, ...updates } : t
+      );
+
+      // 持久化到 localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('subtitle-style-templates', JSON.stringify(newTemplates));
+      }
+
+      return {
+        styleTemplates: newTemplates,
+      };
+    });
+  },
+
+  getDefaultTemplate: () => {
+    const state = get();
+    return state.styleTemplates.find(t => t.isDefault) || null;
+  },
+
+  setDefaultTemplate: (templateId) => {
+    set((state) => {
+      const newTemplates = state.styleTemplates.map(t => ({
+        ...t,
+        isDefault: t.id === templateId,
+      }));
+
+      // 持久化到 localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('subtitle-style-templates', JSON.stringify(newTemplates));
+      }
+
+      return {
+        styleTemplates: newTemplates,
+      };
+    });
+  },
+  
+  // 批量載入專案字幕
+  loadProjectSegments: (segments) => {
+    console.log('🔍 loadProjectSegments 被調用，傳入的 segments:', segments.slice(0, 2));
+    
+    const state = get();
+    
+    // 決定目標軌道 (優先使用第一個軌道)
+    let targetTrackId = state.tracks[0]?.id;
+    
+    // 如果沒有軌道,自動創建第一個
+    if (!targetTrackId) {
+      const newTrack: SubtitleTrack = {
+        id: generateId(),
+        name: '字幕軌道 1',
+        segments: [],
+        muted: false,
+        visible: true,
+        locked: false,
+        color: '#5DBAA0',
+        height: 60,
+      };
+      set({ tracks: [newTrack], selectedTrackId: newTrack.id });
+      targetTrackId = newTrack.id;
+    }
+    
+    // 確保每個 segment 都有完整的 style 屬性和正確的 id 格式
+    const normalizedSegments = segments.map((seg: any, index: number) => {
+      
+      return {
+        ...seg,
+        id: String(seg.id || index + 1), // 確保 id 是字符串格式
+        style: { ...DEFAULT_STYLE, ...(seg.style || {}) }, // 合併樣式
+      };
+    });
+    
+    console.log('🔍 標準化後的 segments:', normalizedSegments.slice(0, 2));
+    
+    // 清空現有字幕並載入新字幕到第一個軌道
+    set((state) => ({
+      tracks: state.tracks.map(t =>
+        t.id === targetTrackId
+          ? { ...t, segments: normalizedSegments.sort((a, b) => a.startTime - b.startTime) }
+          : t
+      ),
+      selectedTrackId: targetTrackId, // 確保選中該軌道
+    }));
+    
+    console.log('✅ 字幕載入完成');
+  },
+
+  // 固定字幕管理方法
+  addPinnedSubtitle: (position) => {
+    const newPinned: PinnedSubtitle = {
+      id: `pinned-${position}-${Date.now()}`,
+      text: position === 'top' ? '新標題' : '新浮水印',
+      position,
+      enabled: true,
+      style: {
+        fontSize: position === 'top' ? 28 : 24,
+        fontFamily: 'Noto Sans SC',
+        fontWeight: 'bold',
+        fontStyle: 'normal',
+        color: '#FFFFFF',
+        opacity: position === 'top' ? 1 : 0.6,
+        backgroundColor: position === 'top' ? 'rgba(0,0,0,0.8)' : 'transparent',
+        enableShadow: true,
+        shadowColor: '#000000',
+        shadowOffsetX: 2,
+        shadowOffsetY: 2,
+        shadowBlur: 4,
+        enableStroke: false,
+        strokeColor: '#000000',
+        strokeWidth: 0,
+        positionY: position === 'top' ? 10 : 95,
+      },
+    };
+    set((state) => ({
+      pinnedSubtitles: [...state.pinnedSubtitles, newPinned],
+    }));
+  },
+
+  updatePinnedSubtitle: (id, updates) => {
+    set((state) => {
+      const updatedPinnedSubtitles = state.pinnedSubtitles.map((pinned) =>
+        pinned.id === id ? { ...pinned, ...updates } : pinned
+      );
+
+      // 持久化到 localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('subtitle-pinned-subtitles', JSON.stringify(updatedPinnedSubtitles));
+      }
+
+      return { pinnedSubtitles: updatedPinnedSubtitles };
+    });
+  },
+
+  togglePinnedSubtitle: (id, enabled) => {
+    get().updatePinnedSubtitle(id, { enabled });
+  },
+
+  deletePinnedSubtitle: (id) => {
+    set((state) => ({
+      pinnedSubtitles: state.pinnedSubtitles.filter((p) => p.id !== id),
+    }));
+  },
+
+  // 批量載入固定字幕
+  loadPinnedSubtitles: (loadedPinnedSubtitles) => {
+    console.log('🔍 載入固定字幕:', loadedPinnedSubtitles);
+
+    if (!loadedPinnedSubtitles || loadedPinnedSubtitles.length === 0) {
+      console.log('⚠️ 沒有固定字幕資料，保持預設值');
+      return;
+    }
+
+    set({ pinnedSubtitles: loadedPinnedSubtitles });
+    console.log('✅ 固定字幕載入完成');
+  },
+
+  // AI 自動優化功能實現
+  autoOptimizeSegment: (segmentId, videoWidth) => {
+    const { autoOptimizeSubtitle, FontAdaptStrategy } = require('@/lib/split-utils');
+    const state = get();
+    const allSegments = state.getAllSegments();
+    const segment = allSegments.find(s => s.id === segmentId);
+
+    if (!segment) {
+      console.error('❌ 找不到字幕片段:', segmentId);
+      return;
+    }
+
+    console.log('🔧 開始優化字幕:', segment.text);
+
+    const result = autoOptimizeSubtitle(segment, {
+      videoWidth,
+      strategy: FontAdaptStrategy.HYBRID,
+      minFontSize: 20,
+      maxFontSize: 60,
+      preserveSemantics: true,
+    });
+
+    console.log('✅ 優化完成:', result.changes);
+
+    set((state) => {
+      // 找到包含此字幕的軌道
+      const trackIndex = state.tracks.findIndex(track =>
+        track.segments.some(s => s.id === segmentId)
+      );
+
+      if (trackIndex === -1) return state;
+
+      const track = state.tracks[trackIndex];
+      const segmentIndex = track.segments.findIndex(s => s.id === segmentId);
+
+      // 替換原字幕為優化後的字幕（可能是多個）
+      const newSegments = [
+        ...track.segments.slice(0, segmentIndex),
+        ...result.segments,
+        ...track.segments.slice(segmentIndex + 1),
+      ];
+
+      const newTracks = [...state.tracks];
+      newTracks[trackIndex] = {
+        ...track,
+        segments: newSegments,
+      };
+
+      return { tracks: newTracks };
+    });
+  },
+
+  autoOptimizeAllSegments: (videoWidth) => {
+    const { detectOverflowSegments: detectOverflow } = require('@/lib/split-utils');
+    const state = get();
+    const allSegments = state.getAllSegments();
+
+    console.log('🔍 掃描所有字幕，檢測溢出...');
+
+    const overflowSegments = detectOverflow(allSegments, videoWidth);
+
+    console.log(`📊 檢測到 ${overflowSegments.length} 條溢出字幕`);
+
+    if (overflowSegments.length === 0) {
+      console.log('✅ 所有字幕長度正常');
+      return;
+    }
+
+    // 批量優化所有溢出字幕
+    overflowSegments.forEach(segment => {
+      get().autoOptimizeSegment(segment.id, videoWidth);
+    });
+
+    console.log(`✅ 批量優化完成，共處理 ${overflowSegments.length} 條字幕`);
+  },
+
+  detectOverflowSegments: (videoWidth) => {
+    const { detectOverflowSegments: detectOverflow } = require('@/lib/split-utils');
+    const state = get();
+    const allSegments = state.getAllSegments();
+
+    return detectOverflow(allSegments, videoWidth);
+  },
+}));

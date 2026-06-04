@@ -1,0 +1,75 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# temp files
+/public/temp/*
+!public/temp/.gitkeep
+
+# editor history
+.history/
+.claude/
+
+# test files
+test-*.js
+test-*.ass
+*_old_version.txt
+
+# screen recordings and test videos
+screen_recorded_*.mp4
+output_*.mp4
+subtitle_*.ass
+
+# AI/session generated notes (not part of canonical docs)
+/CHANGES_SUMMARY.md
+/CODE_CHANGES_CHECKLIST.md
+/CODE_CHANGES_SUMMARY.md
+/PARALLEL_OPTIMIZATION_SUMMARY.md
+/PARALLEL_PROCESSING_GUIDE.md
+/PARALLEL_PROCESSING_OPTIMIZATION.md
+/PERFORMANCE_OPTIMIZATION_QUICK_GUIDE.md
+/PERFORMANCE_OPTIMIZATION_SUMMARY.md
+/QUICK_REFERENCE.md
+/RECORDING_PERFORMANCE_FIX_2025.md
+/TRACK_LOCKING_IMPLEMENTATION.md
+
+# accidental Windows redirection artifact
+/nul
