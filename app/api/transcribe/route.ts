@@ -87,6 +87,9 @@ function findPythonPath(): string {
   if (cachedPythonPath) return cachedPythonPath;
 
   const candidates = [
+    // 呼叫端 (e.g. AutoReel/Reelo) 可用 PYTHON_PATH 指定有 faster-whisper 的 python
+    // (共用它的 venv, 新機器不用再對系統 python 裝一次 faster-whisper)
+    process.env.PYTHON_PATH || "",
     path.join(process.env.LOCALAPPDATA || "", "Programs", "Python", "Python313", "python.exe"),
     path.join(process.env.LOCALAPPDATA || "", "Programs", "Python", "Python312", "python.exe"),
     path.join(process.env.LOCALAPPDATA || "", "Programs", "Python", "Python311", "python.exe"),
