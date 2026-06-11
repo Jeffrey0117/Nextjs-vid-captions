@@ -51,6 +51,100 @@ def format_timestamp(seconds: float) -> str:
     return f"{hrs:02d}:{mins:02d}:{secs:02d},{ms:03d}"
 
 
+# --- 字級時間戳 → 細粒度 cue (Claude 2026-06-12) ----------------------------
+# 舊版一個 Whisper segment 寫一條 cue — 沒標點的講話會變 8 秒一坨, 下游切句只能
+# 按字數比例「猜」時間 → 字幕跟語音差好幾秒。word_timestamps 本來就開著,
+# 改成用每個字的真實時間組 cue: 句點/停頓處切、上限 3.5s/12 詞, 起迄準到字。
+CUE_MAX_DUR = 3.5     # 單條 cue 秒數上限
+CUE_MAX_WORDS = 12    # 單條 cue 詞數上限
+CUE_GAP_CUT = 0.6     # 字與字間隔 >= 0.6s 視為停頓 → 切
+_SENT_END = (".", "!", "?", "。", "!", "?")
+
+
+# 強制切 (太長/詞太多) 時, 結尾若是這些連接詞 → 回溯留給下一條, 切在語意自然處
+_CONNECTORS = {
+    "the", "a", "an", "to", "of", "and", "or", "but", "for", "with", "that",
+    "this", "your", "you're", "is", "are", "was", "were", "be", "not", "my",
+    "in", "on", "at", "as", "so", "who", "what", "when", "how", "more", "less",
+}
+CUE_MIN_DUR = 0.5     # 比這短的尾巴 cue 併回上一條 (避免 0.2s 一閃而過)
+
+
+def build_cues(segments):
+    """faster-whisper segments (含 .words) → 逐條 yield (start, end, text) 細粒度 cue。
+    generator: segments 是 lazy 的, 串流 yield 才能邊轉錄邊吐進度 (Nextjs 靠 stderr 算 %)。"""
+    cur = []        # 進行中的 cue (word 物件 list)
+    pending = None  # 留一手緩衝: 下一條太短就併回來
+
+    def make(words_):
+        text = "".join(w.word for w in words_).strip()
+        return (words_[0].start, words_[-1].end, text) if text else None
+
+    def emit(cue):
+        """緩衝一條: 新 cue 太短且緊接著 → 併進上一條; 否則放行上一條。回 (可 yield 的 cue 或 None)。"""
+        nonlocal pending
+        if cue is None:
+            return None
+        if pending is None:
+            pending = cue
+            return None
+        ps, pe, pt = pending
+        s, e, t = cue
+        if (e - s) < CUE_MIN_DUR and (s - pe) < 0.3:
+            pending = (ps, e, (pt + " " + t).strip())
+            return None
+        out = pending
+        pending = cue
+        return out
+
+    def cut(forced: bool):
+        """切一刀: forced (長度/詞數爆) 時回溯連接詞給下一條。回傳要 yield 的 cue 或 None。"""
+        carry = []
+        if forced:
+            while len(cur) > 2 and len(carry) < 3 and \
+                    cur[-1].word.strip().lower().strip(".,!?") in _CONNECTORS:
+                carry.append(cur.pop())
+        cue = make(cur)
+        cur.clear()
+        cur.extend(reversed(carry))
+        return emit(cue)
+
+    for seg in segments:
+        words = getattr(seg, "words", None) or []
+        if not words:
+            # 沒字級資料 (罕見) → 整段一條, 至少不丟字
+            if cur:
+                c = cut(forced=False)
+                if c:
+                    yield c
+            c = emit((seg.start, seg.end, (seg.text or "").strip())) if (seg.text or "").strip() else None
+            if c:
+                yield c
+            continue
+        for w in words:
+            if cur:
+                gap = w.start - cur[-1].end
+                dur = w.end - cur[0].start
+                prev = cur[-1].word.strip()
+                natural = (
+                    gap >= CUE_GAP_CUT                       # 真實停頓
+                    or prev.endswith(_SENT_END)              # 句子講完
+                    or (prev.endswith((",", ",")) and dur > 2.0)  # 逗號 + 已夠長
+                )
+                forced = dur > CUE_MAX_DUR or len(cur) >= CUE_MAX_WORDS
+                if natural or forced:
+                    c = cut(forced=forced and not natural)
+                    if c:
+                        yield c
+            cur.append(w)
+    if cur:
+        c = cut(forced=False)
+        if c:
+            yield c
+    if pending is not None:
+        yield pending
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("audio", help="Path to audio/video file")
@@ -82,17 +176,12 @@ def main():
 
     idx = 1
     with open(out_path, "w", encoding="utf-8") as f:
-        for seg in segments:
-            start_ts = format_timestamp(seg.start)
-            end_ts = format_timestamp(seg.end)
-            text = seg.text.strip()
-            if not text:
-                continue
-            f.write(f"{idx}\n{start_ts} --> {end_ts}\n{text}\n\n")
+        for start, end, text in build_cues(segments):
+            f.write(f"{idx}\n{format_timestamp(start)} --> {format_timestamp(end)}\n{text}\n\n")
             # Progress output for parsing
-            mins = int(seg.end // 60)
-            secs = int(seg.end % 60)
-            ms = int((seg.end % 1) * 1000)
+            mins = int(end // 60)
+            secs = int(end % 60)
+            ms = int((end % 1) * 1000)
             print(f"[{mins:02d}:{secs:02d}.{ms:03d} -->] {text}", file=sys.stderr, flush=True)
             idx += 1
 
