@@ -3,9 +3,44 @@ faster-whisper SRT transcription wrapper.
 Usage: python faster-whisper-srt.py <audio_file> --model base --language auto --output_dir ./temp
 Outputs an SRT file in the specified directory.
 """
+import os
 import sys
 import argparse
+from pathlib import Path
+
+# --- GPU enable (Claude 2026-06-11) -----------------------------------------
+# Reelo 用 PYTHON_PATH 指向有 GPU faster-whisper 的 venv 跑這支。Windows 上
+# ctranslate2 要找得到 pip 裝的 cuDNN9 / cuBLAS DLL, 不然 cuda 會 "cublas64_12.dll
+# not found"。把 venv 內 nvidia/*/bin 塞進 DLL 搜尋路徑 (用 sys.prefix 相對, 換機器
+# 也通)。truststore 讓 HuggingFace 模型下載走 Windows 憑證庫 (繞過防毒 SSL 攔截)。
+_nv = Path(sys.prefix) / "Lib" / "site-packages" / "nvidia"
+_bins = [str(_nv / s) for s in ("cublas/bin", "cudnn/bin", "cuda_nvrtc/bin") if (_nv / s).exists()]
+if _bins:
+    os.environ["PATH"] = os.pathsep.join(_bins) + os.pathsep + os.environ.get("PATH", "")
+    for _b in _bins:
+        try:
+            os.add_dll_directory(_b)
+        except Exception:
+            pass
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except Exception:
+    pass
+
 from faster_whisper import WhisperModel
+
+
+def _load_model(model_name: str):
+    """優先 GPU (RTX 50xx Blackwell 必須 float16 — int8 會 CUBLAS_STATUS_NOT_SUPPORTED),
+    GPU 不可用 / 載入失敗自動退回 CPU int8。"""
+    try:
+        m = WhisperModel(model_name, device="cuda", compute_type="float16")
+        print("Device: cuda (float16)", file=sys.stderr, flush=True)
+        return m
+    except Exception as e:
+        print(f"GPU 不可用 ({e}), fallback CPU int8", file=sys.stderr, flush=True)
+        return WhisperModel(model_name, device="cpu", compute_type="int8")
 
 
 def format_timestamp(seconds: float) -> str:
@@ -27,7 +62,7 @@ def main():
     lang = None if args.language == "auto" else args.language
 
     print(f"Loading model: {args.model}", file=sys.stderr, flush=True)
-    model = WhisperModel(args.model, device="cpu", compute_type="int8")
+    model = _load_model(args.model)
 
     print(f"Transcribing: {args.audio}", file=sys.stderr, flush=True)
     segments, info = model.transcribe(
